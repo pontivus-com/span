@@ -871,13 +871,22 @@ class ReconsiderServiceTest(unittest.TestCase):
             support=support,
             effects=effects,
         )
-
-        result = service.reconsider(
-            m.ReconsiderRequest(
-                repository_id="repo-1",
-                changed_paths=("docs/functional-pyramid.json",),
-            )
+        request = m.ReconsiderRequest(
+            repository_id="repo-1",
+            changed_paths=("docs/functional-pyramid.json",),
         )
+        before_one = tuple(self.store._connection.iterdump())
+        before_two = tuple(store_two._connection.iterdump())
+
+        preview = service.preview_changed_scope(request)
+
+        self.assertEqual(tuple(self.store._connection.iterdump()), before_one)
+        self.assertEqual(tuple(store_two._connection.iterdump()), before_two)
+        self.assertEqual(preview.reestablishment_contexts, ())
+        result = service.reconsider(request)
+        self.assertEqual(preview.surfaces, result.surfaces)
+        self.assertEqual(preview.omitted, result.omitted)
+        self.assertEqual(preview.truncated, result.truncated)
 
         remote = next(
             surface
@@ -1157,3 +1166,23 @@ class ReconsiderServiceTest(unittest.TestCase):
                         context.scope, m.EvidenceScope(paths=("src/b.py",))
                     )
                 )
+
+    def test_changed_scope_preview_reuses_projection_without_context_issuance(self):
+        request = m.ReconsiderRequest(
+            repository_id="repo-1",
+            changed_paths=("src/a.py",),
+        )
+        before = tuple(self.store._connection.iterdump())
+
+        preview = self.service.preview_changed_scope(request)
+
+        self.assertEqual(tuple(self.store._connection.iterdump()), before)
+        normal = self.service.reconsider(request)
+        self.assertEqual(preview.surfaces, normal.surfaces)
+        self.assertEqual(preview.omitted, normal.omitted)
+        self.assertEqual(preview.truncated, normal.truncated)
+        self.assertEqual(preview.reestablishment_contexts, ())
+        self.assertTrue(normal.reestablishment_contexts)
+        by_surface = {item.surface.locator: item for item in preview.surfaces}
+        self.assertIn(m.ChangeReason.DIRECT, by_surface["src/a.py"].reasons)
+        self.assertIn(m.ChangeReason.INDIRECT, by_surface["src/b.py"].reasons)

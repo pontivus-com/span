@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -516,7 +517,7 @@ def _hook_bin(venv_dir, bin_dir):
     return str(fallback)
 
 
-def wire_codex_hooks(hook_bin, dry_run=False):
+def wire_codex_hooks(hook_bin, data_dir, dry_run=False):
     """Append report-only span entries to the user's codex hooks."""
     hooks_path = Path(os.path.expanduser("~")) / ".codex" / "hooks.json"
     print(f"+ wire codex hooks: {hooks_path}")
@@ -538,18 +539,21 @@ def wire_codex_hooks(hook_bin, dry_run=False):
     # hooks and matchers are untouched.
     replaced = _strip_span_hooks(config)
     entries = [
-        ("SessionStart", "startup|resume|compact", [hook_bin, "session-start"]),
+        (
+            "SessionStart",
+            "startup|resume|compact",
+            [hook_bin, "session-start", "--data-dir", str(data_dir)],
+        ),
         (
             "PostToolUse",
-            "apply_patch|Write|Edit|MultiEdit",
-            [hook_bin, "source-changed"],
+            "^apply_patch$",
+            [hook_bin, "codex-post-tool", "--data-dir", str(data_dir)],
         ),
-        ("Stop", "", [hook_bin, "session-stop"]),
     ]
     added = 0
     hooks = config.setdefault("hooks", {})
     for event, matcher, cmd in entries:
-        command = " ".join(cmd)
+        command = shlex.join(cmd)
         group = hooks.setdefault(event, [])
         group.append(
             {
@@ -600,10 +604,9 @@ def wire_claude_hooks(hook_bin, data_dir, dry_run=False) -> dict[str, object]:
         ),
         (
             "PostToolUse",
-            "Write|Edit|MultiEdit",
-            [hook_bin, "source-changed", "--data-dir", str(data_dir)],
+            "Write|Edit",
+            [hook_bin, "claude-post-tool", "--data-dir", str(data_dir)],
         ),
-        ("Stop", "", [hook_bin, "session-stop", "--data-dir", str(data_dir)]),
     ]
     hooks = {} if hooks is None else hooks
     added = 0
@@ -616,7 +619,7 @@ def wire_claude_hooks(hook_bin, data_dir, dry_run=False) -> dict[str, object]:
             raise SystemExit(
                 f"cannot parse claude settings.json: hooks.{event} is not a list"
             )
-        command = " ".join(command_parts)
+        command = shlex.join(command_parts)
         kept_blocks = []
         for block in group:
             if not isinstance(block, dict):
@@ -697,7 +700,10 @@ def _span_hook_command(command: object) -> bool:
     """True for a command that invokes the Span hook binary."""
     if not isinstance(command, str) or not command.strip():
         return False
-    executable = command.split()[0]
+    try:
+        executable = shlex.split(command)[0]
+    except ValueError:
+        return False
     return Path(executable).name == "span-hooks"
 
 

@@ -9,8 +9,13 @@ Complete the applicable lifecycle before task completion; report named operation
 blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#required-agent-completion).
 
 
-Call `ask` with the surface and no question or request identity. This is both
-the reuse path and the cold-start probe:
+For governed work, Functional Pyramid participation is resolved first. If
+status is UNCONFIGURED, use `span-functional-pyramid` before relying on
+governing orientation; ACTIVE + DEGRADED requires governance repair. EXCLUDED
+continues with the descriptive lifecycle.
+
+Then call `ask` with the surface and no question or request identity. This is
+both the reuse path and the cold-start probe:
 
 ```json
 {
@@ -60,7 +65,10 @@ copy them only into operations that declare a context field.
 
 A reviewer who is selecting captured knowledge for shared reuse uses
 PendingCurationSelector with the repository identity. It returns only CURRENT
-captured exact revisions in deterministic order. Retrieve and inspect the exact
+captured exact revisions in deterministic order. The queue is bounded: when the
+result is truncated, continue with `after=<next_after>` until
+`truncated=false`; the cursor is the exact returned revision reference, not a
+semantic search token. Retrieve and inspect the exact
 capture and relevant retained knowledge/governance before curation; if the
 meaning is wrong or incomplete, repair it through the ordinary semantic
 lifecycle first.

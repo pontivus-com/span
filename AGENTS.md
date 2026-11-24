@@ -14,14 +14,14 @@ into operations, payloads, contract laws, and the boundary between the agent's
 work and Span's internals. [`docs/functional-design.md`](docs/functional-design.md)
 (layer 3) states the behaviour that makes the contract deterministic.
 [`docs/technical-design.md`](docs/technical-design.md) (layer 4) records the
-implementation baseline, what is retained, and the minimal refactoring set.
+implementation mechanisms that realize the higher-layer behavior.
 [`docs/requirements-pyramid.md`](docs/requirements-pyramid.md)
 governs how those layers are structured: what each owns, where a new requirement
 belongs, and why a restatement is a defect. All of these are binding on design,
 contracts, code, tests, prompts, documentation, and releases, and a lower layer
 may not contradict a higher one. Where any plan, ADR, changelog, guide, skill, or
 instruction conflicts with them, they govern; amend them explicitly before
-working around them. Cite the IDs (G1–G8, A1–A10, F1–F13, L1–L17, FD-1–FD-102) in
+working around them. Cite the IDs (G1–G8, A1–A10, F1–F14, L1–L17, FD-1–FD-102) in
 changes and reviews.
 
 ## Layout
@@ -151,6 +151,11 @@ Update the affected public document when a contract changes. See
 Consult Span before deriving semantic understanding. Record supported
 conclusions when established. After edits, reconsider changed paths and record
 the supported dispositions before completing the work.
+
+Before ordinary governed work, resolve Functional Pyramid participation:
+ACTIVE + VALID proceeds; ACTIVE + DEGRADED requires governance repair;
+UNCONFIGURED routes through the Functional Pyramid lifecycle when governed use
+is intended; EXCLUDED is the explicit descriptive-only path.
 
 - Before any source access used to understand a surface — native `Read`/`Grep` or shell reads/searches such as `cat`, `rg`, or `grep` — `ask` the exact surface or reference with no question or request identity.
 - Use `RecordedQuestionSelector` only when you already know the exact recorded question; it is exact surface-scoped lookup, not semantic matching.

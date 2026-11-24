@@ -1,8 +1,7 @@
-"""Beta-2 regressions for the released repository-initialization contract defect.
+"""Beta-3 regressions for the inherited repository-initialization defects.
 
-These tests are intentionally written against the Beta-2 target behavior before
-the runtime fix. T01 requires them to fail on the pre-fix runtime so B2-D01 is
-encoded before installer implementation changes.
+These tests encode the Beta-3 target behavior for B3-D01/B3-D02 after Beta-1
+post-release use exposed the installer and acceptance composition defects.
 """
 
 from __future__ import annotations
@@ -19,7 +18,7 @@ from span.shell import install
 from span.shell.install import cli
 
 
-class Beta2InitializationRegressionTest(unittest.TestCase):
+class Beta3InitializationRegressionTest(unittest.TestCase):
     def _evidence(self, repository_id="repo-a"):
         return m.EvidenceRef(
             evidence_id=m.EvidenceId("authority-a"),
@@ -42,6 +41,37 @@ class Beta2InitializationRegressionTest(unittest.TestCase):
             encoding="utf-8",
         )
         return path
+
+    def test_authority_files_require_canonical_discriminators(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo = root / "repo-a"
+            repo.mkdir()
+            cases = (
+                ("seeds", self._evidence(), "EvidenceRef"),
+                ("bindings", self._binding(), "AuthorityBinding"),
+            )
+            for name, item, expected_type in cases:
+                with self.subTest(name=name):
+                    payload = m.to_canonical(item)
+                    payload.pop("$type")
+                    path = root / f"{name}.json"
+                    path.write_text(json.dumps([payload]), encoding="utf-8")
+                    seed_files = [["repo-a", str(path)]] if name == "seeds" else []
+                    binding_files = (
+                        [["repo-a", str(path)]] if name == "bindings" else []
+                    )
+                    with self.assertRaises(SystemExit) as caught:
+                        install.load_authority_files(
+                            [repo],
+                            seed_files,
+                            binding_files,
+                            dry_run=False,
+                        )
+                    self.assertIn(
+                        f"invalid {expected_type} arguments",
+                        str(caught.exception),
+                    )
 
     def test_repository_qualified_authority_file_grammar(self):
         args = install.parse_args(

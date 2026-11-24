@@ -1,87 +1,150 @@
 # First investigation and fresh-session reuse
 
-Agent work follows [the required Span lifecycle](lifecycle-contract.md#required-agent-completion).
+The first successful Span flow is:
 
-This runbook establishes the complete working context for a chosen engineering
-task. Start with the exact file, symbol, service, or domain. Span can bring
-together what is already understood about that implementation with the project
-guidance that applies to it, from first principles down to functional and
-technical design.
+1. install and verify Span;
+2. resolve project-governance participation;
+3. ask what is already known about a real engineering task;
+4. investigate what is missing;
+5. capture useful understanding;
+6. review stable knowledge for shared reuse;
+7. prove reuse in a fresh session; and
+8. reconsider affected knowledge after change.
 
-The task may still require new investigation across implementation, tests,
-configuration, and canonical documents. A source inventory identifies the
-evidence needed for that work.
+## 1. Install and verify Span
 
-## Prepare
+Follow [Install and connect](install.md), then verify the setup:
 
-Install and connect Span using the [installation guide](install.md). Keep its
-data directory outside the target repository. Check the installed version, root
-binding, store, and provider with `span-install --verify-only`.
+```bash
+span-install --verify-only
+```
 
-Provisioning is owned by the installer. Supply only declared authority seeds
-and bindings; finding a document does not make it governing. Preserve the
-returned canonical repository ID. An older store requires the explicit offline
-transition, not ordinary setup. Operational readiness creates no understanding.
+Keep the reported repository ID. A successful installation means Span is ready
+to work with the repository; it does not mean the repository has already been
+semantically understood or that project governance is configured.
 
-Check Functional Pyramid participation through the public `ask` selector.
-Registration alone yields UNCONFIGURED. If this repository is intended to
-participate, follow the result-driven adoption path: validate the exact member
-intent/declarations, resolve deterministic findings, ACTIVATE or REVISE through
-`record(kind="functional_pyramid")`, verify the exact committed
-pyramid/version/member view, and re-establish any actionable effects before
-calling adoption complete. An intentionally non-participating repository may be
-EXCLUDED explicitly.
+## 2. Resolve project guidance before governed work
 
-## Investigate the chosen scope
+Repository installation and Functional Pyramid participation are separate.
 
-Start with a pure surface/reference `ask`: no question, request identity, or
-context. An `Answer` is the current surface document view grouped by recorded
-question; a `Gap` names what is missing plus concrete source pointers and does
-not prove the whole repository lacks understanding.
+Check the repository's Functional Pyramid status before the first governed
+investigation.
 
-When source bytes are needed, make a separate explicit evidence-admission
-`ask` with a new caller request identity and the exact locators/ranges needed.
-Only that admission returns a context and may return a continuation. Follow its
-continuation until the selected evidence is complete. Use
-`RecordedQuestionSelector` only when the exact recorded question is already
-known.
+- **ACTIVE + VALID** — project governance is initialized; proceed.
+- **ACTIVE + DEGRADED** — repair the declared governance before relying on it.
+- **UNCONFIGURED** — if the repository should use project governance, complete
+  Functional Pyramid initialization/adoption before governed work.
+- **EXCLUDED** — proceed with the descriptive Span lifecycle without a governing
+  projection unless adoption is later intended.
 
-Read material implementation, consumers, tests, and governing sources using the
-agent's normal tools. CSS and configuration remain addressable as exact source
-even when a parser supplies no symbols.
+Initialization/adoption establishes the declared map from software scope to the
+canonical project goals, principles, contracts, functional design, and technical
+design. Span keeps their identity, applicability, relationships, and change
+effects; the canonical documents remain at their owning sources.
 
-## Retain established understanding
+For an UNCONFIGURED repository intended for governed use, the sequence is:
 
-Record coherent conclusions with the evidence you hold and a short account of
-how it led to them. Use `record(kind="understanding")` with `conclusion` and
-dependency evidence from `locator`, `observation_id`, or non-empty `support`
-for a first version, and an explicit update action for an existing one. A
-locator may accompany support solely as carried semantic scope; support remains
-the complete dependency set. Scope is supplied or derived independently. Keep unresolved questions and their basis
-as gaps.
+1. inspect current Functional Pyramid status;
+2. discover the intended member repositories and declaration sources;
+3. add or repair repository-owned declarations where needed;
+4. validate the complete candidate;
+5. activate it;
+6. verify the accepted pyramid is ACTIVE + VALID; and
+7. dispose any dependent effects returned by the accepted write.
 
-Use the live tool schemas and the [recording guide](interpretation.md). Preserve
-`repository_id`, `request_id`, and exact content before dispatch. Inspect the
-compact acceptance and its post-commit qualification; use its receipt selector
-or snapshot selector only when exact audit detail is needed. Acceptance proves
-storage and validation, not semantic truth.
+The installed `span-functional-pyramid` skill guides that lifecycle. Exact
+selectors and write forms are in the [MCP reference](mcp.md).
 
-## Check a fresh session
+## 3. Pick a real engineering task
 
-Start another agent session and ask the surface document view, without a saved
-understanding ID or recorded question. Select the applicable current conclusion
-from the grouped view and retrieve an exact snapshot only when needed. If no
-current conclusion is returned, report the gap and continue explicit
-investigation; do not invent semantic equivalence.
+Choose the exact file, symbol, service, or domain you are about to understand or
+change.
 
-## Maintain it
+Ask Span about that surface before deriving the behavior yourself.
 
-After a relevant edit, call `reconsider` with the changed paths. Investigate the
-reported dependency changes, then record a confirm/correct/replace/withdraw
-update against the expected version. Preserve unresolved disputes through
-explicit challenge dispositions in `record`. Record verification independently
-after external execution, using the evidence actually tested.
+For an ACTIVE repository, the result can include both maintained software
+understanding and the governing projection for the same scope.
 
-Close the task with what was recorded and retrieved, what remains uncertain,
-what was tested externally, and any omitted scope. Follow the completion boundary in the lifecycle contract. See
-[lifecycle](lifecycle.md) and [scope](scope.md).
+Two outcomes are useful:
+
+- **reusable knowledge exists** — start from it and verify that it is relevant
+  to the task;
+- **Span has a gap** — use the returned pointers and governing orientation as
+  inputs to the investigation.
+
+## 4. Investigate normally
+
+Read the implementation and its consumers. Check tests, configuration, runtime
+behavior, and canonical project guidance when they matter.
+
+If source content selected through Span is needed, follow the evidence path
+returned by `ask`. Exact evidence-admission and continuation mechanics are in
+[Using Span](usage.md#start-a-task-with-what-is-already-known) and the
+[MCP reference](mcp.md#ask).
+
+The investigation establishes the understanding the task actually requires.
+
+## 5. Keep what the work established
+
+When the investigation establishes something that would help future work,
+record it while the evidence and reasoning are still fresh.
+
+A useful retained conclusion answers a real question about the selected software
+surface and identifies the evidence that supports it. Keep unresolved questions
+explicit.
+
+This is **capture**. The knowledge is retained, but it is not automatically
+shared with every future agent.
+
+See [Using Span — Capture useful understanding](usage.md#capture-useful-understanding-while-it-is-fresh)
+and [MCP reference — record](mcp.md#record).
+
+## 6. Review the captured knowledge for reuse
+
+Use a separate reviewer context — another agent session, a dedicated review
+workflow, or a human reviewer — to inspect the captured conclusion.
+
+Repair wrong, incomplete, duplicated, disputed, or badly scoped meaning through
+the ordinary lifecycle. When the exact captured revision is suitable for shared
+reuse, curate it through `record`.
+
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
+
+See [Using Span — Review captured knowledge](usage.md#review-captured-knowledge-before-broad-reuse).
+
+## 7. Prove reuse in a fresh session
+
+Start a new coding-agent session with no previous conversation and ask Span
+about the same software surface.
+
+The new session should be able to start from the reviewed knowledge without the
+old transcript or a saved internal understanding ID. For ACTIVE repositories,
+the same ask also resolves the current governing projection.
+
+If the knowledge is not reusable, follow the returned state: it may still be
+pending review, its support may no longer hold, or the requested surface may
+still be unassessed.
+
+## 8. See what happens after change
+
+After changing source or relevant project guidance, call `reconsider` with the
+changed paths.
+
+Revisit the retained knowledge that actually requires reassessment. Unrelated
+maintained knowledge remains reusable.
+
+If the meaning still holds, re-establish it against current support. If the
+meaning changed, record the corrected understanding and send the new revision
+through review before shared reuse.
+
+For a Functional Pyramid declaration or participation change, use the dependent
+effects and re-establishment contexts returned by that governance write; do not
+invent a second change-analysis path.
+
+See [Using Span — After code or project guidance changes](usage.md#after-code-or-project-guidance-changes).
+
+## Continue with normal work
+
+Use [Using Span](usage.md) for the repeating engineering lifecycle,
+[Evidence, authority, and interpretation](authority-trust.md) for the governance
+model, and the [MCP reference](mcp.md) for exact request/result grammar.

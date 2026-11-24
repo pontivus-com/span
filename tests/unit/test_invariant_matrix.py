@@ -308,7 +308,7 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
 
 
 class Beta2CurationArchitectureTest(unittest.TestCase):
-    """Beta-2 keeps curation inside the existing semantic architecture."""
+    """Beta-3 keeps curation inside the existing semantic architecture."""
 
     def _class_locations(self, name: str) -> list[str]:
         locations: list[str] = []

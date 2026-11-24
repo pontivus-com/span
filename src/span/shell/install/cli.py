@@ -605,7 +605,7 @@ def _wire_hooks(env: _Environment, scope: str | None) -> dict[str, object]:
             },
         }
     hook_bin = _hook_bin(env.venv_dir, env.bin_dir)
-    codex_hooks = wire_codex_hooks(hook_bin, dry_run=env.dry)
+    codex_hooks = wire_codex_hooks(hook_bin, env.data_dir, dry_run=env.dry)
     claude_hooks = (
         wire_claude_hooks(hook_bin, env.data_dir, dry_run=env.dry)
         if args.with_claude

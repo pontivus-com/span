@@ -59,6 +59,7 @@ class NoSpanImportTest(unittest.TestCase):
             "sys",
             "pathlib",
             "re",
+            "shlex",
             "typing",
         }
         for node in _module_level_imports(tree):
@@ -106,7 +107,8 @@ class OpencodeInstallGuidanceTest(unittest.TestCase):
             pathlib.Path(__file__).resolve().parents[2] / "docs" / "install.md"
         ).read_text(encoding="utf-8")
         start = readme.index("### OpenCode")
-        end = readme.index("## Verify the installation", start)
+        end = readme.find("\n## ", start + len("### OpenCode"))
+        self.assertGreater(end, start)
         block = readme[start:end]
         self.assertIn('"servers"', block)
         self.assertIn('"codemode": false', block)
@@ -1452,6 +1454,11 @@ class PlanningTest(unittest.TestCase):
             self.assertEqual(
                 snippet.read_bytes(), (generated / "agents-snippet.md").read_bytes()
             )
+            plugin = repo_root / "integrations/hosts/opencode/span-hooks.js"
+            self.assertEqual(
+                plugin.read_bytes(),
+                (generated / "opencode-plugin" / "index.js").read_bytes(),
+            )
 
     def test_main_returns_success_for_console_entrypoint(self):
         import tempfile
@@ -1981,10 +1988,36 @@ class HookWiringTest(unittest.TestCase):
                 str(home) + p[1:] if p.startswith("~") else p
             )
             try:
-                install.wire_codex_hooks("/bin/span-hooks", dry_run=False)
+                install.wire_codex_hooks(
+                    "/bin/span-hooks", "/isolated/data", dry_run=False
+                )
                 first = json.loads(hooks_path.read_text())
                 self.assertIn("SessionStart", first["hooks"])
-                install.wire_codex_hooks("/bin/span-hooks", dry_run=False)
+                span_commands = [
+                    hook["command"]
+                    for group in first["hooks"].values()
+                    for block in group
+                    for hook in block["hooks"]
+                    if "span-hooks" in hook["command"]
+                ]
+                self.assertEqual(len(span_commands), 2)
+                self.assertTrue(
+                    all(
+                        "--data-dir /isolated/data" in command
+                        for command in span_commands
+                    )
+                )
+                self.assertTrue(
+                    any("codex-post-tool" in command for command in span_commands)
+                )
+                self.assertNotIn("Stop", first["hooks"])
+                self.assertEqual(
+                    first["hooks"]["PostToolUse"][0]["matcher"],
+                    "^apply_patch$",
+                )
+                install.wire_codex_hooks(
+                    "/bin/span-hooks", "/isolated/data", dry_run=False
+                )
                 second = json.loads(hooks_path.read_text())
                 self.assertEqual(first, second)
             finally:
@@ -2000,7 +2033,9 @@ class HookWiringTest(unittest.TestCase):
                 str(pathlib.Path(tmp)) + p[1:] if p.startswith("~") else p
             )
             try:
-                install.wire_codex_hooks("/bin/span-hooks", dry_run=False)
+                install.wire_codex_hooks(
+                    "/bin/span-hooks", "/isolated/data", dry_run=False
+                )
             finally:
                 os.path.expanduser = real_expanduser
 
@@ -2040,7 +2075,9 @@ class HookWiringTest(unittest.TestCase):
                 str(home) + p[1:] if p.startswith("~") else p
             )
             try:
-                result = install.wire_codex_hooks("/new/bin/span-hooks", dry_run=False)
+                result = install.wire_codex_hooks(
+                    "/new/bin/span-hooks", "/isolated/data", dry_run=False
+                )
             finally:
                 os.path.expanduser = real_expanduser
             self.assertEqual(result["replaced"], 1)
@@ -2052,9 +2089,11 @@ class HookWiringTest(unittest.TestCase):
                 for hook in block["hooks"]
             ]
             self.assertNotIn("/old/bin/span-hooks session-start", commands)
-            self.assertIn("/new/bin/span-hooks session-start", commands)
+            self.assertIn(
+                "/new/bin/span-hooks session-start --data-dir /isolated/data", commands
+            )
             self.assertIn("/bin/foreign-hook", commands)
-            self.assertEqual(sum("span-hooks" in command for command in commands), 3)
+            self.assertEqual(sum("span-hooks" in command for command in commands), 2)
 
     def test_claude_merge_preserves_foreign_hooks_and_converges(self):
         import os
@@ -2108,10 +2147,10 @@ class HookWiringTest(unittest.TestCase):
                 for hook in block["hooks"]
             ]
             self.assertEqual(first["status"], "wired")
-            self.assertEqual(second["replaced"], 3)
+            self.assertEqual(second["replaced"], 2)
             self.assertIn("/foreign-hook", commands)
             self.assertEqual(
-                sum("/new/span-hooks" in command for command in commands), 3
+                sum("/new/span-hooks" in command for command in commands), 2
             )
             self.assertTrue(
                 all(
@@ -2120,6 +2159,12 @@ class HookWiringTest(unittest.TestCase):
                     if "/new/span-hooks" in command
                 )
             )
+            self.assertNotIn("Stop", config["hooks"])
+            self.assertEqual(
+                config["hooks"]["PostToolUse"][0]["matcher"],
+                "Write|Edit",
+            )
+            self.assertTrue(any("claude-post-tool" in command for command in commands))
             self.assertTrue((settings_path.with_suffix(".json.bak-span")).is_file())
 
     def test_claude_missing_settings_skips(self):

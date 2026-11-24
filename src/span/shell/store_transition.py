@@ -1,4 +1,4 @@
-"""Offline legacy → schema-13 store transition (N-06, §8.3/§8.5).
+"""Offline legacy → current repository-store transition.
 
 This is the one canonical transition tool. It is deliberately raw: legacy
 stores are inspected and exported by reading their observed SQLite catalog and
@@ -434,7 +434,7 @@ def _file_bytes(path: _pathlib.Path) -> int:
 
 
 def _empty_target_bytes() -> int:
-    """Measured size of an empty schema-14 store (not an invented floor)."""
+    """Measured size of an empty current target store (not an invented floor)."""
     connection = _sqlite3.connect(":memory:")
     try:
         from span.shell.sqlite_store.lifecycle import _DDL
@@ -472,7 +472,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
             unknown_tables=(),
             limitations=(
                 f"no store at {source}; explicit installer provisioning creates "
-                "a new schema-14 store instead of a transition",
+                f"a new schema-{TARGET_SCHEMA} store instead of a transition",
             ),
         )
     connection = _connect_read_only(source)
@@ -488,7 +488,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
     file_bytes = _file_bytes(source)
     empty_target = _empty_target_bytes()
     # Archive copy + lossless export (raw rows cannot exceed the logical
-    # database bytes) + one empty schema-14 store.
+    # database bytes) + one empty current target store.
     required = file_bytes + logical + empty_target
     limitations: list[str] = []
     if version is None:
@@ -1172,7 +1172,7 @@ def _verify_staged(
         verify_schema13_staging(paths, config)
         _smoke(paths, config)
         return (
-            "staged store carries the schema-13 state without semantic reinterpretation",
+            "staged store carries the source schema-13 state into the current target without semantic reinterpretation",
             "Functional Pyramid state is empty until explicit activation",
             "fresh lifecycle smoke test passed on an isolated copy",
         )
@@ -1436,7 +1436,7 @@ def _check_space(config: TransitionConfig, inspection: LegacyInspection) -> None
         raise TransitionError(
             "insufficient free space for a lossless transition: "
             f"{free} bytes free, {inspection.required_free_bytes} required "
-            "(archive copy + raw export + staged schema-13 store)"
+            f"(archive copy + raw export + staged schema-{TARGET_SCHEMA} store)"
         )
 
 

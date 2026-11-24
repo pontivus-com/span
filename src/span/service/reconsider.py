@@ -59,6 +59,12 @@ class ReconsiderService:
             return self._raise_challenge(repository_id, request.challenge)
         return self._effects.repository_change(request)
 
+    def preview_changed_scope(self, request: m.ReconsiderRequest) -> m.Changed:
+        """Return the canonical changed-scope projection without context writes."""
+        if request.challenge is not None:
+            raise ValueError("a challenge is not a changed-scope preview")
+        return self._effects.repository_change(request, issue_contexts=False)
+
     def _raise_challenge(
         self, repository_id: str, challenge: m.ChallengeRaise
     ) -> m.Challenged:

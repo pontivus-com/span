@@ -1,8 +1,8 @@
-"""Materialize the packaged skill assets from their canonical sources.
+"""Materialize packaged assets from their canonical repository sources.
 
-``skills/`` and ``docs/agents-snippet.md`` are the only sources. A wheel has
-no repository root, so the build copies them into the package. Nothing is
-committed at the destination and nothing is edited there.
+The repository-owned skills, lifecycle snippet and OpenCode plugin remain the
+only canonical copies. Builds consume the same manifest as test generation, so
+a wheel contains generated assets without committing a second package copy.
 """
 
 from __future__ import annotations
@@ -13,30 +13,45 @@ import shutil
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
+def asset_manifest() -> tuple[tuple[pathlib.Path, pathlib.Path], ...]:
+    """Return canonical source -> package-relative asset mappings."""
+    entries: list[tuple[pathlib.Path, pathlib.Path]] = []
+    skills = ROOT / "skills"
+    for name in sorted(path.name for path in skills.iterdir() if path.is_dir()):
+        source = skills / name / "SKILL.md"
+        if source.is_file():
+            entries.append((source, pathlib.Path("skills") / name / "SKILL.md"))
+    entries.append(
+        (
+            ROOT / "docs" / "agents-snippet.md",
+            pathlib.Path("agents-snippet.md"),
+        )
+    )
+    entries.append(
+        (
+            ROOT / "integrations" / "hosts" / "opencode" / "span-hooks.js",
+            pathlib.Path("opencode-plugin") / "index.js",
+        )
+    )
+    return tuple(entries)
+
+
 def sync_assets(destination: pathlib.Path) -> tuple[pathlib.Path, ...]:
-    """Copy every canonical skill and the lifecycle snippet below ``destination``."""
+    """Copy the canonical asset manifest below the destination."""
     dest = pathlib.Path(destination)
     written: list[pathlib.Path] = []
-    skills = ROOT / "skills"
-    names = sorted(path.name for path in skills.iterdir() if path.is_dir())
-    for name in names:
-        source = skills / name / "SKILL.md"
-        if not source.is_file():
-            continue
-        target = dest / "skills" / name / "SKILL.md"
+    manifest = asset_manifest()
+    for source, relative in manifest:
+        target = dest / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
         written.append(target)
-    snippet = ROOT / "docs" / "agents-snippet.md"
-    target = dest / "agents-snippet.md"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(snippet, target)
-    written.append(target)
-    plugin = ROOT / "integrations" / "hosts" / "opencode" / "span-hooks.js"
-    target = dest / "opencode-plugin" / "index.js"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(plugin, target)
-    written.append(target)
+
+    names = {
+        relative.parts[1]
+        for _, relative in manifest
+        if len(relative.parts) >= 3 and relative.parts[0] == "skills"
+    }
     stale = dest / "skills"
     if stale.is_dir():
         for child in stale.iterdir():

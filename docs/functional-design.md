@@ -8,10 +8,10 @@ must satisfy it.
 Where this layer and a higher layer disagree, the higher layer governs. A
 requirement here that cannot be traced to a higher-layer statement is a defect.
 
-**1.0 Beta target behavior, 21 November 2026.** This design completes the
-product model across empirical understanding, declared governing authority and
-the supported relationship between them. Implementation, migration and host
-verification remain pending; current code is not certified by this design.
+**1.0 Beta functional design.** This document states binding deterministic
+behavior. Implementation and delivery conformance are evidenced separately in
+[acceptance](acceptance.md); implementation state never changes the authority of
+this design.
 
 ## 1. Scope
 
@@ -561,16 +561,30 @@ re-establishment contexts through FD-84/FD-85/FD-89. The write never creates a
 second semantic writer, route carrier or dependency-effect representation.
 *(G3, G8, F6, F7, F12, L4, L8, L14–L15)*
 
-**FD-94 — Lifecycle notices reflect participation without becoming governance.**
-For a registered UNCONFIGURED repository, the session notice directs the agent to
-the Functional Pyramid initialization skill/status path; EXCLUDED is quiet about
-initialization unless explicitly requested. ACTIVE/VALID uses ordinary
-governed-work guidance. ACTIVE/DEGRADED reports governance attention and the next
-public lifecycle action. ACTIVE/DEGRADED means ACTIVE participation with DEGRADED live health, not a
-fourth participation state. Change notices use the canonical affected projection
-from either reconsideration or an accepted Functional Pyramid write.
+**FD-94 — Lifecycle notices compose Functional Pyramid obligations without
+becoming governance.**
+At session start/resume/compact, canonical participation and live health select
+only the Functional Pyramid obligation: UNCONFIGURED directs governed use to the
+initialization/status path; EXCLUDED has no initialization obligation and
+ordinary descriptive semantic work remains available; ACTIVE/VALID adds no
+separate Pyramid action beyond ordinary governed orientation; ACTIVE/DEGRADED
+reports governance attention and the next existing lifecycle action.
+ACTIVE/DEGRADED means ACTIVE participation with DEGRADED live health, not a
+fourth participation state.
+
+For an external edit/write, the same canonical changed-scope projection decides
+semantic, authority, route, premise, containment and cross-repository effects;
+the hook does not first classify the edit as semantic versus governance work.
+The resulting obligation may therefore be semantic-only, Functional-Pyramid-
+related only, both, or neither while still routing through the existing public
+lifecycle. An accepted Functional Pyramid activate/revise/deactivate write is
+different: its `FunctionalPyramidRecorded` result already owns the canonical
+dependent effects and re-establishment contexts, so a hook does not recompute
+those effects or require a second `reconsider` for that write.
+
 Hooks never activate/revise a pyramid, author rule meaning, copy rule content,
-or make support current. *(G8, A4, F5, F10, F12, L13–L16)*
+create authority, or make support current. *(G8, A4, A9, F5–F6, F10, F12,
+L13–L16)*
 
 ## 5. Support evaluation
 
@@ -1014,16 +1028,38 @@ The Version-1 host contract still exposes exactly `ask`, `record` and
 result schemas; no host is accepted on evidence from a separate authority tool
 because no such public operation exists. *(F6, L8, L12)*
 
-**FD-58 — Lifecycle notices reach the agent at the moment of use.**
-The delivered host notice names only the next public lifecycle action computed
-from canonical lifecycle state; it does not duplicate or independently classify
-participation, health, support, or affected understanding. Functional Pyramid
-notice selection is the deterministic case owned by FD-94. A
-source/governance-change notice may report that affected understanding crosses
-member repositories but never computes another affected set. Notices never
-activate/revise governance, author semantic conclusions or certify meaning.
-Measure delivered notice cost under F8 and delivery under FD-53. *(F5, F10, G2,
-F12, L13–L16)*
+**FD-58 — Lifecycle notices interrupt omission at host-observable moments.**
+A lifecycle notice exists only where host-observable activity can create a
+required Span action outside the result of an MCP operation: session
+start/resume/compact, a reliable pre-investigation source-access event when the
+host exposes one, an external edit/write, or idle/stop/completion with a known
+outstanding lifecycle obligation. At each such moment notice selection evaluates
+the semantic-understanding obligation and the Functional Pyramid obligation
+independently from canonical Span state; either, both, or neither may require
+action. That distinction is a deterministic selection rule, not a new public
+state, carrier, operation, or hook-owned lifecycle.
+
+The delivered notice names the smallest existing public lifecycle action or
+actions that satisfy those obligations. A transition already exposed by an
+`ask`, `record`, or `reconsider` result remains owned by that result and is
+not rediscovered by a hook. Pre-investigation reminders are permitted only when
+the host identifies the source-access moment without semantic guessing; arbitrary
+command/string heuristics never manufacture a semantic surface or lifecycle
+state.
+
+For external changes, the complete normalized changed scope available from the
+host is evaluated through the canonical changed-scope effect projection before
+notice presentation is bounded. Multiple observed edits that have not yet been
+handed off preserve their union. A host that cannot supply a complete changed
+scope must make that incompleteness explicit; a subset is never treated as a
+smaller complete change. The resulting notice may report cross-repository
+effects but never computes another affected set.
+
+Notices never activate/revise governance, author or curate semantic conclusions,
+issue re-establishment contexts, make support current, or certify meaning.
+Answer safety remains independent of notice delivery under FD-52. Measure
+delivered notice cost under F8 and delivery under FD-53. *(A4, A8–A9, F5–F6,
+F10, F12, L8, L12–L16)*
 
 ## 13. Bounds and truncation
 
@@ -1065,7 +1101,7 @@ After commitment, compose current status for the understanding's canonical owner
 Operational status failure preserves acceptance and reports explicit status
 unavailability. Status is never persisted in the receipt. *(F9, L4)*
 
-### Beta 2 capture and curation
+### Beta 3 capture and curation
 
 **FD-95 — Answer eligibility composes support and curation.**
 For every current semantic revision,
@@ -1130,82 +1166,17 @@ scoped uses challenge, correct, replace or withdraw as appropriate. No
 `rejected_curation` semantic state or second writer exists. Only a stable exact
 semantic revision can be curated. *(F5, F13, L17)*
 
-## 14. Why these choices follow
+## 14. Derivation
 
-The choices below that resemble judgement calls are derivations, not preferences.
+Each FD rule cites the higher-layer goal, foundation, or lifecycle law that
+justifies it. Those citations are the derivation record.
 
-### The Answer/Gap threshold (FD-23, FD-25)
+This layer does not maintain a second prose rationale for the same decisions:
+where a rule's justification is unclear, correct its owning requirement or its
+citations rather than adding a parallel explanation here.
 
-F2 forbids presenting unsupported or uncurated content as shared Answer
-knowledge. L2/L3/L17 require non-eligible content to remain explicit as history,
-stale references or pending-curation references. F8 penalises discarding usable
-eligible understanding.
-
-Therefore: if at least one matched conclusion is CURRENT + CURATED, the result
-is an `Answer` containing those eligible conclusions, with pending/stale state
-reported separately. If none is eligible, the result is a `Gap`; FD-25 derives
-whether the blocker is pending curation, invalidation, unverifiability or
-unassessed membership. Membership is selected by surface, current identity or
-the exact recorded-question selector, never semantic similarity.
-
-Withholding one eligible conclusion because a sibling is pending or stale would
-satisfy no principle and force unnecessary re-derivation.
-
-### The state precedence (FD-15)
-
-F1 keeps evidence and authority proof distinct, A6 says confidence is not
-evidence, and A7 requires a safe default. If any dependency cannot be checked, the conclusion is not
-established. Reporting `REASSESSMENT_REQUIRED` in that case would assert a
-definite change that has not been observed — promoting uncertainty to a claim.
-Therefore `UNVERIFIABLE` dominates. FD-16 keeps every definite finding visible,
-so nothing is hidden; only the summary is conservative.
-
-### The replay window (FD-43)
-
-A2 requires that a lost response not duplicate work; A1 requires that a resumed
-session recover; D-3 makes the retry the same request identity. The receipt must
-therefore outlive the longest suspension a supported host allows. That lower
-bound is derived. The exact window is a deployment measurement because the
-suspension length is a property of the host, not of Span.
-
-### Two proof planes (FD-12, FD-81, FD-73, FD-76)
-
-G1 and F1 require Span to say only what its evidence establishes. Source identity
-can establish empirical currency but cannot establish that a governing rule is
-legitimate or applicable. Conversely, accepted canonical authority can establish
-governing status but cannot establish what implementation currently does.
-
-Therefore source/verification support and authority/route support remain distinct
-dependencies. A conformance judgment becomes reusable by depending on both,
-rather than by weakening either proof type.
-
-### Additive context resolution (FD-63, FD-64)
-
-G7 requires the complete applicable governing route, and F11 forbids inference.
-A path can legitimately participate in several responsibilities at once.
-Selecting one "best" context would drop obligations without authority to do so.
-Therefore every explicit match composes and inheritance adds rather than
-replaces.
-
-### Server-derived normative governance support (FD-75)
-
-A4 says the agent will omit bookkeeping; F7 says Span derives what can be
-derived; G7 requires governing applicability to be complete. If the caller were
-allowed to enumerate the applicable governing route, omission would create a
-false CURRENT normative conclusion. Therefore, when the repository is ACTIVE and the semantic scope has a
-functional portion, Span derives route and authority support from the
-already-declared semantic scope and Functional Pyramid. A scope wholly outside
-the declared FunctionalScope derives a resolved empty applicability route rather
-than invented authority.
-
-### confirm (FD-31)
-
-F2 requires present support for any claim of currency; A6 forbids treating
-unchanged wording as evidence; F8 penalises work that adds no value. A
-confirmation is therefore a re-establishment, not a re-assertion: it requires a
-present check and applies to a version that was not current. If the version is
-already current and nothing changed, a new version would be churn, so the current
-version is returned.
+Non-normative conceptual explanations belong in the public
+[concept documentation](README.md#concepts).
 
 ## 15. Version 1 Beta functional acceptance
 
@@ -1318,9 +1289,18 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     the current downstream graph is obtainable; after the edit, reconsider
     reports cross-repository authority/route effects and record closes the
     affected dispositions.
-28. **Participation-aware hooks.** UNCONFIGURED, EXCLUDED, ACTIVE/VALID and
-    ACTIVE/DEGRADED produce the FD-94 notice behavior without any hook mutating
-    participation, governance or support.
+28. **Lifecycle-compliance hooks.** Session start/resume/compact exercises
+    the FD-94 participation cases; a reliable host pre-investigation event, where
+    supported, directs the agent to ordinary `ask`; edit/write evaluates the
+    complete changed scope through the same canonical effect projection as
+    `reconsider`, including source, discovery, authority, route, containment,
+    premise and cross-repository effects; multiple edits before handoff preserve
+    their union; only notice presentation is bounded; and idle/stop/completion
+    reports only known outstanding lifecycle obligations. Where logically
+    possible, no-action, semantic-only, Functional-Pyramid-only and combined
+    obligations are exercised. Explicit MCP-result transitions are not
+    rediscovered, and no hook mutates semantics, curation, participation,
+    governance or support or issues re-establishment contexts.
 29. **Initialization handoff.** After accepted activation/revision, lifecycle
     verification succeeds only when `FunctionalPyramidSelector` returns the
     exact committed pyramid identity/version/member view with live health VALID;
@@ -1441,9 +1421,8 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 
 ## 16. What this layer does not define
 
-Storage layout, wire schemas, transport framing, installer behaviour, host
-adapters, and exact deployment numbers. Those are layer 4 and must satisfy this layer. The concrete declaration file format, path-selector grammar, persistence schema,
-graph-index/cache mechanism, repository-binding storage, host adapter mechanics,
-administrative CLI representation and migration from 0.11 are therefore
-intentionally left to the Version-1 technical design. The public lifecycle
-semantics and transitions in layer 2 are not left for layer 4 to invent.
+Layer 3 does not choose storage layout, wire encoding, transport framing,
+installer mechanics, host adapters, persistence schemas, or deployment values.
+Those are Layer-4 choices and must remain derivable from this functional design
+and the higher layers.
+

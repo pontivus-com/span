@@ -88,23 +88,37 @@ without a verified identity, a compatible licence, and a ledger entry.
 
 ## Releases
 
-The version lives in `src/span/__init__.py`; `pyproject.toml` reads it. A
-release is an ordinary pull request that bumps it.
+A merge, push, green CI run, or completed implementation does **not** publish
+Span.
 
-On merge to `master`, the `Release` workflow reads the version and acts only
-when `v<version>` does not exist yet:
+Publication is a separate release-owner decision.
 
-1. Build, attest, and publish `span-mcp` to PyPI.
-2. Only after PyPI accepts the version, create the tag and the GitHub Release.
-   The release body is the matching `## <version>` section of `CHANGELOG.md`,
-   so release notes are written once.
-3. Publish `server.json` to the MCP Registry from the same commit.
+The package version lives in `src/span/__init__.py`; release identity is
+resolved through `scripts/release_identity.py` for the package version, Git
+tag, registry version, release title, and prerelease state.
 
-A push whose version is already tagged is a no-op, and development versions
-containing `dev` are never tagged. A manual `v*` tag push runs the same path;
-the tag must equal `v<__version__>`. Use `workflow_dispatch` on the `Release`
-workflow to retry the resolve step, or re-run the failed job to retry a later
-stage without republishing.
+The `Release` workflow is **manual-only**:
+
+1. Obtain explicit release-owner authorization for the exact reviewed
+   `master` commit/version.
+2. Dispatch the `Release` workflow from `master`.
+3. Supply `confirm_version` equal to the exact package version.
+4. The workflow refuses any non-`master` dispatch or mismatched version
+   confirmation.
+5. If the release tag already exists, the workflow performs no release. A
+   development version is also not published.
+6. For an authorized release, the workflow builds and attests the distribution.
+7. PyPI publication happens before the release tag is created.
+8. After PyPI accepts the version, the workflow creates the Git tag and GitHub
+   Release using the matching changelog section.
+9. The MCP Registry publication runs from the same resolved release identity.
+
+Do not create or push a manual release tag as a substitute for the authorized
+workflow.
+
+A failed later stage may be re-run according to the workflow's idempotent
+release checks, but retry is not new authorization for a different SHA or
+version.
 
 ## Publication and provenance
 

@@ -409,6 +409,51 @@ CAPTURED revision and cannot be served as shared Answer content until separately
 curated; a support-only confirmation of unchanged curated meaning can become
 servable again without manufacturing another semantic review.
 
+### F14 — Public documentation starts from the user's problem and discloses detail progressively
+
+Public documentation is part of the delivered product. Each public document has
+one reader job and begins at the level of abstraction required for that job.
+Front-door documentation starts from the user's problem, the outcome Span
+provides, and credible evidence or context for why the problem matters. It
+introduces Span mechanisms only to the degree needed for the reader to
+understand, trust, or act on that outcome.
+
+Information order follows product dependency order. A prerequisite state,
+initialization step, or orientation must appear before the workflow that depends
+on it. Where a governed runtime depends on prior Functional Pyramid
+initialization/adoption, public guidance presents that prerequisite before the
+ordinary runtime lifecycle that consumes governing orientation. Exact lifecycle
+states and transition rules remain owned by Layer 2 rather than being restated
+here.
+
+Detail is disclosed progressively. User guidance explains the task and next
+action; concept documentation explains the product model; reference
+documentation owns exact operational mechanics; contributor documentation
+explains implementation ownership; and the Functional Pyramid remains the
+single owner of binding product authority. A public guide may explain the
+consequence of a canonical rule for its reader, but it links to that rule rather
+than reproducing the normative contract.
+
+Public documentation does not narrate its own information architecture or
+editorial method. Headings, sequence, links, and document boundaries perform
+that work. Self-referential commentary such as why a document is organized a
+certain way, that it uses progressive disclosure, or that it is intentionally
+high-level is omitted unless the statement is itself operationally necessary,
+for example to distinguish authority, verification evidence, or historical
+material.
+
+External sources may establish industry context, evidence, or credibility for a
+problem or practice. They do not become Span product authority and do not import
+another product's architecture or requirements into Span.
+
+*Demonstration:* a new reader can understand the problem Span solves, follow the
+required setup in dependency order, and reach the first successful workflow
+without learning implementation internals. A governed first-use path completes
+the required Functional Pyramid initialization/adoption before ordinary governed
+runtime work. Exact mechanics and authority remain reachable at the next
+appropriate depth; public pages do not explain the documentation strategy
+itself; and the corpus contains no competing copy of a normative rule.
+
 ## 4. Lifecycle responsibilities
 
 The agent's required actions and task-completion boundary are owned by

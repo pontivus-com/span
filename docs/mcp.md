@@ -1,49 +1,69 @@
 # MCP reference
 
+This is the exact public protocol reference for Span's MCP server.
+
+If you are trying to learn the normal workflow rather than look up a request,
+result, selector, or error contract, start with [Using Span](usage.md).
+
 Span runs over stdio:
 
 ```bash
 span-mcp --data-dir DIR [--repo /path ...]
 ```
 
-`--repo` registers repository identity for discovery. It opens no store and
-performs no structural build; context opens lazily on the first
-repository-scoped call. Setup belongs to the installer.
+`--repo` registers repository identity for discovery. Setup and provisioning
+belong to [Install and connect](install.md); MCP process startup does not perform
+installation work.
 
-## Tools
+## Find the contract you need
+
+| Need | Section |
+| --- | --- |
+| Obtain current knowledge, gaps, exact history, evidence, or Functional Pyramid status | [`ask`](#ask) |
+| Create/update understanding, record verification, declare surfaces, or change Functional Pyramid participation | [`record`](#record) |
+| Reassess changed scope or challenge retained knowledge | [`reconsider`](#reconsider) |
+| Understand typed failures and result egress | [Egress and errors](#egress-and-errors) |
+| Recover/replay a recording safely | [Replay, identity, and retention](#replay-identity-and-retention) |
+| Find repository IDs | [Repository discovery](#repository-discovery) |
+| Check operational readiness | [Readiness](#readiness) |
+
+## Public tool boundary
 
 Exactly three core tools ship, one per lifecycle moment:
 
 | Tool | Lifecycle verb | Job |
 | --- | --- | --- |
-| `ask` | obtain | Current understanding or gap |
-| `record` | retain | Create, update, verify, or declare a surface |
+| `ask` | obtain | Current understanding, gap, exact retrieval, or lifecycle status |
+| `record` | retain | Create/update understanding, verification, surfaces, or Functional Pyramid state |
 | `reconsider` | re-align | Changed scope or challenge |
 
 The host supplies structural navigation and the installer owns setup. Neither is
-part of the default surface.
+another Span MCP operation.
 
 **Working agents capture. Reviewers curate. Span maintains the lifecycle.**
-Understanding create/change retains semantic meaning as CAPTURED; ordinary
-shared Answer content requires the exact revision to be both CURRENT under the
-canonical support evaluator and CURATED by an explicit reviewer act.
-`ask(PendingCurationSelector)` discovers current captures awaiting review, and
-`record(actions.curate)` records the immutable disposition without changing
-semantic content, support, or Functional Pyramid authority. Span runs no
-background curator and exposes no fourth curation tool.
 
-`record` carries `kind` (`understanding`, `verification`, `surface`, or
-`functional_pyramid`). An
-understanding create is flat — one `conclusion` with dependency evidence from
-`locator`, `observation_id`, or non-empty `support`; scope is supplied or
-derived independently. A locator may accompany explicit support only as carried
-semantic scope; support remains the complete dependency set. `actions` is for updates and `action` for a surface
-declaration. Those are semantic fields, not separate tools. Only the current
-three names are registered. Any other operation name follows the ordinary typed
-`unknown_tool` error path and performs no work.
+Understanding create/change retains semantic meaning as `CAPTURED`. Ordinary
+shared Answer content requires the exact revision to remain `CURRENT` under
+the canonical support evaluator and to be `CURATED` by an explicit reviewer
+act.
 
-Every repository-scoped request carries its canonical `repository_id`. Paths are
-never accepted as IDs.
+`ask(PendingCurationSelector)` discovers current captures awaiting review.
+`record(actions.curate)` records the immutable curation disposition without
+changing semantic content, support, or Functional Pyramid authority. Span runs
+no background curator and exposes no fourth curation tool.
+
+`record` carries `kind` (`understanding`, `verification`, `surface`,
+or `functional_pyramid`). An understanding create carries one conclusion with
+dependency evidence from `locator`, `observation_id`, or non-empty
+`support`; scope is supplied or derived independently. `actions` is used for
+understanding updates and `action` for a surface or Functional Pyramid
+lifecycle write.
+
+Only `ask`, `record`, and `reconsider` are registered tool names. Any
+other operation name follows the typed unknown-tool path and performs no work.
+
+Every repository-scoped request carries the canonical `repository_id`.
+Filesystem paths are never accepted as repository IDs.
 
 ## `ask`
 
@@ -168,8 +188,9 @@ set. Scope is supplied or derived independently through
 `scope_paths`, the bound context, or a single carried path. `surface` is
 optional and derived from the carried scope. `assertion_nature` defaults to
 `DESCRIPTIVE`. A create takes no caller-created conclusion identity, no
-`action`, and no `actions`: `action` belongs to `kind="surface"` and `actions`
-to updates. Sending any of them is a recognized lifecycle structural rejection; malformed
+`action`, and no `actions`: `action` belongs to `kind="surface"` or
+`kind="functional_pyramid"`, while `actions` belongs to understanding
+updates. Sending any of them is a recognized lifecycle structural rejection; malformed
 transport envelopes and unknown tools remain transport errors.
 
 Updates use `actions` with `add`, `confirm`, `correct`, `replace`, or `withdraw`,
@@ -349,8 +370,12 @@ detail remains retrievable with `ReceiptRetrievalSelector`.
 }
 ```
 
-This is an after-edit operation. The service derives the challenge context from
-the target version and cited evidence; the caller does not supply a context id.
+Changed-scope reconsideration is the after-edit operation. The challenge branch
+is an explicit dispute and does not require an edit. A challenge may supply the
+canonical context that already binds admitted evidence; in that branch the
+context determines repository routing and there is no independent repository
+override. When challenge evidence is direct, omit context and Span derives the
+challenge context internally.
 Results: `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 
 `Changed` names every surface to re-examine, the reasons it was considered

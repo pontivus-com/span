@@ -119,8 +119,25 @@ def _ensure_isolated_exe(work):
         srctree / "src",
         ignore=_shutil.ignore_patterns("__pycache__"),
     )
-    for name in ("pyproject.toml", "README.md"):
+    for name in ("pyproject.toml", "README.md", "setup.py"):
         _shutil.copy(repo_root / name, srctree / name)
+    _shutil.copytree(
+        repo_root / "scripts",
+        srctree / "scripts",
+        ignore=_shutil.ignore_patterns("__pycache__"),
+    )
+    _shutil.copytree(repo_root / "skills", srctree / "skills")
+    (srctree / "docs").mkdir()
+    _shutil.copy(
+        repo_root / "docs" / "agents-snippet.md",
+        srctree / "docs" / "agents-snippet.md",
+    )
+    plugin_dir = srctree / "integrations" / "hosts" / "opencode"
+    plugin_dir.mkdir(parents=True)
+    _shutil.copy(
+        repo_root / "integrations" / "hosts" / "opencode" / "span-hooks.js",
+        plugin_dir / "span-hooks.js",
+    )
     identity = {
         "source_revision": _tree_revision(repo_root),
         "source_digest": _tree_digest(repo_root),
@@ -215,6 +232,109 @@ class InstalledMcpDriverTest(_unittest.TestCase):
             env=self._env(),
         )
         self.assertEqual(created.returncode, 0, created.stderr[-2000:])
+
+    def test_packaged_opencode_plugin_reaches_real_installed_hook_store(self):
+        """Exercise deployed OpenCode plugin -> installed span-hooks -> real store."""
+        if _shutil.which("node") is None:
+            raise _unittest.SkipTest(
+                "packaged OpenCode hook lane needs Node for the managed plugin"
+            )
+        root = self.tmp / "opencode-real-hook"
+        repo = root / "hook-repo"
+        repo.mkdir(parents=True, exist_ok=True)
+        (repo / "README.md").write_text("# hook repo\n", encoding="utf-8")
+        data_dir = root / "data"
+        self._create_store(repo, data_dir)
+
+        receipt_code = (
+            "import json\n"
+            "from pathlib import Path\n"
+            "from span.shell.install.constants import INSTALL_VERSION\n"
+            f"path = Path({str(data_dir / 'install.json')!r})\n"
+            f"repos = [{str(repo.resolve())!r}]\n"
+            "path.write_text(json.dumps({'install_version': INSTALL_VERSION, "
+            "'repos': repos, 'host_registration': {}}), encoding='utf-8')\n"
+        )
+        receipt = _subprocess.run(
+            [self.isolated_python, "-c", receipt_code],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=self._env(),
+        )
+        self.assertEqual(receipt.returncode, 0, receipt.stderr[-2000:])
+
+        real_hook = _pathlib.Path(self.exe).with_name("span-hooks")
+        self.assertTrue(real_hook.is_file())
+        plugin_dir = root / "opencode-plugin"
+        config_path = root / "config/opencode.json"
+        not_a_checkout = root / "distribution-mode"
+        not_a_checkout.mkdir()
+        deploy_code = (
+            "from span.shell.install.hosts import deploy_opencode_plugin\n"
+            "from span.shell.install.paths import opencode_plugin_path\n"
+            f"source = opencode_plugin_path({str(not_a_checkout)!r})\n"
+            f"deploy_opencode_plugin(str(source), {str(plugin_dir)!r}, "
+            f"{str(config_path)!r}, {str(real_hook)!r}, {str(data_dir)!r}, "
+            f"dry_run=False, span_root={str(root)!r})\n"
+        )
+        deployed = _subprocess.run(
+            [self.isolated_python, "-c", deploy_code],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=self._env(),
+        )
+        self.assertEqual(deployed.returncode, 0, deployed.stderr[-4000:])
+        self.assertTrue((plugin_dir / "index.js").is_file())
+        self.assertTrue((plugin_dir / "span-hooks").is_file())
+
+        driver = root / "drive-opencode-hook.mjs"
+        driver.write_text(
+            """
+import { pathToFileURL } from "node:url";
+const pluginPath = process.argv[2];
+const repoRoot = process.argv[3];
+const registered = {};
+const ctx = {
+  location: { directory: repoRoot },
+  event: { subscribe: async function* () {} },
+  tool: {
+    list: async () => [{ id: "span_ask" }],
+    hook: async (name, handler) => { registered["tool:" + name] = handler; },
+  },
+  session: {
+    hook: async (name, handler) => {
+      registered["session:" + name] = handler;
+      return { dispose() {} };
+    },
+  },
+};
+const plugin = (await import(pathToFileURL(pluginPath).href + "?real=1")).default;
+const dispose = await plugin.setup(ctx);
+const event = { sessionID: "real-session", system: [] };
+registered["session:context"](event);
+console.log(JSON.stringify(event.system));
+dispose();
+""".strip() + "\n",
+            encoding="utf-8",
+        )
+        proc = _subprocess.run(
+            ["node", str(driver), str(plugin_dir / "index.js"), str(repo)],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=self._env(),
+        )
+        self.assertEqual(proc.returncode, 0, (proc.stderr or proc.stdout)[-4000:])
+        observed = _json.loads(proc.stdout.strip().splitlines()[-1])
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0]["type"], "text")
+        self.assertIn("Functional Pyramid UNCONFIGURED", observed[0]["text"])
+        self.assertIn("ask the relevant surface", observed[0]["text"])
 
     def _install_governed_runtime(
         self,

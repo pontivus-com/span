@@ -1,79 +1,145 @@
 # Evidence, authority, and interpretation
 
-Span gives an agent two different parts of the working context, and they need
-different proof. Source code, tests, configuration, and executions can support
-what the implementation is understood to do. Canonical goals, rules, contracts,
-and design documents can establish what that implementation is supposed to
-follow when their authority and applicability are declared.
+A coding agent often needs to answer two different questions:
 
-Span keeps those two roles separate even though it returns them together for the
-same software scope. Relevance alone makes neither an implementation explanation
-true nor a document authoritative.
+1. **What does the software appear to do?**
+2. **What is the software supposed to do?**
 
-## Evidence and support
+Those questions can point to different sources and require different proof.
 
-Exact source admission creates an immutable `SourceObservation`: its repository,
-locator, content hash and delivered ranges. Source bytes are re-read and verified
-on delivery; they are not stored. A recorded conclusion
-cites admitted support rather than resending source bodies or inventing
-fingerprints. CSS and configuration can support investigation even when
-structural parsing is unavailable.
+Source code, tests, configuration, and executions can support an explanation of
+the implementation. Project goals, contracts, policies, and design documents can
+govern what that implementation is supposed to satisfy.
 
-The support union covers source observations, declared authority bindings,
-exact premise revisions, recorded discovery membership, and Functional Pyramid
-route support. Route support establishes the exact declared governance
-applicability/topology for a NORMATIVE conclusion; canonical governing content
-remains independently supported through authority bindings. Their typed
-contracts live in `core/model/support.py`; [freshness](freshness.md) explains
-how present state is evaluated.
+Span keeps those roles separate even when both are relevant to the same task.
 
-## Declared governance
+## Evidence supports an interpretation of the implementation
 
-`AuthorityBinding` carries an evidence reference, kind, status, applicability,
-and optional declared precedence. Setup registers explicit bindings; recording
-resolves references through the authority port. Finding a file with a promising
-name or admitting its bytes does not create a binding.
+An investigator reads source, tests, configuration, runtime observations, or
+other material and reaches a conclusion about the software.
 
-Accepted, declared, draft, superseded, and unknown statuses remain distinct.
-Current authority support requires its declared accepted state, identity,
-applicability, kind, and recorded content to remain compatible with present
-evidence. Missing authority stays unverifiable; superseded or changed support
-requires reassessment. Precedence must come from an explicit declaration,
-not from a model's preferred interpretation or a ranking score.
+Span can retain that conclusion together with the evidence used to establish it.
+Later, Span can check whether the recorded evidence still matches the present
+state.
 
-## Functional Pyramid governance
+That gives a future agent a maintained explanation rather than an unsupported
+note.
 
-Functional Pyramid declarations connect semantic scope to declared Functional
-Contexts and Functional Rules, then to repository-qualified canonical authority
-owners. This graph establishes applicability; it does not grant authority to
-prose merely because the prose is discoverable.
+But evidence does not make the interpretation infallible. An agent may still
+have misunderstood the code, missed relevant evidence, or drawn a conclusion
+that is too broad.
 
-Canonical rule text remains in the repository that owns its accepted
-`AuthorityBinding`. Span carries rule identity, owner reference, graph
-relationships and route identity. Cross-repository governance therefore does
-not require copying another repository's governing source into the semantic
-owner's store.
+That is why semantic judgment remains with the investigator and reviewer.
 
-## Meaning, currency, and dispute
+## Governing authority answers a different question
 
-`SupportedConclusion` contains an agent-authored statement, descriptive or
-normative assertion nature, scope, support, and a basis. A basis explains what
-was checked; it is not proof of semantic correctness. Mechanical admission
-and acceptance do not certify the interpretation.
+A document is not authoritative merely because it looks important or contains
+relevant words.
 
-`CURRENT`, `REASSESSMENT_REQUIRED`, and `UNVERIFIABLE` classify support currency.
-Explicit gaps preserve unanswered questions. Challenges preserve contested
-interpretations and their disposition history independently of current source
-bytes. A later version or passing run does not silently resolve disagreement.
+For Span to treat project guidance as governing, its ownership and applicability
+must be declared by the project.
 
-Legacy trust/claim-kind vocabulary may remain in retained core types and
-historical exports. It is not a required taxonomy for authoring a current
-understanding. See [taxonomy](taxonomy.md) and [recording](interpretation.md).
+That means Span does not infer authority from:
 
-## Verification is its own record
+- filenames such as `requirements.md` or `architecture.md`;
+- directory position;
+- search ranking or semantic similarity;
+- document age or prominence; or
+- a model's preferred interpretation.
 
-An external execution is recorded independently with its observed outcome and
-source observations. Test existence is not a pass. A current failed run still
-records failure; changed tested bytes require a new execution before a fresh
-pass can be claimed. `ask` returns the run with its live qualification without
-running anything. Span never originates repository or professional authority.
+Repository owners decide what the canonical governing sources are. Span
+maintains the declared identities and relationships needed to apply them to
+software work.
+
+## Why the distinction matters
+
+Implementation and governing guidance can drift independently.
+
+For example:
+
+- the code can change while the governing requirement stays the same;
+- a requirement can change while the implementation stays byte-for-byte
+  identical;
+- a governing document can remain unchanged while its applicability changes;
+  or
+- the code and requirement can both remain unchanged while an earlier
+  interpretation is shown to be wrong.
+
+If evidence and authority were collapsed into one concept, those cases would be
+easy to misrepresent.
+
+Span therefore keeps them as different dependency classes and lets change on
+either side trigger reassessment where appropriate.
+
+## The Functional Pyramid makes governing applicability explicit
+
+For participating repositories, Span uses the **Functional Pyramid** to connect
+the software scope being worked on to its declared project guidance.
+
+The path can run from project goals and principles through contracts, functional
+design, and technical design to the relevant software scope.
+
+The canonical rule text stays at its owning source. Span maintains the declared
+relationships and applicability rather than copying that material into a second
+authority store.
+
+This also allows declared governance to cross repository boundaries without
+assuming that repository layout defines the knowledge boundary.
+
+## A normative conclusion still belongs to the investigator
+
+Sometimes the engineering conclusion itself is normative, for example:
+
+> this implementation conforms to the governing contract.
+
+The investigator or reviewer still authors that judgment.
+
+Span can ensure that the applicable governing route and required authority are
+part of the conclusion's support. It does not make the conformance judgment on
+the investigator's behalf.
+
+That keeps a useful separation:
+
+- repository owners provide governing authority;
+- investigators and reviewers provide semantic/conformance judgment; and
+- Span maintains the declared support, relationships, history, and change
+  consequences around them.
+
+## Current support is not semantic truth
+
+A conclusion whose support is `CURRENT` has dependencies that still pass their
+checks.
+
+A conclusion whose exact revision is `CURATED` has been accepted by a reviewer
+for shared reuse.
+
+Neither label means that Span has mathematically proved the statement true.
+
+Gaps can remain. Disputes can remain. A reviewer can later discover a semantic
+error even when every recorded dependency still matches.
+
+See [Support currency and reassessment](freshness.md) for how change affects
+recorded support.
+
+## Verification is separate again
+
+A test run or external review records what was observed during that execution.
+
+That evidence can support engineering judgment, but the run is not itself the
+semantic explanation of the software and does not become project authority.
+
+A recorded failing test remains a failing observation even when its supporting
+source is still current. A passing test does not silently settle a disputed
+interpretation.
+
+Keeping verification, interpretation, and authority separate preserves what
+each one actually proves.
+
+## Go deeper
+
+- [Agent lifecycle](lifecycle.md) explains how captured knowledge moves through
+  review, reuse, and reassessment.
+- [Interpretation and recording](interpretation.md) explains what makes a useful
+  retained conclusion.
+- [MCP reference](mcp.md) owns the exact evidence, authority, and Functional
+  Pyramid request/result grammar.

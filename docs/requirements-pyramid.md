@@ -86,7 +86,7 @@ it.
   truth and will drift.
 - Test: if a line can be deleted and the rule still holds by derivation from the
   layer above, delete it.
-- Citations are how layers connect. Use the IDs (`G1–G8`, `A1–A10`, `F1–F13`,
+- Citations are how layers connect. Use the IDs (`G1–G8`, `A1–A10`, `F1–F14`,
   `L1–L17`, `FD-1–FD-102`) instead of repeating the statement they name.
 
 This rule applies within a layer as well as between layers. Two sections that say

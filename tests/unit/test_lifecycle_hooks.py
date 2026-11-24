@@ -108,18 +108,108 @@ class LifecycleHooksTest(unittest.TestCase):
             self.assertIn("Functional Pyramid UNCONFIGURED", output)
             self.assertIn("span-functional-pyramid", output)
 
+    def test_session_entry_composes_four_participation_health_branches_once(self):
+        active_member = m.FunctionalPyramidMemberView(
+            repository_id=REPO,
+            declaration_refs=(
+                m.EvidenceRef(
+                    evidence_id=m.EvidenceId("fp-declaration"),
+                    repository_id=REPO,
+                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                    locator="docs/functional-pyramid.json",
+                ),
+            ),
+            functional_scope=m.FunctionalScope(
+                (
+                    m.FunctionalScopeSelector(
+                        m.FunctionalScopeSelectorKind.PREFIX,
+                        path="src",
+                    ),
+                )
+            ),
+            coverage=m.FunctionalPyramidCoverage.PARTIAL,
+        )
+        degraded_finding = m.FunctionalPyramidFinding(
+            reason=m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+            repository_id=REPO,
+            detail="repository unavailable",
+            recovery="restore repository availability",
+        )
+        cases = (
+            (
+                "unconfigured",
+                m.FunctionalPyramidStatus(
+                    state=m.FunctionalPyramidParticipationState.UNCONFIGURED
+                ),
+                (
+                    "UNCONFIGURED",
+                    "span-functional-pyramid",
+                    "Descriptive-only work remains available",
+                ),
+            ),
+            (
+                "excluded",
+                m.FunctionalPyramidStatus(
+                    state=m.FunctionalPyramidParticipationState.EXCLUDED
+                ),
+                ("EXCLUDED", "no initialization obligation", "descriptive-only"),
+            ),
+            (
+                "active-valid",
+                m.FunctionalPyramidStatus(
+                    state=m.FunctionalPyramidParticipationState.ACTIVE,
+                    health=m.FunctionalPyramidHealth.VALID,
+                    pyramid_id=m.FunctionalPyramidId("fp-hooks"),
+                    version=m.FunctionalPyramidVersion(1),
+                    members=(active_member,),
+                ),
+                ("ACTIVE/VALID", "no separate Pyramid action", "governed semantic"),
+            ),
+            (
+                "active-degraded",
+                m.FunctionalPyramidStatus(
+                    state=m.FunctionalPyramidParticipationState.ACTIVE,
+                    health=m.FunctionalPyramidHealth.DEGRADED,
+                    pyramid_id=m.FunctionalPyramidId("fp-hooks"),
+                    version=m.FunctionalPyramidVersion(1),
+                    members=(active_member,),
+                    findings=(degraded_finding,),
+                ),
+                (
+                    "ACTIVE/DEGRADED",
+                    "governance needs attention",
+                    "semantic orientation",
+                ),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data = _recorded(tmp)
+            for name, status, expected in cases:
+                with (
+                    self.subTest(name=name),
+                    mock.patch.object(
+                        hooks, "_functional_pyramid_status", return_value=status
+                    ),
+                ):
+                    output = _capture(hooks.cmd_session_start, data, str(root))
+                    self.assertEqual(len(output.splitlines()), 1)
+                    for value in expected:
+                        self.assertIn(value, output)
+                    self.assertIn("ask the relevant surface", output)
+
     def test_adoption_primer_when_understanding_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = _recorded(tmp)
             output = _capture(hooks.cmd_adoption_primer, data, str(root))
             self.assertEqual(output, hooks.ADOPTION_PRIMER)
-            self.assertIn("governs semantic understanding", output)
+            self.assertIn("lifecycle is active", output)
             self.assertIn("_ask", output)
-            self.assertIn("direct tools", output)
-            self.assertIn("native read/search", output)
-            self.assertIn("shell commands", output)
-            self.assertNotIn("current", output)
-            self.assertNotIn("stale", output)
+            self.assertIn("FunctionalPyramidSelector", output)
+            self.assertIn("span-functional-pyramid", output)
+            self.assertIn("ACTIVE/VALID", output)
+            self.assertIn("EXCLUDED", output)
+            self.assertNotIn("_record", output)
+            self.assertNotIn("_reconsider", output)
 
     def test_adoption_primer_reaches_a_cold_registered_repository(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -136,7 +226,7 @@ class LifecycleHooksTest(unittest.TestCase):
             store.close()
             output = _capture(hooks.cmd_adoption_primer, data, str(root))
             self.assertEqual(output, hooks.ADOPTION_PRIMER)
-            self.assertIn("Record supported conclusions", output)
+            self.assertIn("FunctionalPyramidSelector", output)
 
     def test_adoption_primer_is_silent_without_a_store(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -194,6 +284,205 @@ class LifecycleHooksTest(unittest.TestCase):
             )
             with self.assertRaises(SystemExit):
                 hooks.cmd_session_start(data, str(root))
+
+    def test_changed_scope_projection_receives_complete_input_before_render_bound(self):
+        class FakeReconsider:
+            def __init__(self):
+                self.requests = []
+
+            def preview_changed_scope(self, request):
+                self.requests.append(request)
+                return object()
+
+        class FakeContext:
+            def __init__(self, reconsider):
+                self.reconsider = reconsider
+
+        class FakeInstallation:
+            def __init__(self, reconsider):
+                self.reconsider = reconsider
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def context_for_locator(self, root):
+                return FakeContext(self.reconsider)
+
+        reconsider = FakeReconsider()
+        paths = tuple(
+            f"src/file-{index}.py" for index in range(hooks.HOOK_DIAGNOSTIC_LIMIT + 3)
+        )
+        with (
+            mock.patch.object(hooks, "repo_map", return_value={"/repo": "/repo"}),
+            mock.patch(
+                "span.shell.installation_runtime.open_installation_runtime",
+                return_value=FakeInstallation(reconsider),
+            ),
+        ):
+            repository_id, projection = hooks._affected_for_root(
+                "/data", "/repo", paths
+            )
+
+        self.assertEqual(repository_id, "repo")
+        self.assertIsNotNone(projection)
+        self.assertEqual(reconsider.requests[0].changed_paths, paths)
+
+    def test_stdin_path_parser_does_not_silently_cap_changed_scope(self):
+        payload = [
+            {"file_path": f"/repo/src/file-{index}.py"}
+            for index in range(hooks.HOOK_DIAGNOSTIC_LIMIT * 5)
+        ]
+        with mock.patch("sys.stdin", io.StringIO(json.dumps(payload))):
+            paths = hooks._stdin_paths()
+        self.assertEqual(len(paths), len(payload))
+        self.assertEqual(paths[-1], payload[-1]["file_path"])
+
+    def test_codex_apply_patch_parser_uses_only_documented_patch_markers(self):
+        command = """*** Begin Patch
+*** Update File: src/a.py
+*** Move to: src/moved.py
+*** Add File: src/new.py
+*** Delete File: src/old.py
+*** End Patch
+"""
+        self.assertEqual(
+            hooks._codex_apply_patch_paths(command),
+            ("src/a.py", "src/moved.py", "src/new.py", "src/old.py"),
+        )
+        self.assertIsNone(
+            hooks._codex_apply_patch_paths("*** Begin Patch\n*** End Patch")
+        )
+
+    def test_codex_post_tool_emits_structured_context_for_complete_native_scope(self):
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {
+                "command": (
+                    "*** Begin Patch\n"
+                    "*** Update File: src/a.py\n"
+                    "*** Add File: src/b.py\n"
+                    "*** End Patch\n"
+                )
+            },
+        }
+        observed = []
+
+        def project(_data_dir, paths):
+            observed.append(tuple(paths))
+            return ("span: repo needs attention; call reconsider after editing.",)
+
+        with (
+            mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
+            mock.patch.object(hooks, "_source_change_notices", side_effect=project),
+        ):
+            output = _capture(hooks.cmd_codex_post_tool, "/data", "/repo")
+
+        result = json.loads(output)
+        self.assertEqual(observed, [("/repo/src/a.py", "/repo/src/b.py")])
+        self.assertEqual(
+            result["hookSpecificOutput"]["hookEventName"],
+            "PostToolUse",
+        )
+        self.assertIn(
+            "call reconsider after editing",
+            result["hookSpecificOutput"]["additionalContext"],
+        )
+
+    def test_codex_post_tool_keeps_reconsider_obligation_when_preview_is_clean(self):
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {
+                "command": (
+                    "*** Begin Patch\n" "*** Update File: src/a.py\n" "*** End Patch\n"
+                )
+            },
+        }
+        observed = []
+
+        def project(_data_dir, paths):
+            observed.append(tuple(paths))
+            return ()
+
+        with (
+            mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
+            mock.patch.object(hooks, "_source_change_notices", side_effect=project),
+        ):
+            output = _capture(hooks.cmd_codex_post_tool, "/data", "/repo")
+
+        result = json.loads(output)
+        self.assertEqual(observed, [("/repo/src/a.py",)])
+        context = result["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("call reconsider with the complete changed scope", context)
+        self.assertIn("1 changed file(s)", context)
+
+    def test_codex_post_tool_reports_incomplete_native_scope_without_guessing(self):
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {"command": "not an apply_patch document"},
+        }
+        with mock.patch("sys.stdin", io.StringIO(json.dumps(payload))):
+            output = _capture(hooks.cmd_codex_post_tool, "/data", "/repo")
+
+        result = json.loads(output)
+        self.assertIn(
+            "could not normalize the complete changed scope",
+            result["hookSpecificOutput"]["additionalContext"],
+        )
+
+    def test_claude_post_tool_uses_documented_absolute_path_and_structured_context(
+        self,
+    ):
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/repo/src/a.py", "content": "x"},
+        }
+        observed = []
+
+        def project(_data_dir, paths):
+            observed.append(tuple(paths))
+            return ()
+
+        with (
+            mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
+            mock.patch.object(hooks, "_source_change_notices", side_effect=project),
+        ):
+            output = _capture(hooks.cmd_claude_post_tool, "/data", "/repo")
+
+        result = json.loads(output)
+        self.assertEqual(observed, [("/repo/src/a.py",)])
+        self.assertEqual(
+            result["hookSpecificOutput"]["hookEventName"],
+            "PostToolUse",
+        )
+        self.assertIn(
+            "call reconsider with the complete changed scope",
+            result["hookSpecificOutput"]["additionalContext"],
+        )
+
+    def test_claude_post_tool_reports_incomplete_native_scope_without_guessing(self):
+        for file_path in (None, "src/a.py"):
+            with self.subTest(file_path=file_path):
+                tool_input = {} if file_path is None else {"file_path": file_path}
+                payload = {
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Edit",
+                    "tool_input": tool_input,
+                }
+                with mock.patch("sys.stdin", io.StringIO(json.dumps(payload))):
+                    output = _capture(hooks.cmd_claude_post_tool, "/data", "/repo")
+
+                result = json.loads(output)
+                self.assertIn(
+                    "documented absolute tool_input.file_path is unavailable",
+                    result["hookSpecificOutput"]["additionalContext"],
+                )
 
     def test_source_change_reports_bounded_dependents(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -374,6 +663,12 @@ class LifecycleHooksTest(unittest.TestCase):
         self.assertIn("ACTIVE/DEGRADED", notice)
         self.assertIn("FunctionalPyramidSelector", notice)
         self.assertIn("span-functional-pyramid", notice)
+
+    def test_hook_source_uses_canonical_changed_scope_projection(self):
+        source = pathlib.Path(hooks.__file__).read_text(encoding="utf-8")
+        self.assertIn("preview_changed_scope", source)
+        self.assertNotIn("source_observation_ids_for_locator", source)
+        self.assertNotIn('support_dependents("SOURCE"', source)
 
     def test_hook_source_has_no_semantic_writer_or_builder(self):
         source = pathlib.Path(hooks.__file__).read_text(encoding="utf-8")

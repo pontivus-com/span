@@ -95,6 +95,60 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("no changelog section", result.stderr)
 
+    def test_release_requires_explicit_manual_authorization(self):
+        workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotRegex(workflow, r"(?m)^  push:")
+        self.assertIn("confirm_version:", workflow)
+        self.assertIn("REF_NAME: ${{ github.ref_name }}", workflow)
+        self.assertIn('if [[ "${REF_NAME}" != "master" ]]', workflow)
+        self.assertIn('if [[ "${requested}" != "${version}" ]]', workflow)
+
+    def test_active_release_surfaces_contain_only_beta3_identity(self):
+        roots = (
+            REPO_ROOT / "docs",
+            REPO_ROOT / "src",
+            REPO_ROOT / "skills",
+            REPO_ROOT / "integrations",
+            REPO_ROOT / ".github",
+            REPO_ROOT / "scripts",
+            REPO_ROOT / "tests",
+        )
+        root_files = tuple(
+            path
+            for path in REPO_ROOT.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in {".json", ".md", ".py", ".toml", ".yaml", ".yml"}
+        )
+        forbidden = (
+            "Beta " + "2",
+            "Beta-" + "2",
+            "1.0.0" + "b2",
+            "1.0.0-beta." + "2",
+            "B2-" + "D01",
+            "B2-" + "D02",
+        )
+        candidates = list(root_files)
+        for root in roots:
+            if root.exists():
+                candidates.extend(path for path in root.rglob("*") if path.is_file())
+
+        offenders = []
+        for path in candidates:
+            relative = path.relative_to(REPO_ROOT)
+            if "1.0.0-beta2" in path.name.lower():
+                offenders.append(str(relative))
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            if any(value in text for value in forbidden):
+                offenders.append(str(relative))
+        self.assertEqual(sorted(set(offenders)), [])
+
 
 if __name__ == "__main__":
     unittest.main()

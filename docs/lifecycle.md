@@ -1,154 +1,153 @@
 # Agent lifecycle
 
-The agent follows [the required lifecycle](lifecycle-contract.md#required-agent-completion)
-to keep its working context current. For the exact software surface being worked
-on, Span can provide both retained implementation understanding and the
-applicable chain of project guidance. The agent investigates gaps, records
-supported conclusions, and re-aligns affected understanding after implementation
-or guidance changes. See [usage](usage.md) for the procedure and
-[MCP reference](mcp.md) for the three-tool grammar.
+Span maintains two related lifecycles.
 
+For repositories intended to use project governance, Functional Pyramid
+initialization/adoption establishes the governing map first. The ordinary
+software-knowledge lifecycle then uses that governing orientation during each
+task.
+
+Repositories not using governance can enter the descriptive semantic lifecycle
+without ACTIVE participation. UNCONFIGURED remains a valid descriptive state;
+EXCLUDED records an explicit non-participation decision.
+
+```text
+repository installed and ready
+  ├─ governed use → initialize/adopt → ACTIVE + VALID ─┐
+  └─ descriptive use → UNCONFIGURED or EXCLUDED ──────┤
+                                                       ↓
+                                                start a task
+                                  ↓
+                        ask what is known
+                                  ↓
+                    investigate what is missing
+                                  ↓
+                    capture useful understanding
+                                  ↓
+                 review stable knowledge for reuse
+                                  ↓
+                    future tasks start better informed
+                                  ↓
+                    code or guidance changes
+                                  ↓
+                    reconsider affected knowledge
+                                  ↺
 ```
-SETUP (installer)
-  bind repository, declared authority seeds/bindings, repository schema 14
-  create/verify installation Functional Pyramid store
-  → registered repositories begin UNCONFIGURED; no understanding is created
 
-GOVERNANCE ADOPTION (same three MCP tools)
-  STATUS → DISCOVER/VALIDATE → DECLARE when needed
-  → reconsider/disposition → VALIDATE → ACTIVATE/REVISE
-  → VERIFY → REESTABLISH actionable effects → ACTIVE
+UNCONFIGURED is not a completed governance setup. ACTIVE + DEGRADED requires
+governance repair before the repository is treated as governance-ready.
 
-ORDINARY SESSION
-  ask
-    → current surface document view or an honest gap with source pointers;
-      explicit evidence admission is separate
-  record
-    → atomic create/update/verify, or a declared service/domain surface
-  reconsider
-    → every surface a change affects, with per-conclusion support state
-```
+## Initialize governing context before governed runtime
 
-## Functional Pyramid participation
+Functional Pyramid initialization/adoption establishes or revises the explicit
+relationship from software scope to canonical project goals, principles,
+contracts, functional design, and technical design.
 
-Functional Pyramid participation controls whether Span can provide the
-guiding-document half of the working context. Participation is explicit and
-installation-scoped. A registered repository is `UNCONFIGURED` unless it is
-explicitly `EXCLUDED` or belongs to one ACTIVE pyramid. Candidate validation
-is read-only. ACTIVATE/REVISE/DEACTIVATE writes use the installation receipt
-namespace and return only actual participation changes plus the live
-dependent-effect projection.
+Only explicit lifecycle actions change durable participation. Span does not
+infer governance from repository layout, filenames, or semantic similarity, and
+it does not copy governing prose into a second authority store.
 
-For ACTIVE repositories, ordinary `ask` carries the governing projection for
-the exact semantic scope. NORMATIVE `record` derives route and canonical
-authority support server-side. Ordinary `reconsider` and participation writes
-share one repository-qualified effect engine, so governance changes can produce
-re-establishment work in another repository. An accepted participation write is
-not lifecycle completion while its retained effect references remain
-actionable.
+Once a repository is ACTIVE + VALID, ordinary `ask` resolves the governing
+projection for the same software scope as the semantic request. UNCONFIGURED and
+EXCLUDED repositories can continue with the descriptive semantic lifecycle
+without an ACTIVE governing projection; UNCONFIGURED must be initialized before
+the user relies on governed behavior.
 
-## Contexts
+See [First investigation](onboarding-runbook.md) for the first setup/use flow and
+[Evidence, authority, and interpretation](authority-trust.md) for the proof
+model.
 
-Pure surface/reference obtain creates no context and requires no caller request
-identity. Explicit evidence admission issues or recovers one persisted
-evidence-only context bound to its caller-owned request identity and complete
-selection. A context-free `record` likewise uses an evidence-only operational
-context; its explicit semantic target remains on the record request and is not
-inferred from the operational context. Changed-scope `reconsider` issues a fresh
-Span-owned bounded re-establishment context. Challenge issuance without a
-supplied context uses its own challenge context; a supplied valid context is
-preserved. All expose the same opaque `InvestigationContextRef`; copy it only
-into operations that declare a `context` field.
+## Start from maintained knowledge
 
-Contexts expire without deleting accepted understanding, challenges,
-verification runs, or retained receipts. A continuation is valid only for its
-bound live context. Malformed, wrong-binding, missing/non-live/expired,
-exhausted, or out-of-position continuation references are typed `Rejected`;
-genuine store/provider inability is `Unavailable`. A missing row alone is not
-described as expired or reaped.
+A task begins with the exact file, symbol, service, or domain the agent is about
+to understand or change.
 
-## Recording
+Span can return maintained knowledge already associated with that surface. If no
+reusable knowledge exists, it returns an explicit gap.
 
-`record` is atomic. It cites direct or admitted evidence without resending
-source bodies. Ordinary understanding/verification acceptance carries a receipt
-selector, accepted coordinates and post-commit qualification; the immutable
-receipt remains in storage for exact retrieval. Surface declaration returns
-`SurfaceDeclared`.
+For ACTIVE repositories, the same ask also resolves the currently applicable
+governing projection.
 
-- `kind="understanding"` with `conclusion` and dependency evidence from
-  `locator`, `observation_id`, or non-empty `support` creates version 1; scope
-  is supplied or derived independently. A locator may accompany support solely
-  as carried semantic scope; support remains the complete dependency set.
-- `actions.add`, `confirm`, `correct`, `replace`, and `withdraw` update an exact
-  expected version; multiple actions apply atomically. Actions are compact
-  deltas: name the conclusion and one evidence mode; Span derives the old
-  revision, unchanged content metadata, and the mechanical basis.
-- `challenge_dispositions` settles a challenge raised by `reconsider`.
-  Resolved dispositions name semantic target lineages when needed; Span derives
-  the resulting understanding/version/revision coordinates from the same atomic
-  update.
-- `kind="verification"` records an independent run against the observations or
-  evidence actually tested.
-- `kind="surface"` creates a service/domain boundary or updates it with
-  compare-and-set.
+## Capture what the work establishes
 
-A verification run applies to the surfaces within its declared scope. A
-single-file run is not widened to a broader service, and a service-wide run
-applies to the files it covers. A run requires observations or evidence; either
-is accepted.
+The coding agent investigates with its normal tools and remains responsible for
+engineering judgment.
 
-A validation, identity, conflict, or source-drift rejection commits no semantic
-transition and names the offending identity. A post-commit `SupportUnavailable`
-preserves the accepted effect and receipt selector while reporting qualification
-failure separately from acceptance.
+When the work establishes understanding that can help future tasks, the
+conclusion can be captured with the evidence that supported it. Capture happens
+close to the work while evidence, reasoning, and scope are clear.
 
-A matching replay resolves from the retained receipt before new-write dependency
-checks and returns the same compact acceptance. The same identity with different
-content is a conflict.
+Captured knowledge is retained but is not automatically shared with every future
+agent.
 
-## Currentness
+## Review before shared reuse
 
-Support is evaluated on retrieval and recording. States are `CURRENT`,
-`REASSESSMENT_REQUIRED`, and `UNVERIFIABLE`. A missing authority or observation
-stays explicit; it is never promoted to current.
+A task-local conclusion is a candidate for durable shared knowledge.
 
-`reconsider` returns every affected surface and every conclusion it considered,
-with that conclusion's own support state. Inclusion is not a verdict: a
-considered conclusion can remain `CURRENT`. Only non-current states require
-re-establishment. A surface with no `conclusions` is containment-only, and the
-returned order is deterministic.
+A separate reviewer decides whether the captured revision is suitable for reuse.
+Wrong, incomplete, duplicated, disputed, or badly scoped meaning is repaired
+through the ordinary semantic lifecycle first.
 
-A non-current conclusion is still recoverable as historical **content**: an
-invalidated `ask` returns the prior statement with its exact revision,
-understanding version, evidence references, and present non-current state in
-`Gap.historical`. A surface status names the same set through `stale_refs`,
-alongside the count. Neither is current answer content; to read the statement,
-use `ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`.
+Once a stable revision is accepted for reuse, later agents can receive it while
+its required support still holds.
 
-Challenges settle only through an explicit disposition in `record`. A resolved
-disposition carries the challenge/revision, reasoning, optional semantic target
-lineages and optional context-bound evidence references; it never carries the
-resulting version or revision coordinates that the same request creates. A new
-version, a passing test, or a matching fingerprint does not settle a dispute.
-Current support does not certify meaning or complete investigation. Saved gaps
-and open disputes remain relevant to the agent's judgment.
+**Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
-## Hooks
+Review and support answer different questions:
 
-Hooks deliver event-local lifecycle reminders. They never record, re-check, interpret,
-or rebuild. A missed or disabled hook cannot make stale understanding current;
-correctness is evaluated by the lifecycle operations.
+- review asks whether this exact semantic revision is suitable for shared reuse;
+- support asks whether the things that revision depends on still hold.
 
-## Store transition
+Neither is a claim that Span independently proved the interpretation true.
 
-The runtime never migrates at open. Repository schema 14 is the Version-1
-runtime format. Existing schema-7–13 stores use the explicit offline
-inspect/apply/verify/rollback path in [install](install.md). The schema-13→14
-mapping copies durable semantic/audit state without reinterpretation, derives
-the repository-local route index only from already-retained
-FunctionalRouteSupport, and fabricates no participation or governance support.
+## Reuse in later work
 
-Functional Pyramid participation/receipts are owned by the separate installation
-store, not by a selected repository database. Transitioning repositories alone
-therefore leaves them UNCONFIGURED. Installation setup creates or verifies that
-store explicitly; full-installation backup/recovery includes it.
+A later session starts from the software surface, not from the previous
+conversation or a saved internal identifier.
+
+If reviewed knowledge is still usable, it becomes part of the new task's
+starting context. For ACTIVE repositories, governing applicability is resolved
+again from current declarations.
+
+Pending review, lost support, and unassessed scope remain explicit.
+
+## Change creates reassessment work
+
+Source and project governance can change independently.
+
+After relevant implementation or authority-source edits, `reconsider` identifies
+retained knowledge that may depend on the changed paths. The agent revisits the
+affected conclusions rather than re-investigating everything.
+
+If meaning still holds, it can be re-established against current support. If
+meaning changed, the corrected revision is captured and reviewed again before
+shared reuse.
+
+A Functional Pyramid participation write already returns its own affected
+projection and re-establishment contexts; those obligations are disposed
+directly.
+
+See [Support currency and reassessment](freshness.md).
+
+## Gaps, disputes, and verification remain explicit
+
+A gap means required understanding has not been established. A dispute means an
+interpretation is contested. A verification record says what an external test or
+review observed.
+
+Those facts remain separate. A passing test does not automatically settle a
+semantic dispute, and a current dependency check does not prove an explanation
+complete.
+
+See [Interpretation and recording](interpretation.md).
+
+## Ordinary runtime in one sentence
+
+For governed work, complete initialization/adoption first. The repeating
+semantic lifecycle is:
+
+> **Ask before deriving → investigate normally → capture what you establish →
+> review for shared reuse → reconsider after change.**
+
+Exact states and payloads are in the [MCP reference](mcp.md). Installation,
+host setup, and store transitions are in [Install and connect](install.md).

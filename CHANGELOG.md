@@ -1,6 +1,16 @@
 # Changelog
 
-## 1.0.0b2 — 2026-11-24
+## 1.0.0b3 — 2026-11-24
+
+### Beta 3 corrective integrity
+
+- Enforce repository authority ingress as the strict canonical boundary:
+  authority seed and binding files must carry their canonical discriminators;
+  the installer no longer synthesizes missing `$type` values before decoding.
+- Make publication an explicit release-owner action. Merging or pushing to
+  `master` does not publish; the release workflow is manual-only and requires
+  the exact package version to be supplied when it is deliberately dispatched.
+
 
 ### Qualified reuse and explicit curation
 
@@ -17,21 +27,65 @@
 - Preserve exactly three public MCP tools: `ask`, `record`, and
   `reconsider`.
 
+### Agent guidance and lifecycle-hook alignment
+
+- Reconcile all five shipped skills with the Beta-3 lifecycle: ordinary Answer
+  reuse is CURRENT + CURATED, reviewer queues follow bounded `next_after`
+  continuation, conformance examples are NORMATIVE, Functional Pyramid
+  participation includes explicit exclusion, and challenge guidance preserves
+  both context-bound and direct-evidence branches.
+- Remove the hook runtime's parallel SOURCE-only affected-understanding scan.
+  Change notices now preview the same canonical dependency-effect projection as
+  changed-scope `reconsider` without issuing re-establishment contexts.
+- Preserve containment, discovery, authority/route, premise and cross-repository
+  effects in hook notice selection, and deliver a complete repository-qualified
+  changed-scope reminder through the packaged OpenCode plugin.
+- Keep hooks advisory: they do not record, curate, make support current, create
+  Functional Pyramid participation, or turn configured wiring into a claim of
+  authenticated live-model delivery.
+- Evaluate the complete changed scope before bounding diagnostic presentation
+  and preserve the union of unconsumed edits until lifecycle handoff.
+- Compose session entry once from readiness, Functional Pyramid state and
+  semantic orientation; completion notices operate only on known outstanding
+  session work.
+- Preserve the configured Span data-directory identity across Codex, Claude and
+  OpenCode hook execution, and translate only documented native host fields.
+  Pre-investigation remains guidance-only where a host cannot provide a reliable
+  non-blocking advisory interception point.
+- Align Codex hook delivery with its native contract: canonical `apply_patch`
+  PostToolUse payloads are normalized from documented patch markers and returned
+  as structured model-visible context; the invalid plain-text Stop path is not
+  installed.
+- Cover OpenCode's documented multi-file `patch` tool, diagnose incomplete
+  native edit payloads without guessing, and retain per-session changed scope
+  without arbitrary eviction or correctness-bearing notice truncation.
+- Keep the post-edit lifecycle obligation independent from preview content: a
+  clean canonical preview still requires `reconsider(changed_scope)`; a failed
+  newer OpenCode preview invalidates any stale older notice while preserving the
+  full accumulated path union for retry.
+- Align Claude Code hooks with its native contract: documented `Write|Edit`
+  PostToolUse absolute `tool_input.file_path` is translated to structured
+  model-visible context; ambiguous path shapes are diagnosed, and no redundant
+  Stop hook is installed.
+- Package skills, lifecycle guidance and the OpenCode plugin from one canonical
+  asset manifest, and prove the wheel-bundled plugin through the isolated
+  installed `span-hooks` acceptance path.
+
 ### Installer, governance and external-integration correction
 
-- Fix B2-D01 at the owning setup seam: `span-install` now accepts
+- Fix B3-D01 at the owning setup seam: `span-install` now accepts
   repository-qualified authority seed/binding files and invokes the existing
   canonical repository-initialization owner once per selected repository.
-- Fix B2-D02 at the acceptance seam: installed cold-start coverage now proves
+- Fix B3-D02 at the acceptance seam: installed cold-start coverage now proves
   repository initialization instead of manufacturing lifecycle/binding state
   behind the installer.
 - Keep Functional Pyramid participation separate from repository
   initialization. Curation cannot create or alter governance participation,
   authority, applicability, routes or health.
-- Revalidate the private first adopter from committed root-correct authority
+- Revalidate the private external integration from committed root-correct authority
   inputs: cold installation, Functional Pyramid activation/projection,
   CAPTURED/pending behavior, explicit curation and fresh-process shared reuse
-  all passed. Raw adopter evidence remains private.
+  all passed. Raw integration evidence remains private.
 
 ### Storage, migration and product boundary
 
@@ -109,7 +163,7 @@
   (`919 passed, 1 skipped, 144 subtests`), installed non-editable MCP and the
   FA-01–FA-44 matrix.
 - T11 external integration acceptance passed on 2026-11-22 using integration-owned
-  gitignored evidence. Raw adopter topology and captures remain outside Span
+  gitignored evidence. Raw integration topology and captures remain outside Span
   Git; only the sanitized pass result is published.
 - The assembled `1.0.0b1` candidate passed the repository-verifiable T13
   closure gates: non-editable package install, schema-14/installation-schema-1
@@ -120,8 +174,7 @@
   **UNVERIFIED** and is not advertised as verified Beta-1 delivery. Historical
   host captures and registration health are not promoted into Version-1 proof.
 - Beta 1 does not require a synthetic G5/F8 comparative score before
-  publication. Product-value validation continues through real-world use in the
-  legal project, with follow-up Beta patch releases used to correct defects and
+  publication. Product-value validation continues through real-world integration use, with follow-up Beta patch releases used to correct defects and
   workflow friction found in practice. Universal time/token-saving claims remain
   out of scope without separate evidence.
 

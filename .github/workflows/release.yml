@@ -1,10 +1,12 @@
 name: Release
 
 on:
-  push:
-    branches: [master]
-    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      confirm_version:
+        description: "Exact package version explicitly authorized for publication"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -35,9 +37,19 @@ jobs:
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
         run: |
           set -euo pipefail
           version=$(python scripts/release_identity.py --field package_version)
+          requested="${CONFIRM_VERSION}"
+          if [[ "${REF_NAME}" != "master" ]]; then
+            echo "release must be dispatched explicitly from master; got ${REF_NAME}" >&2
+            exit 1
+          fi
+          if [[ "${requested}" != "${version}" ]]; then
+            echo "explicit confirmation ${requested} does not match package version ${version}" >&2
+            exit 1
+          fi
           tag=$(python scripts/release_identity.py --field tag)
           registry_version=$(python scripts/release_identity.py --field registry_version)
           release_title=$(python scripts/release_identity.py --field release_title)

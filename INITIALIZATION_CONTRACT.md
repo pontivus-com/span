@@ -1,8 +1,20 @@
 # Span — Offline Initialization and Readiness Contract
 
-Governing invariants: initialization is explicit, never implicit; readiness
-is operational state, not semantic trust; hooks never interpret, record,
-re-check, or rebuild.
+> **Document role: derived administrative contract.** This artifact gives the
+> installer/readiness tests and operators one concise statement of the
+> initialization boundary. It is **not** a sixth Functional Pyramid layer and
+> cannot create product authority.
+>
+> Binding lifecycle behavior comes from
+> [Lifecycle contract](docs/lifecycle-contract.md), deterministic behavior from
+> [Functional design](docs/functional-design.md), and installation/transition
+> mechanisms from [Technical design](docs/technical-design.md). If this derived
+> artifact conflicts with those owners, this file is the defect.
+
+The derived invariants are: initialization is explicit, never implicit;
+readiness is operational state, not semantic trust; hook execution remains
+outside initialization and durable semantic/governance mutation (FD-58;
+Technical Design §22).
 
 ## Contract
 
