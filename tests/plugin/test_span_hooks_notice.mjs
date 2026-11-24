@@ -129,7 +129,7 @@ esac
     registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", input:{path:firstPath}});
     registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", input:{path:secondPath}});
 
-    const args = fs.readFileSync(received, "utf8").trim().split("\\n");
+    const args = fs.readFileSync(received, "utf8").trim().split("\n");
     assert.deepEqual(args, ["source-changed", firstPath, secondPath]);
 
     const event = {sessionID:"session-1", system:[]};
