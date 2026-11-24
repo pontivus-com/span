@@ -26,8 +26,12 @@ Span ships hook commands for a small set of lifecycle moments:
 | `source-changed` | Inspect bounded changed paths for retained knowledge that may need attention. |
 | `session-stop` | Report bounded support effects associated with supplied session paths. |
 
-These notices reuse Span's normal readiness and support logic. Hooks do not
-maintain a second freshness policy.
+These notices reuse Span's normal readiness and canonical dependency-effect
+projection. Change notices do not maintain a second SOURCE-only dependency scan
+or freshness policy; they consume the same containment/direct/indirect,
+discovery, authority, Functional Pyramid route, premise-closure and
+cross-repository projection owned by reconsideration, without issuing
+re-establishment contexts.
 
 ## Hooks are advisory, not semantic actors
 
@@ -48,7 +52,9 @@ When a hook reports that something may need attention, the agent follows the
 normal lifecycle to investigate and record the result.
 
 For example, an edit notice can tell the agent to call `reconsider` with the
-changed paths. The hook itself does not perform the reassessment or disposition.
+changed paths. The hook may preview the canonical affected projection to decide
+whether a notice is useful, but it does not persist a reconsideration context,
+perform a disposition, or make support current.
 
 ## Silence does not mean everything is current
 

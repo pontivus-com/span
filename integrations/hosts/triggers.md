@@ -9,14 +9,14 @@ declared support independently of hook delivery.
 
 | Host | Implemented integration | Version-1 delivery qualification |
 | --- | --- | --- |
-| Codex | MCP registration, skills, managed repository snippet; hooks appended to an existing `~/.codex/hooks.json`. | Managed integration remains supported. Historical 0.9.1 delivery captures do not certify Version 1. Candidate-specific live model delivery is **UNVERIFIED** until T13 captures the assembled `1.0.0b1` candidate. |
-| OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait plus the FD-58 adoption notice. | Managed integration and packaged notice delivery are verified. Historical 0.9.1/0.11 captures remain historical evidence only; candidate-specific live model delivery is **UNVERIFIED** until T13. |
-| Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`. | Registration/health and installer behavior are verified; authenticated Version-1 model-delivered grammar and caller identity remain **UNVERIFIED** pending T13. |
+| Codex | MCP registration, skills, managed repository snippet; hooks appended to an existing `~/.codex/hooks.json`. | Managed wiring is supported and installer-tested. Authenticated Beta-3 model-delivered hook behavior remains **UNVERIFIED**. |
+| OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait plus the FD-58 adoption notice. | Managed integration and packaged notice delivery are verified by the automated plugin lane. Authenticated Beta-3 live-model delivery remains **UNVERIFIED**. |
+| Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`. | Registration/health and installer behavior are verified. Authenticated Beta-3 model-delivered grammar and caller identity remain **UNVERIFIED**. |
 
-The supported managed hosts are Codex, OpenCode, and Claude Code. Version-1
-delivery is claimed only from an assembled-candidate T13 capture. Historical
-captures remain evidence for their named candidate and are never promoted into
-Version-1 delivery proof. Other MCP hosts can connect manually; no universal
+The supported managed hosts are Codex, OpenCode, and Claude Code. Current
+Beta-3 documentation claims only the delivery evidence actually observed for
+the assembled candidate; historical captures remain evidence for their named
+candidate and are never promoted into current live-model delivery proof. Other MCP hosts can connect manually; no universal
 compatibility or model-delivery claim follows from stdio compatibility.
 
 ## Hook entries
@@ -70,9 +70,13 @@ hook proves neither complete coverage nor global currency.
 
 ## Agent procedure without hooks
 
-Call `ask` for current understanding or inspectable evidence, then `record`
-supported conclusions when established, with the evidence you hold. Before editing, ask for
-current support; after it, call `reconsider`, use external tests, and record
-explicit updates. Keep unsupported scope and open disputes visible.
+For governed work, resolve Functional Pyramid participation/health first. Then
+call `ask` for current shared understanding or inspectable evidence and
+`record` supported conclusions when established. New or changed semantic
+meaning is CAPTURED and remains pending until a separate reviewer curates the
+exact CURRENT revision for shared reuse. Before editing, ask for current
+orientation; after it, call changed-scope `reconsider`, use external tests,
+and record explicit dispositions. Use the challenge branch of `reconsider`
+for disputes. Keep unsupported scope and open disputes visible.
 See the [router skill](../../skills/span-router/SKILL.md) and
 [usage](../../docs/usage.md).

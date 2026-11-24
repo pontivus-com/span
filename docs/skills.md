@@ -26,7 +26,8 @@ lifecycle when governed use is intended, and EXCLUDED is the explicit
 descriptive-only path.
 
 The working-agent path captures supported meaning through `record`. The
-reviewer path discovers pending captures and uses the curation action inside the
+reviewer path discovers the bounded pending-capture queue, follows
+`next_after` while it is truncated, and uses the curation action inside the
 same `record` tool; there is no fourth curation operation.
 
 Functional Pyramid status, candidate validation, receipts, and participation
@@ -34,8 +35,9 @@ writes are likewise branches inside the same three tools.
 
 Skills must not treat a gap as failure, invent a context identifier, collapse
 missing authority into certainty, or hide failed admission, omissions, disputes,
-pending review, or noncurrent support. `reconsider` is an after-edit
-operation; "before editing" is `ask`.
+pending review, or noncurrent support. Changed-scope `reconsider` is an
+after-edit operation; the challenge branch is an explicit dispute. "Before
+editing" is `ask`.
 
 ## Distribution and upgrades
 

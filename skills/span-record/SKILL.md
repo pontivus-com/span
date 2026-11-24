@@ -1,6 +1,6 @@
 ---
 name: span-record
-description: Record a supported conclusion, an independent verification run, or a service/domain surface after investigating. Use when an investigation produced a supported semantic conclusion, an independent test result, or a boundary the agent chose.
+description: Record supported conclusions, curate stable captured revisions for shared reuse, record independent verification, or declare/update a service/domain surface. Use after investigation or during reviewer curation.
 ---
 
 # Record what you established
@@ -160,6 +160,7 @@ narrow. Admitted evidence references and observation IDs remain context-bound; s
   "repository_id": "repo-1",
   "request_id": "plan-status-1",
   "kind": "understanding",
+  "assertion_nature": "NORMATIVE",
   "question": "Is this plan implemented?",
   "scope_paths": ["docs/implementation-plan.md"],
   "conclusion": "The implementation described by the plan is complete.",
@@ -184,6 +185,11 @@ truth. First obtain the deterministic repository-local queue through `ask`:
   }
 }
 ```
+
+The pending queue is bounded. If the result is truncated, continue with another
+`PendingCurationSelector` carrying `after=<next_after>`, using the exact
+returned revision reference as the keyset cursor, until `truncated=false`.
+Do not treat the first page as the complete review queue.
 
 Retrieve the exact owning understanding and inspect broader retained
 knowledge/governance as needed. If review finds the meaning wrong, incomplete,
@@ -250,7 +256,7 @@ repository; a stale boundary version is a rejection with the current version.
 
 Span derives context, observation identity, submission identity, revisions, and
 the new conclusion lineage identity. You supply the request identity,
-compare-and-set version, semantic content, and the evidence you hold. `action` is used only for a
-surface declaration; an understanding create has no action.
+compare-and-set version, semantic content, and the evidence you hold. `action` is used for a surface declaration or Functional Pyramid lifecycle
+write; an understanding create has no action.
 
 Detail: [MCP reference](https://github.com/pontivus-com/span/blob/master/docs/mcp.md), [interpretation](https://github.com/pontivus-com/span/blob/master/docs/interpretation.md).

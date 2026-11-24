@@ -9,8 +9,9 @@ Complete the applicable lifecycle before task completion; report named operation
 blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#required-agent-completion).
 
 
-Span answers from current curated shared knowledge, retained captured
-understanding, and exact source evidence. It owns validation, identity,
+Span serves ordinary Answer content only from current curated shared knowledge.
+It separately retains captured understanding and exact source evidence for
+review and investigation. It owns validation, identity,
 freshness, persistence, and deterministic lifecycle projection. You own
 interpretation and every edit; a reviewer/curator owns the decision to accept an
 exact stable revision for shared reuse. Span never edits the target, runs
@@ -33,7 +34,7 @@ explicitly EXCLUDED.
 | Finish an investigation | `record` the supported meaning as capture |
 | Review captured knowledge for shared reuse | `ask` with PendingCurationSelector, then `record` curation for a stable exact revision |
 | Declare or change a service/domain boundary | `record(kind="surface")` |
-| Initialize/revise/deactivate Functional Pyramid participation | Use the `span-functional-pyramid` skill; it stays inside `ask` / `record` / `reconsider` |
+| Initialize/revise/deactivate/exclude Functional Pyramid participation | Use the `span-functional-pyramid` skill; it stays inside `ask` / `record` / `reconsider` |
 | Dispute a recorded conclusion | `reconsider` with a challenge |
 
 For ACTIVE Functional Pyramid repositories, ordinary `ask` also returns the
@@ -66,9 +67,10 @@ handles and never inspect internal context state.
   `observation_id`, or non-empty `support`; a locator may accompany support
   solely as carried semantic scope while observation remains exclusive. Scope
   is supplied or derived independently. A reviewer discovers CURRENT captures
-  with PendingCurationSelector, repairs semantic defects through the ordinary
-  lifecycle when needed, and uses the same `record` tool to curate only a
-  stable exact revision. `actions` is for updates and `action` only for a
+  with PendingCurationSelector, follows `next_after` while the bounded result
+  is truncated, repairs semantic defects through the ordinary lifecycle when
+  needed, and uses the same `record` tool to curate only a stable exact
+  revision. `actions` is for updates and `action` only for a
   surface declaration or Functional Pyramid lifecycle write.
 - **After editing:** `reconsider` the paths you just changed. It returns every
   surface to re-examine, why it was considered, per-conclusion support state,

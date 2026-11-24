@@ -25,7 +25,8 @@ The result is `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 
 Each conclusion carries its own support state. Reconsider traverses retained
 CAPTURED and CURATED revisions; it does not change curation. `CURRENT` means
-the surface was considered but the conclusion still holds.
+the conclusion was considered and its required support remains current; it is
+not a semantic-truth certification.
 `REASSESSMENT_REQUIRED` or `UNVERIFIABLE` means actual support loss:
 investigate and re-establish it. A CURATED revision with non-current support is
 not shared Answer content but keeps its curation history. A surface with no
@@ -40,7 +41,10 @@ effects came directly from an accepted Functional Pyramid participation write,
 do not call `reconsider` again for that write; follow its returned contexts via
 the `span-functional-pyramid` skill.
 
-Use the returned context with `record` or a challenge. A semantic-preserving
+Use the returned re-establishment context with `record`. To dispute a
+recorded conclusion, call `reconsider` with the challenge branch; do not copy
+the changed-scope context into that request because Span derives the challenge
+context from the challenged target and admitted evidence. A semantic-preserving
 confirm can re-establish support while preserving inherited curation; a semantic
 correction/replacement becomes CAPTURED and requires separate curation for
 shared reuse. Settle a challenge through `record` with named

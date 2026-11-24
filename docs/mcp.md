@@ -188,8 +188,9 @@ set. Scope is supplied or derived independently through
 `scope_paths`, the bound context, or a single carried path. `surface` is
 optional and derived from the carried scope. `assertion_nature` defaults to
 `DESCRIPTIVE`. A create takes no caller-created conclusion identity, no
-`action`, and no `actions`: `action` belongs to `kind="surface"` and `actions`
-to updates. Sending any of them is a recognized lifecycle structural rejection; malformed
+`action`, and no `actions`: `action` belongs to `kind="surface"` or
+`kind="functional_pyramid"`, while `actions` belongs to understanding
+updates. Sending any of them is a recognized lifecycle structural rejection; malformed
 transport envelopes and unknown tools remain transport errors.
 
 Updates use `actions` with `add`, `confirm`, `correct`, `replace`, or `withdraw`,
@@ -369,8 +370,10 @@ detail remains retrievable with `ReceiptRetrievalSelector`.
 }
 ```
 
-This is an after-edit operation. The service derives the challenge context from
-the target version and cited evidence; the caller does not supply a context id.
+Changed-scope reconsideration is the after-edit operation. The challenge branch
+is an explicit dispute and does not require an edit. For a challenge, the
+service derives the challenge context from the target version and cited
+evidence; the caller does not supply a context id.
 Results: `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 
 `Changed` names every surface to re-examine, the reasons it was considered

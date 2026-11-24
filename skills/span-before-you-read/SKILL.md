@@ -65,7 +65,10 @@ copy them only into operations that declare a context field.
 
 A reviewer who is selecting captured knowledge for shared reuse uses
 PendingCurationSelector with the repository identity. It returns only CURRENT
-captured exact revisions in deterministic order. Retrieve and inspect the exact
+captured exact revisions in deterministic order. The queue is bounded: when the
+result is truncated, continue with `after=<next_after>` until
+`truncated=false`; the cursor is the exact returned revision reference, not a
+semantic search token. Retrieve and inspect the exact
 capture and relevant retained knowledge/governance before curation; if the
 meaning is wrong or incomplete, repair it through the ordinary semantic
 lifecycle first.

@@ -6,7 +6,7 @@ description: Initialize, inspect, revise, deactivate, or explicitly exclude repo
 # Functional Pyramid lifecycle
 
 Complete the canonical lifecycle before calling adoption, revision, or deactivation
-complete. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#71-initialization--adoption-state-machine).
+complete. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#71-functional-pyramid-initializationadoption-lifecycle).
 
 The Functional Pyramid adds declared governing applicability to Span's existing
 maintained-understanding lifecycle. It does not replace canonical documents,
