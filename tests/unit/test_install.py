@@ -1982,10 +1982,21 @@ class HookWiringTest(unittest.TestCase):
                 str(home) + p[1:] if p.startswith("~") else p
             )
             try:
-                install.wire_codex_hooks("/bin/span-hooks", dry_run=False)
+                install.wire_codex_hooks("/bin/span-hooks", "/isolated/data", dry_run=False)
                 first = json.loads(hooks_path.read_text())
                 self.assertIn("SessionStart", first["hooks"])
-                install.wire_codex_hooks("/bin/span-hooks", dry_run=False)
+                span_commands = [
+                    hook["command"]
+                    for group in first["hooks"].values()
+                    for block in group
+                    for hook in block["hooks"]
+                    if "span-hooks" in hook["command"]
+                ]
+                self.assertEqual(len(span_commands), 3)
+                self.assertTrue(
+                    all("--data-dir /isolated/data" in command for command in span_commands)
+                )
+                install.wire_codex_hooks("/bin/span-hooks", "/isolated/data", dry_run=False)
                 second = json.loads(hooks_path.read_text())
                 self.assertEqual(first, second)
             finally:
@@ -2001,7 +2012,7 @@ class HookWiringTest(unittest.TestCase):
                 str(pathlib.Path(tmp)) + p[1:] if p.startswith("~") else p
             )
             try:
-                install.wire_codex_hooks("/bin/span-hooks", dry_run=False)
+                install.wire_codex_hooks("/bin/span-hooks", "/isolated/data", dry_run=False)
             finally:
                 os.path.expanduser = real_expanduser
 
@@ -2041,7 +2052,7 @@ class HookWiringTest(unittest.TestCase):
                 str(home) + p[1:] if p.startswith("~") else p
             )
             try:
-                result = install.wire_codex_hooks("/new/bin/span-hooks", dry_run=False)
+                result = install.wire_codex_hooks("/new/bin/span-hooks", "/isolated/data", dry_run=False)
             finally:
                 os.path.expanduser = real_expanduser
             self.assertEqual(result["replaced"], 1)
@@ -2053,7 +2064,7 @@ class HookWiringTest(unittest.TestCase):
                 for hook in block["hooks"]
             ]
             self.assertNotIn("/old/bin/span-hooks session-start", commands)
-            self.assertIn("/new/bin/span-hooks session-start", commands)
+            self.assertIn("/new/bin/span-hooks session-start --data-dir /isolated/data", commands)
             self.assertIn("/bin/foreign-hook", commands)
             self.assertEqual(sum("span-hooks" in command for command in commands), 3)
 

@@ -16,7 +16,7 @@ parity, singular session-entry composition and expanded executable acceptance.
 
 | Host | Implemented integration | Version-1 delivery qualification |
 | --- | --- | --- |
-| Codex | MCP registration, skills, managed repository snippet; hooks appended to an existing `~/.codex/hooks.json`. | Managed wiring is supported and installer-tested. Authenticated Beta-3 model-delivered hook behavior remains **UNVERIFIED**. |
+| Codex | MCP registration, skills, managed repository snippet; hooks appended to an existing `~/.codex/hooks.json` with the same configured Span data directory as the MCP registration. | Managed wiring is supported and installer-tested. Authenticated Beta-3 model-delivered hook behavior remains **UNVERIFIED**. |
 | OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait plus the FD-58 adoption notice. | Managed integration and packaged notice delivery are verified by the automated plugin lane. Authenticated Beta-3 live-model delivery remains **UNVERIFIED**. |
 | Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`. | Registration/health and installer behavior are verified. Authenticated Beta-3 model-delivered grammar and caller identity remain **UNVERIFIED**. |
 
@@ -37,6 +37,30 @@ The canonical installer implementation is
 | OpenCode prompt admission | bounded wait for the MCP connection, then `span-hooks adoption-primer` through the `context` hook |
 | `PostToolUse` for configured edit tools | `span-hooks source-changed` |
 | `Stop` | `span-hooks session-stop` |
+
+Every installer-managed command carries the configured Span data-directory
+identity; a non-default installation does not fall through to the platform
+default. OpenCode's deployed wrapper already provides this identity, Claude
+commands already carry it explicitly, and Beta-3 H4 now applies the same rule
+to Codex.
+
+### Pre-investigation event qualification
+
+The current managed hosts expose before-tool interception APIs, but Beta 3 does
+not claim a pre-investigation hook for any of them. A compliant reminder must be
+non-blocking *and* visible to the agent before source access so the agent can
+still choose the existing `ask` lifecycle action. The currently supported
+managed delivery paths do not establish that combination without turning the
+hook into a blocker or approval mechanism, which FD-58 forbids.
+
+Accordingly, pre-investigation remains guidance-only for Codex, Claude Code and
+OpenCode in Beta 3. This is an explicit unsupported interception point, not a
+silent compatibility promise. No shell-command text is inspected to infer
+reads.
+
+For OpenCode edit/write interception, the V2 adapter consumes only the
+documented `event.tool`, `event.sessionID`, and `event.input.path` fields.
+Adjacent legacy-shaped fields are not guessed into a changed-scope carrier.
 
 The OpenCode plugin scope is explicit: `--opencode-plugin-scope
 global|local|none`. Under `global` the plugin is deployed under Span's own data

@@ -65,12 +65,13 @@ function run(bin, args, input) {
 const PENDING_LIMIT = 8;
 const NOTICE_LIMIT = 2000;
 
-function sessionKey(event) {
-  const value =
-    (event && event.data && event.data.sessionID) ||
-    (event && (event.sessionID || event.session_id)) ||
-    (event && event.session && event.session.id) ||
-    "";
+function sessionKeyFromNativeEvent(event) {
+  const value = event && event.data && event.data.sessionID;
+  return typeof value === "string" && value ? value : "*";
+}
+
+function sessionKeyFromHook(event) {
+  const value = event && event.sessionID;
   return typeof value === "string" && value ? value : "*";
 }
 
@@ -124,39 +125,14 @@ function rememberNotice(pending, sessionID, notice, paths = []) {
   pending.set(sessionID, { text: notice.slice(0, NOTICE_LIMIT), paths });
 }
 
-function filePathsFromArgs(args) {
-  const found = [];
-  const walk = (node, depth) => {
-    if (depth > 4) return;
-    if (typeof node === "string") {
-      if (
-        node.includes("/") &&
-        !node.startsWith("{") &&
-        node.length < 512
-      ) {
-        found.push(node);
-      }
-      return;
-    }
-    if (Array.isArray(node)) {
-      node.forEach((v) => walk(v, depth + 1));
-      return;
-    }
-    if (node && typeof node === "object") {
-      for (const key of [
-        "filePath",
-        "file_path",
-        "path",
-        "filename",
-        "file",
-      ]) {
-        if (typeof node[key] === "string") found.push(node[key]);
-      }
-      Object.values(node).forEach((v) => walk(v, depth + 1));
-    }
-  };
-  walk(args, 0);
-  return [...new Set(found)];
+function filePathsFromEditEvent(event) {
+  if (!event || !["edit", "write"].includes(event.tool)) return [];
+  const input = event.input;
+  if (!input || typeof input !== "object" || typeof input.path !== "string") {
+    console.warn("span: OpenCode edit/write hook skipped because documented input.path is absent.");
+    return [];
+  }
+  return [input.path];
 }
 
 function handleSessionEvent(event, pending, checked, locationRoot) {
@@ -167,9 +143,9 @@ function handleSessionEvent(event, pending, checked, locationRoot) {
       locationRoot,
       "session-start",
     ]);
-    rememberNotice(pending, sessionKey(event), notice);
+    rememberNotice(pending, sessionKeyFromNativeEvent(event), notice);
   } else if (event.type === "session.idle") {
-    const key = sessionKey(event);
+    const key = sessionKeyFromNativeEvent(event);
     const waiting = pending.get(key);
     if (!waiting || waiting.paths.length === 0) return;
     const notice = run(resolveBin(), [
@@ -179,8 +155,8 @@ function handleSessionEvent(event, pending, checked, locationRoot) {
     ], JSON.stringify(waiting.paths.map((file_path) => ({ file_path }))));
     if (notice) rememberNotice(pending, key, notice, waiting.paths);
   } else if (event.type === "session.deleted") {
-    pending.delete(sessionKey(event));
-    checked.delete(sessionKey(event));
+    pending.delete(sessionKeyFromNativeEvent(event));
+    checked.delete(sessionKeyFromNativeEvent(event));
   }
 }
 
@@ -228,28 +204,17 @@ export default {
     if (ctx && ctx.tool && typeof ctx.tool.hook === "function") {
       await ctx.tool.hook("execute.after", (event) => {
         try {
-          // V2 passes one mutable event; accept the documented shape but
-          // also tolerate adjacent shapes. Run only on a positively
-          // identified edit/write tool with at least one path; otherwise
-          // skip silently rather than guessing.
-          const toolName =
-            (event &&
-              (event.tool ||
-                event.toolName ||
-                event.name ||
-                (event.input &&
-                  (event.input.tool || event.input.name)) ||
-                "")) ||
-            "";
-          if (!["edit", "write"].includes(toolName)) return;
-          const changed = event || {};
-          if (sessionKey(changed) === "*") {
+          // OpenCode V2 documents execute.after as one mutable event with
+          // event.tool, event.input and event.sessionID. Do not guess adjacent
+          // legacy shapes into semantic scope.
+          if (!event || !["edit", "write"].includes(event.tool)) return;
+          const key = sessionKeyFromHook(event);
+          if (key === "*") {
             console.warn("span: edit notice has no session identity; reconsider changed paths before completing work.");
             return;
           }
-          const paths = filePathsFromArgs(changed);
+          const paths = filePathsFromEditEvent(event);
           if (paths.length === 0) return;
-          const key = sessionKey(changed);
           const completePaths = rememberChangedPaths(pending, key, paths);
           const notice = run(resolveBin(), ["source-changed", ...completePaths]);
           if (!notice) return;
@@ -304,7 +269,7 @@ export default {
     if (ctx && ctx.session && typeof ctx.session.hook === "function") {
       contextRegistration = await ctx.session.hook("context", (event) => {
         try {
-          const sessionID = sessionKey(event || {});
+          const sessionID = sessionKeyFromHook(event || {});
           // The edit-time notice is delivered once, on the next context call.
           // Session identity is required; notices never cross session boundaries.
           const pendingNotice = pending.get(sessionID);

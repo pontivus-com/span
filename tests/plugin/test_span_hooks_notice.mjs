@@ -86,7 +86,7 @@ test("the edit-time notice reaches event.system once", async () => {
       registered["tool:execute.after"]({
         sessionID: "session-1",
         tool: "edit",
-        filePath: path.join(root, "src/a.js"),
+        input: { path: path.join(root, "src/a.js") },
       });
 
       const first = { sessionID: "session-1", system: [] };
@@ -114,9 +114,9 @@ test("multiple edits are accumulated before lifecycle handoff", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-union-"));
   const bin = path.join(root, "fake-span-hooks");
   const received = path.join(root, "received.txt");
-  fs.writeFileSync(bin, \`#!/bin/sh
+  fs.writeFileSync(bin, `#!/bin/sh
 case "$*" in
-  *source-changed*) printf '%s\\n' "$@" > "\${received}"; echo "changed" ;;
+  *source-changed*) printf '%s\\n' "$@" > "${received}"; echo "changed" ;;
 esac
 \`, { mode: 0o755 });
   const previous = process.env.SPAN_HOOKS_BIN;
@@ -126,8 +126,8 @@ esac
   try {
     const firstPath = path.join(root, "src/a.js");
     const secondPath = path.join(root, "src/b.js");
-    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", filePath:firstPath});
-    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", filePath:secondPath});
+    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", input:{path:firstPath}});
+    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", input:{path:secondPath}});
 
     const args = fs.readFileSync(received, "utf8").trim().split("\\n");
     assert.deepEqual(args, ["source-changed", firstPath, secondPath]);
@@ -136,6 +136,30 @@ esac
     registered["session:context"](event);
     assert.equal(event.system.length, 1);
     assert.match(event.system[0].text, /"changed_paths":\["src\/a\.js","src\/b\.js"\]/);
+  } finally {
+    dispose();
+    if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN=previous;
+    fs.rmSync(root,{recursive:true,force:true});
+  }
+});
+
+
+test("adjacent legacy edit payload shapes are not guessed into changed scope", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-native-shape-"));
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = makeFixture(root);
+  const { ctx, registered } = fakeContext(root);
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    registered["tool:execute.after"]({
+      sessionID: "session-1",
+      tool: "edit",
+      filePath: path.join(root, "src/a.js"),
+    });
+    const event = { sessionID: "session-1", system: [] };
+    registered["session:context"](event);
+    assert.equal(event.system.length, 0);
   } finally {
     dispose();
     if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
@@ -203,7 +227,7 @@ test("a missing hook binary leaves the session silent and running", async () => 
       registered["tool:execute.after"]({
         sessionID: "session-1",
         tool: "edit",
-        filePath: path.join(root, "src/a.js"),
+        input: { path: path.join(root, "src/a.js") },
       });
       const event = { sessionID: "session-1", system: [] };
       registered["session:context"](event);
@@ -243,7 +267,7 @@ esac
   };
   const dispose = await (await loadPlugin()).default.setup(ctx);
   try {
-    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", filePath:path.join(root,"src/a.js")});
+    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", input:{path:path.join(root,"src/a.js")}});
     release();
     await done;
     assert.deepEqual(JSON.parse(fs.readFileSync(received,"utf8")), [{file_path:path.join(root,"src/a.js")}]);
@@ -280,7 +304,7 @@ test("undelivered notices survive malformed context and are reaped on session de
   };
   const dispose = await (await loadPlugin()).default.setup(ctx);
   try {
-    const edit = () => registered["tool:execute.after"]({sessionID:"session-1",tool:"edit",filePath:path.join(root,"src/a.js")});
+    const edit = () => registered["tool:execute.after"]({sessionID:"session-1",tool:"edit",input:{path:path.join(root,"src/a.js")}});
     edit();
     registered["session:context"]({sessionID:"session-1"});
     const valid = {sessionID:"session-1",system:[]};
