@@ -149,11 +149,11 @@ test("native patch payload contributes every changed file to one union", async (
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-patch-"));
   const bin = path.join(root, "fake-span-hooks");
   const received = path.join(root, "received.txt");
-  fs.writeFileSync(bin, \`#!/bin/sh
+  fs.writeFileSync(bin, `#!/bin/sh
 case "$*" in
   *source-changed*) printf '%s\\n' "$@" > "${received}"; echo "changed" ;;
 esac
-\`, { mode: 0o755 });
+`, { mode: 0o755 });
   const previous = process.env.SPAN_HOOKS_BIN;
   process.env.SPAN_HOOKS_BIN = bin;
   const { ctx, registered } = fakeContext(root);
@@ -196,9 +196,9 @@ test("malformed native patch is explicit incomplete input and never guessed", as
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-patch-incomplete-"));
   const bin = path.join(root, "fake-span-hooks");
   const touched = path.join(root, "called");
-  fs.writeFileSync(bin, \`#!/bin/sh
+  fs.writeFileSync(bin, `#!/bin/sh
 touch "${touched}"
-\`, { mode: 0o755 });
+`, { mode: 0o755 });
   const previous = process.env.SPAN_HOOKS_BIN;
   process.env.SPAN_HOOKS_BIN = bin;
   const { ctx, registered } = fakeContext(root);
@@ -234,9 +234,9 @@ test("undelivered session obligations are never evicted by another session", asy
   try {
     for (let index = 0; index < 9; index += 1) {
       registered["tool:execute.after"]({
-        sessionID: \`session-\${index}\`,
+        sessionID: `session-${index}`,
         tool: "edit",
-        input: { path: path.join(root, \`src/\${index}.js\`) },
+        input: { path: path.join(root, `src/${index}.js`) },
       });
     }
     const oldest = { sessionID: "session-0", system: [] };
