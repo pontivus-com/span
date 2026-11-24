@@ -11,10 +11,11 @@ that support the corresponding behavior. The test suite validates that FA-01
 through FA-64 are present exactly once and that every named test still exists.
 
 FA-28 was strengthened during the reopened Beta-3 T14 lifecycle-hook review.
-Its current row intentionally records only the evidence that exists on the
-branch; T14-H6 remains the owner for the missing complete-scope, accumulation,
-read-only integration and composed-delivery evidence. Until H6 closes, this
-matrix must not be read as a complete FA-28 verdict.
+The branch now carries the hook-specific executable evidence for composed
+session entry, complete changed-scope evaluation, multi-edit accumulation,
+canonical read-only preview parity, managed data-directory identity and a real
+deployed OpenCode -> installed span-hooks -> temporary-store path. Exact-head
+release closure remains owned by T14-H7.
 
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
@@ -45,7 +46,7 @@ matrix must not be read as a complete FA-28 verdict.
 | FA-25 | Canonical-source singularity | `test_functional_pyramid_carries_references_not_governing_prose` |
 | FA-26 | Runtime lifecycle preservation | `test_three_tool_journey_and_restart`; `test_reconsider_record_succeeds_without_an_intervening_ask`; `test_challenge_raised_by_reconsider_is_settled_by_record` |
 | FA-27 | Governance-source edit lifecycle | `test_authority_source_change_is_considered_not_forced_stale`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_normative_confirm_reestablishes_changed_server_route_support` |
-| FA-28 | Lifecycle-compliance hooks — partial evidence; T14-H6 open | `test_functional_pyramid_unconfigured_notice_routes_to_skill`; `test_functional_pyramid_excluded_notice_is_silent`; `test_functional_pyramid_active_valid_notice_is_silent`; `test_functional_pyramid_active_degraded_notice_routes_to_lifecycle`; `test_hook_source_uses_canonical_changed_scope_projection`; `test_hook_source_has_no_semantic_writer_or_builder` |
+| FA-28 | Lifecycle-compliance hooks | `test_session_entry_composes_four_participation_health_branches_once`; `test_changed_scope_projection_receives_complete_input_before_render_bound`; `test_changed_scope_preview_reuses_projection_without_context_issuance`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_codex_merge_adds_entries_and_dedupes`; `test_packaged_opencode_plugin_reaches_real_installed_hook_store`; `test_hook_source_uses_canonical_changed_scope_projection`; `test_hook_source_has_no_semantic_writer_or_builder`; `tests/plugin/test_span_hooks_notice.mjs` (multi-edit union, singular delivery and completion handoff) |
 | FA-29 | Initialization handoff | `test_activation_handoff_status_matches_committed_result`; `test_record_revise_only_reports_actual_participation_changes`; `test_installed_lifecycle_over_stdio` |
 | FA-30 | One active instance per repository | `test_candidate_reports_duplicate_unregistered_and_other_active_members`; `test_concurrent_overlapping_activation_serializes_to_one_active_instance` |
 | FA-31 | Three-tool host surface | `test_only_the_three_core_tools_are_registered`; `test_installed_lifecycle_over_stdio` |

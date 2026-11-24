@@ -28,11 +28,11 @@ that bypass `InstallationRuntime`.
 These are executable consequences of the canonical L0–L4 requirements; this
 document does not add a second Functional Pyramid contract.
 
-The reopened T14 hook review strengthened FD-58/FD-94 beyond the evidence
-currently named for I-28. I-28 therefore records the canonical-preview/read-only
-boundary already enforced on this branch; complete-input, multi-edit and composed
-host-delivery enforcement remains explicitly pending T14-H6 and must be added to
-this matrix only when those live tests exist.
+The reopened T14 hook review strengthened FD-58/FD-94 and the corresponding
+hook invariants. I-28 now names the live complete-input, canonical-preview,
+composed-entry and deployed-host evidence added under T14-H2-H6; the Node plugin
+lane additionally proves multi-edit union and completion handoff. Exact-head
+release closure remains separate under T14-H7.
 
 | ID | Invariant | Verdict | Evidence |
 |---|---|---|---|
@@ -63,9 +63,9 @@ this matrix only when those live tests exist.
 | I-25 | Runtime independence from skill text | Test | `test_implementation_ignores_skills` (no implementation file depends on skill content) |
 | I-26 | Lifecycle placement | Test | `AnswerServiceTest`; `test_unknown_surface_is_unassessed` |
 | I-27 | Offline bootstrap isolation | Test | `InitializationContractTest`; `test_cs07_uninitialized_context_creates_no_store` |
-| I-28 | Hook canonical-effect reuse/read-only preview — strengthened complete-input enforcement pending T14-H6 | Test | `LifecycleHooksTest` (current event-local notice behavior); `test_hook_source_uses_canonical_changed_scope_projection`; `test_changed_scope_preview_reuses_projection_without_context_issuance` |
+| I-28 | Hook canonical-effect reuse, complete-input evaluation and read-only preview | Test | `test_session_entry_composes_four_participation_health_branches_once`; `test_changed_scope_projection_receives_complete_input_before_render_bound`; `test_changed_scope_preview_reuses_projection_without_context_issuance`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_packaged_opencode_plugin_reaches_real_installed_hook_store`; `tests/plugin/test_span_hooks_notice.mjs` |
 | I-29 | No automatic semantic interpretation | Test | `LifecycleHooksTest`; `test_hooks_never_build` (hook paths never build or record) |
-| I-30 | No automatic refresh | Test | `LifecycleHooksTest` (hooks report only) |
+| I-30 | No automatic refresh | Test | `LifecycleHooksTest`; `test_changed_scope_preview_reuses_projection_without_context_issuance` (preview leaves persisted lifecycle state unchanged) |
 | I-31 | Readiness/trust separation | Test | `StartupRegistrationTest`; `SupportServiceTest` (readiness is not currency) |
 | I-32 | Irrelevant-change silence | Test | `LifecycleHooksTest` (unrelated paths stay silent) |
 | I-33 | Trust/freshness singularity | Test | `ClosedVocabularyTest`; `SerializationRoundTripTest` |
