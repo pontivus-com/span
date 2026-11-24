@@ -13,6 +13,7 @@ Commands:
   session-start      report an unavailable/absent store for the active repo
   source-changed     report dependent recorded conclusions for changed paths
   session-stop       same bounded notice for the session's changed paths
+  codex-post-tool    translate Codex apply_patch PostToolUse into JSON context
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from span.shell.readiness import probe_store
 __all__ = [
     "ADOPTION_PRIMER",
     "cmd_adoption_primer",
+    "cmd_codex_post_tool",
     "cmd_session_start",
     "cmd_source_changed",
     "cmd_session_stop",
@@ -395,24 +397,118 @@ def _scoped_paths(mapping, paths):
     return scoped
 
 
-def cmd_source_changed(data_dir, paths):
-    if not paths:
-        paths = _stdin_paths()
+def _source_change_notices(data_dir, paths) -> tuple[str, ...]:
+    """Project complete changed paths and return only bounded advisory text."""
     paths = [p for p in paths if isinstance(p, str) and p]
     if not paths:
-        return
+        return ()
     mapping = repo_map(data_dir)
     if not mapping:
-        return
+        return ()
+    notices: list[str] = []
     for root, rel_paths in sorted(_scoped_paths(mapping, paths).items()):
         line = _readiness_notice(data_dir, root)
         if line:
-            print(line)
+            notices.append(line)
             continue
         repository_id, changed = _affected_for_root(data_dir, root, rel_paths)
         rendered = _render_affected(repository_id, changed)
         if rendered:
-            print(rendered)
+            notices.append(rendered)
+    return tuple(notices)
+
+
+def cmd_source_changed(data_dir, paths):
+    if not paths:
+        paths = _stdin_paths()
+    for notice in _source_change_notices(data_dir, paths):
+        print(notice)
+
+
+_CODEX_PATCH_MARKERS = (
+    "*** Add File: ",
+    "*** Update File: ",
+    "*** Delete File: ",
+    "*** Move to: ",
+)
+
+
+def _codex_apply_patch_paths(command: str) -> tuple[str, ...] | None:
+    """Extract exact file paths from Codex's documented apply_patch payload."""
+    paths: list[str] = []
+    saw_file_marker = False
+    for line in command.splitlines():
+        for marker in _CODEX_PATCH_MARKERS:
+            if not line.startswith(marker):
+                continue
+            saw_file_marker = True
+            path = line[len(marker) :].strip()
+            if not path:
+                return None
+            paths.append(path)
+            break
+    if not saw_file_marker:
+        return None
+    return tuple(dict.fromkeys(paths))
+
+
+def _codex_post_tool_notice(data_dir, repo_root, payload) -> str | None:
+    """Translate only the documented Codex PostToolUse/apply_patch shape."""
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("hook_event_name") != "PostToolUse":
+        return None
+    if payload.get("tool_name") != "apply_patch":
+        return None
+    tool_input = payload.get("tool_input")
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if not isinstance(command, str):
+        return (
+            "span: Codex observed apply_patch but its documented "
+            "tool_input.command is unavailable; reconsider the complete edited "
+            "scope before completing work."
+        )
+    parsed = _codex_apply_patch_paths(command)
+    if parsed is None:
+        return (
+            "span: Codex observed apply_patch but could not normalize the complete "
+            "changed scope from the documented patch payload; reconsider the "
+            "complete edited scope before completing work."
+        )
+    absolute = tuple(
+        path if os.path.isabs(path) else os.path.join(repo_root, path)
+        for path in parsed
+    )
+    notices = _source_change_notices(data_dir, absolute)
+    return " ".join(notices) if notices else None
+
+
+def cmd_codex_post_tool(data_dir, repo_root=None):
+    """Emit Codex's documented structured PostToolUse additional context."""
+    try:
+        raw = sys.stdin.read()
+    except OSError:
+        return
+    if not raw.strip():
+        return
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return
+    notice = _codex_post_tool_notice(data_dir, repo_root or os.getcwd(), payload)
+    if notice is None:
+        return
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": notice,
+                }
+            },
+            separators=(",", ":"),
+        )
+    )
 
 
 def cmd_session_stop(data_dir, repo_root=None):
@@ -449,7 +545,13 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "command",
-        choices=("session-start", "adoption-primer", "source-changed", "session-stop"),
+        choices=(
+            "session-start",
+            "adoption-primer",
+            "source-changed",
+            "session-stop",
+            "codex-post-tool",
+        ),
     )
     parser.add_argument("paths", nargs="*")
     return parser.parse_args(argv)
@@ -479,6 +581,8 @@ def main(argv=None):
             cmd_source_changed(data_dir, args.paths)
         elif args.command == "session-stop":
             cmd_session_stop(data_dir, repo_root)
+        elif args.command == "codex-post-tool":
+            cmd_codex_post_tool(data_dir, repo_root)
     except BrokenPipeError:
         raise SystemExit(0)
     except Exception as exc:  # noqa: BLE001 - hooks never break sessions
