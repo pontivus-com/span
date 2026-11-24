@@ -171,14 +171,21 @@ class LifecycleHooksTest(unittest.TestCase):
                     members=(active_member,),
                     findings=(degraded_finding,),
                 ),
-                ("ACTIVE/DEGRADED", "governance needs attention", "semantic orientation"),
+                (
+                    "ACTIVE/DEGRADED",
+                    "governance needs attention",
+                    "semantic orientation",
+                ),
             ),
         )
         with tempfile.TemporaryDirectory() as tmp:
             root, data = _recorded(tmp)
             for name, status, expected in cases:
-                with self.subTest(name=name), mock.patch.object(
-                    hooks, "_functional_pyramid_status", return_value=status
+                with (
+                    self.subTest(name=name),
+                    mock.patch.object(
+                        hooks, "_functional_pyramid_status", return_value=status
+                    ),
                 ):
                     output = _capture(hooks.cmd_session_start, data, str(root))
                     self.assertEqual(len(output.splitlines()), 1)
@@ -274,7 +281,6 @@ class LifecycleHooksTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 hooks.cmd_session_start(data, str(root))
 
-
     def test_changed_scope_projection_receives_complete_input_before_render_bound(self):
         class FakeReconsider:
             def __init__(self):
@@ -303,8 +309,7 @@ class LifecycleHooksTest(unittest.TestCase):
 
         reconsider = FakeReconsider()
         paths = tuple(
-            f"src/file-{index}.py"
-            for index in range(hooks.HOOK_DIAGNOSTIC_LIMIT + 3)
+            f"src/file-{index}.py" for index in range(hooks.HOOK_DIAGNOSTIC_LIMIT + 3)
         )
         with (
             mock.patch.object(hooks, "repo_map", return_value={"/repo": "/repo"}),

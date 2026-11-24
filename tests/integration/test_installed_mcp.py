@@ -299,8 +299,7 @@ const event = { sessionID: "real-session", system: [] };
 registered["session:context"](event);
 console.log(JSON.stringify(event.system));
 dispose();
-""".strip()
-            + "\n",
+""".strip() + "\n",
             encoding="utf-8",
         )
         proc = _subprocess.run(
