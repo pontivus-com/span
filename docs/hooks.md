@@ -45,6 +45,7 @@ Span ships hook commands for a small set of lifecycle moments:
 | `adoption-primer` | Emit the standalone lifecycle primer when invoked directly; managed OpenCode session entry uses the composed `session-start` path. |
 | `source-changed` | Evaluate the complete normalized changed scope through the canonical reconsider preview, then render bounded diagnostic detail. |
 | `session-stop` | Report bounded support effects associated with supplied session paths. |
+| `codex-post-tool` | Translate the documented Codex `PostToolUse`/`apply_patch` payload into complete changed scope and emit structured model-visible `additionalContext`. |
 
 Session entry is lifecycle-singular: readiness, Functional Pyramid state and
 semantic orientation are composed into one notice rather than competing host
@@ -119,7 +120,7 @@ Span can wire lifecycle reminders for its supported managed hosts.
 
 The exact installation behavior differs by host:
 
-- **Codex** — hook configuration is managed alongside the MCP setup and carries the same configured Span data directory;
+- **Codex** — hook configuration is managed alongside the MCP setup and carries the same configured Span data directory; session entry uses `SessionStart`, while canonical `apply_patch` edits use documented `PostToolUse` input and structured `additionalContext` rather than plain stdout;
 - **Claude Code** — supported session/edit/stop hook entries can be added to an
   existing user settings file while preserving unrelated configuration; and
 - **OpenCode** — the Span lifecycle plugin supplies the host-side reminder
