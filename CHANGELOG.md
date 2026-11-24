@@ -52,6 +52,16 @@
   OpenCode hook execution, and translate only documented native host fields.
   Pre-investigation remains guidance-only where a host cannot provide a reliable
   non-blocking advisory interception point.
+- Align Codex hook delivery with its native contract: canonical `apply_patch`
+  PostToolUse payloads are normalized from documented patch markers and returned
+  as structured model-visible context; the invalid plain-text Stop path is not
+  installed.
+- Cover OpenCode's documented multi-file `patch` tool, diagnose incomplete
+  native edit payloads without guessing, and retain per-session changed scope
+  without arbitrary eviction or correctness-bearing notice truncation.
+- Package skills, lifecycle guidance and the OpenCode plugin from one canonical
+  asset manifest, and prove the wheel-bundled plugin through the isolated
+  installed `span-hooks` acceptance path.
 
 ### Installer, governance and external-integration correction
 
