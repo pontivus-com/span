@@ -839,3 +839,110 @@ The transition verifies:
   lifecycle store and never claim to carry cross-repository participation state.
 
 Existing archive/stage/verify/activate/rollback ownership remains unchanged.
+
+
+## Historical Part-C §22 verification detail
+
+The following detailed verification checklist and dated design-audit narrative
+were removed from active Layer-4 authority when verification ownership was
+reconciled to the functional-acceptance, invariant, and acceptance documents.
+
+### 22. Host delivery, skills and Version-1 verification
+
+**Authority:** A4, A8, A9; F6, F8, F10, F12; L8, L12–L16; FD-38–FD-58,
+FD-92–FD-94 and functional acceptance §15.
+
+Generate all new selector/result branches from the canonical model/schema owner.
+The shell MCP adapter remains transport-only and may not classify Functional
+Pyramid semantics from strings, paths or runtime class names. Exactly three
+advertised tools remain `ask`, `record`, `reconsider`.
+
+Update the Functional Pyramid skill and managed notices only after the canonical
+wire is generated. Initialization guidance must consume the Layer-2 result gates,
+not merely call names:
+
+`STATUS → DISCOVER/VALIDATE → DECLARE when needed → reconsider/disposition →
+VALIDATE → ACTIVATE/REVISE → VERIFY → REESTABLISH when accepted write effects
+remain actionable → ACTIVE`.
+
+DEACTIVATE likewise consumes its returned dependent effects before the
+deactivation task is called complete. An accepted participation write is never
+treated as completion solely because it returned a receipt. The skill retains
+the returned Functional Pyramid receipt selector/effect obligation across any
+DEGRADED repair/revision loop and uses replay/live projection when fresh
+re-establishment contexts are required.
+
+Ordinary runtime guidance likewise checks
+`UnderstandingRecorded.qualification`: accepted but non-current NORMATIVE
+content returns to investigation/re-establishment instead of successful
+COMPLETE. Conformance guidance always records that judgment as NORMATIVE.
+Participation/health notices use the canonical status/health evaluator and
+affected projections, never an independent hook computation.
+
+Extend the §16 verification matrix and installed MCP/host lanes to cover every
+functional-design §15 case, specifically:
+
+- OUTSIDE_FUNCTIONAL_SCOPE and broad MIXED scope;
+- VALID/DEGRADED iff structural findings;
+- pre-existing normative revision invalidation on activation;
+- ACTIVATE/REVISE/DEACTIVATE dependent effects and per-repository contexts;
+- removal/deactivation REASSESSMENT_REQUIRED versus ACTIVE operational
+  UNVERIFIABLE;
+- Functional Pyramid receipt replay with fresh expired-context recovery;
+- pyramid CAS and overlapping activation concurrency;
+- initialization declaration-edit reconsideration and post-write effect
+  disposition before successful adoption/revision/deactivation completion;
+- accepted non-current NORMATIVE record results returning to
+  investigation/re-establishment rather than successful COMPLETE;
+- conformance judgments using the NORMATIVE assertion contract;
+- preservation of every pre-Version-1 semantic lifecycle branch and exactly
+  three public MCP tools.
+
+Managed-host captures are candidate-specific delivery evidence only. Historical
+0.10/0.11 captures remain evidence for their named candidates and do not certify
+the Version-1 grammar.
+
+**Production-topology acceptance.** At least one non-editable installed MCP lane
+must exercise physically separate repository-A and repository-B lifecycle
+databases plus the installation Functional Pyramid database. The fixture must
+contain a rule consumed by semantic scope in A whose canonical
+`AuthorityBinding` and authority evidence are owned by B. The lane must prove,
+through the production composition root:
+
+```
+activate A+B
+→ ordinary ask(A scope) returns the governing projection
+→ NORMATIVE record in A derives FunctionalRouteSupport plus B authority support
+→ reuse/ask qualifies CURRENT
+→ B canonical governance source or applicability changes
+→ ordinary reconsider(B changed scope) reaches the dependent A conclusion
+→ A re-establishes through the returned repository-bound context
+→ required qualification is CURRENT again
+```
+
+The same verification set must prove exact canonical-owner reverse navigation,
+unknown repository/pyramid status rejection, complete mixed candidate findings,
+and architecture guards preventing shell semantic effect coordination or
+optional production Functional Pyramid dependencies. Component tests that
+manually inject Functional Pyramid callbacks do not satisfy this production
+composition requirement.
+
+The architecture guard must inspect both composition sites and service behavior:
+the production `ServiceContext` factory supplies every mandatory capability;
+`ReconsiderService` has no local effect-engine fallback;
+`DependencyEffectService` has no single-store/single-support constructor mode;
+ordinary `DependencyEffectService.repository_change` cannot conditionally omit
+route impact traversal; repository-qualified authority evaluation cannot silently
+fall back to the semantic owner's local store for an external authority; and
+semantic hook paths compose through `InstallationRuntime`. A green installed
+journey does not waive any of these static ownership checks.
+
+**2026-11-22 design-detail audit.** The adversarial implementation audit found
+no contradiction requiring a Layer-0–3 product/functional amendment. It found
+that the prior Part-C text was not construction-complete at the installation
+composition, repository-qualified support and multi-repository effect-engine
+seams. The paragraphs above close those Layer-4 mechanism gaps without changing
+the governing Layer-0–3 behavior.
+
+Part C is complete only when the mechanisms above are implemented and the
+functional acceptance matrix passes without adding a product rule below Layer 3.

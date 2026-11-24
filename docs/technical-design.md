@@ -964,12 +964,15 @@ of Functional Pyramid participation, instance versions, exclusions and
 installation-scoped receipts. It stores no ordinary understanding, source
 observation, verification or repository-owned governing prose.
 
-Repository lifecycle schema 14 retains every schema-13 table and adds only the
-repository-local derived route lookup projection:
+The repository-local `functional_route_dependency_index` introduced with the
+Version-1 Functional Pyramid remains part of the current repository schema
+**15**:
 
 | repository-store table | key / purpose |
 | --- | --- |
 | `functional_route_dependency_index` | conclusion revision key + `pyramid_id` + owning `repository_id` + route identity; derived lookup projection over canonical FunctionalRouteSupport |
+
+Schema 15 also contains the Beta-3 curation persistence defined by §23/§25.
 
 The installation store has its own schema identity, version 1, and owns exactly:
 
@@ -988,9 +991,9 @@ service composition revalidates member registration before committing an
 installation record.
 
 Canonical `FunctionalRouteSupport` remains inside each conclusion's existing
-canonical support dependency set. Repository schema 14 extends the existing
-`support_dependencies` projection with dependency kind `FUNCTIONAL_ROUTE`;
-its `dependency_ref` is the canonical route identity.
+canonical support dependency set. The current schema-15
+`support_dependencies` projection retains dependency kind
+`FUNCTIONAL_ROUTE`; its `dependency_ref` is the canonical route identity.
 `functional_route_dependency_index` is only a rebuildable repository-local
 lookup projection and never a second support model.
 
@@ -1101,19 +1104,16 @@ not fabricate a partially composed `ServiceContext`. Provisioning ownership
 remains in the installer/context setup path; MCP startup registration does not
 restore a public or implicit provisioning path.
 
-**Beta-3 administrative initialization correction (B3-D01/B3-D02).** Beta-1
-external integration use exposed a composition defect, not a missing Functional Pyramid
-product rule. The released `span-install` never invokes the already-owned
-`provision_repository_runtime(InitializeRepositoryRequest)` path, and its
-installed production-topology fixture manufactures repository/binding state
-directly. Beta 3 therefore repairs the shell/setup seam and the acceptance seam
-without introducing another authority model, setup DTO, semantic writer, MCP
-operation or Functional Pyramid lifecycle.
+**Administrative initialization mechanism (B3-D01/B3-D02 correction).**
+`span-install` uses the canonical
+`provision_repository_runtime(InitializeRepositoryRequest)` owner rather than
+manufacturing repository/binding state through a parallel setup path.
 
-The initialization correction is schema-neutral in itself. In Beta 1 the
-omission affected schema 14. In the complete Beta-3 release the same canonical
-provisioning path creates/opens the **current Beta-3 repository schema 15**
-defined by Part D; installation Functional Pyramid schema 1 remains unchanged.
+The correction is schema-neutral in its behavior. In the current Beta-3
+composition, that canonical provisioning path creates/opens repository schema
+**15** defined by Part D; installation Functional Pyramid schema **1** remains
+separate and unchanged. Historical defect evidence is retained in the Beta-3
+programme record and technical-design history.
 
 The exact mechanism is:
 
@@ -1337,105 +1337,30 @@ The former Beta-1 package/release identity and schema-13→14 transition are
 historical and are retained in the
 [technical-design history](history/technical-design-pre-version1.md#historical-part-c-beta-1-transition-and-release-identity).
 
-### 22. Host delivery, skills and Version-1 verification
+### 22. Host delivery, skills and verification ownership
 
 **Authority:** A4, A8, A9; F6, F8, F10, F12; L8, L12–L16; FD-38–FD-58,
 FD-92–FD-94 and functional acceptance §15.
 
-Generate all new selector/result branches from the canonical model/schema owner.
-The shell MCP adapter remains transport-only and may not classify Functional
-Pyramid semantics from strings, paths or runtime class names. Exactly three
-advertised tools remain `ask`, `record`, `reconsider`.
+Generate selector/result branches from the canonical model/schema owner. The
+shell MCP adapter remains transport-only and may not classify Functional
+Pyramid semantics from strings, paths, or runtime class names. Exactly three
+advertised tools remain `ask`, `record`, and `reconsider`.
 
-Update the Functional Pyramid skill and managed notices only after the canonical
-wire is generated. Initialization guidance must consume the Layer-2 result gates,
-not merely call names:
+Managed skills/notices are generated or maintained from the same lifecycle
+contract. They may guide the agent through Functional Pyramid participation,
+capture/curation, and post-change disposition, but they do not create another
+operation, semantic writer, support evaluator, or governance model.
 
-`STATUS → DISCOVER/VALIDATE → DECLARE when needed → reconsider/disposition →
-VALIDATE → ACTIVATE/REVISE → VERIFY → REESTABLISH when accepted write effects
-remain actionable → ACTIVE`.
+Host adapters and managed notices use the installation composition root and
+canonical status/effect paths. A configured host integration is not proof of
+authenticated model delivery.
 
-DEACTIVATE likewise consumes its returned dependent effects before the
-deactivation task is called complete. An accepted participation write is never
-treated as completion solely because it returned a receipt. The skill retains
-the returned Functional Pyramid receipt selector/effect obligation across any
-DEGRADED repair/revision loop and uses replay/live projection when fresh
-re-establishment contexts are required.
-
-Ordinary runtime guidance likewise checks
-`UnderstandingRecorded.qualification`: accepted but non-current NORMATIVE
-content returns to investigation/re-establishment instead of successful
-COMPLETE. Conformance guidance always records that judgment as NORMATIVE.
-Participation/health notices use the canonical status/health evaluator and
-affected projections, never an independent hook computation.
-
-Extend the §16 verification matrix and installed MCP/host lanes to cover every
-functional-design §15 case, specifically:
-
-- OUTSIDE_FUNCTIONAL_SCOPE and broad MIXED scope;
-- VALID/DEGRADED iff structural findings;
-- pre-existing normative revision invalidation on activation;
-- ACTIVATE/REVISE/DEACTIVATE dependent effects and per-repository contexts;
-- removal/deactivation REASSESSMENT_REQUIRED versus ACTIVE operational
-  UNVERIFIABLE;
-- Functional Pyramid receipt replay with fresh expired-context recovery;
-- pyramid CAS and overlapping activation concurrency;
-- initialization declaration-edit reconsideration and post-write effect
-  disposition before successful adoption/revision/deactivation completion;
-- accepted non-current NORMATIVE record results returning to
-  investigation/re-establishment rather than successful COMPLETE;
-- conformance judgments using the NORMATIVE assertion contract;
-- preservation of every pre-Version-1 semantic lifecycle branch and exactly
-  three public MCP tools.
-
-Managed-host captures are candidate-specific delivery evidence only. Historical
-0.10/0.11 captures remain evidence for their named candidates and do not certify
-the Version-1 grammar.
-
-**Production-topology acceptance.** At least one non-editable installed MCP lane
-must exercise physically separate repository-A and repository-B lifecycle
-databases plus the installation Functional Pyramid database. The fixture must
-contain a rule consumed by semantic scope in A whose canonical
-`AuthorityBinding` and authority evidence are owned by B. The lane must prove,
-through the production composition root:
-
-```
-activate A+B
-→ ordinary ask(A scope) returns the governing projection
-→ NORMATIVE record in A derives FunctionalRouteSupport plus B authority support
-→ reuse/ask qualifies CURRENT
-→ B canonical governance source or applicability changes
-→ ordinary reconsider(B changed scope) reaches the dependent A conclusion
-→ A re-establishes through the returned repository-bound context
-→ required qualification is CURRENT again
-```
-
-The same verification set must prove exact canonical-owner reverse navigation,
-unknown repository/pyramid status rejection, complete mixed candidate findings,
-and architecture guards preventing shell semantic effect coordination or
-optional production Functional Pyramid dependencies. Component tests that
-manually inject Functional Pyramid callbacks do not satisfy this production
-composition requirement.
-
-The architecture guard must inspect both composition sites and service behavior:
-the production `ServiceContext` factory supplies every mandatory capability;
-`ReconsiderService` has no local effect-engine fallback;
-`DependencyEffectService` has no single-store/single-support constructor mode;
-ordinary `DependencyEffectService.repository_change` cannot conditionally omit
-route impact traversal; repository-qualified authority evaluation cannot silently
-fall back to the semantic owner's local store for an external authority; and
-semantic hook paths compose through `InstallationRuntime`. A green installed
-journey does not waive any of these static ownership checks.
-
-**2026-11-22 design-detail audit.** The adversarial implementation audit found
-no contradiction requiring a Layer-0–3 product/functional amendment. It found
-that the prior Part-C text was not construction-complete at the installation
-composition, repository-qualified support and multi-repository effect-engine
-seams. The paragraphs above close those Layer-4 mechanism gaps without changing
-the governing Layer-0–3 behavior.
-
-Part C is complete only when the mechanisms above are implemented and the
-functional acceptance matrix passes without adding a product rule below Layer 3.
+Mechanism verification is owned by the executable
+[functional-acceptance matrix](functional-acceptance.md), the
+[invariant audit matrix](invariants.md), installed/package lanes, and
+[Acceptance and evidence](acceptance.md). This Layer-4 section does not maintain
+a duplicate candidate-specific test checklist or dated delivery verdict.
 
 ## Part D — Beta 3 capture/curation mechanisms
 
