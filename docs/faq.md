@@ -145,9 +145,7 @@ combined installer + Functional Pyramid + capture/curation topology. Managed
 registration/integration exists for Codex, OpenCode and Claude Code, but live
 model-host delivery for the current Beta-3 candidate remains **UNVERIFIED** and
 is not inferred from registration health, configured hooks, or historical
-captures. Private first-adopter cold-install/governance/capture-curation revalidation
-has passed against committed adopter inputs. Beta 3 remains unpublished until
-its corrective exact-head gates pass and the release owner separately
+captures. Beta 3 remains unpublished until the release owner separately
 authorizes publication.
 
 ## Does Span save time or tokens?
