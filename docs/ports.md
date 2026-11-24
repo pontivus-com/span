@@ -1,8 +1,14 @@
 # Port contracts
 
+Use this page when a contributor needs to change a capability boundary between
+Span's semantic composition and an effectful implementation.
+
 Ports carry canonical domain types directly. Services compose these contracts;
-shell implementations own effects. Public JSON grammar belongs to
-[MCP reference](mcp.md).
+shell implementations own effects. A port is not a place to introduce a second
+DTO/domain shape or to relocate semantic decisions into an adapter.
+
+Public JSON grammar belongs to [MCP reference](mcp.md); the higher-level
+ownership model is in [Architecture](architecture.md).
 
 ## Lifecycle store and authority
 
@@ -10,7 +16,7 @@ shell implementations own effects. Public JSON grammar belongs to
 request-bound contexts, source/discovery observations, understanding/version
 reads, conclusion history, challenges, verification runs, and receipt lookup.
 Its recording operations accept canonical commands and commit the transition
-with its receipt atomically. SQLite implements repository schema 14; semantic
+with its receipt atomically. SQLite implements repository schema 15; semantic
 decisions are made by core/service rules rather than by SQL or transport.
 
 `LifecycleAuthorityResolver` resolves declared authority references. Source
