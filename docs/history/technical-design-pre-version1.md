@@ -768,3 +768,74 @@ above. Candidate-specific managed-host delivery remains unverified unless separa
 claimed, and final Part-C derivation re-verification remains release-verification
 work. G5/F8 product-value validation is post-release Beta work and does not
 reopen the implemented mechanism or block publication.
+
+
+## Historical Part-C Beta-1 transition and release identity
+
+This section was part of the original Version-1 Beta-1 mechanism design. Beta 3
+supersedes the active repository schema/release identity through current
+technical-design §25.
+
+### 21. Offline transition and compatibility boundary
+
+**Authority:** F2–F4, F12; L4, L12–L15; FD-35–FD-48, FD-73, FD-79,
+FD-81, FD-85.
+
+The first Version-1 Beta release identity is **1.0.0 Beta 1** and its
+lifecycle store identity is schema 14. That one release identity has deterministic
+ecosystem serializations rather than independent version owners:
+
+- Python/PyPI package version and changelog section: `1.0.0b1` (PEP 440);
+- Git tag: `v1.0.0b1`;
+- GitHub Release: title `Span 1.0.0 Beta 1`, explicitly marked prerelease;
+- MCP Registry top-level server version: `1.0.0-beta.1` (SemVer);
+- MCP Registry PyPI package entry version: `1.0.0b1`.
+
+`src/span/__init__.py::__version__` remains the canonical package serialization.
+Release tooling derives the tag, changelog lookup and PyPI package version from
+that value and derives the MCP server SemVer deterministically; `server.json`
+metadata is a generated/validated release projection, not a second version
+authority. Prerelease detection must understand PEP-440 beta/rc/dev forms and
+must not rely on the presence of a hyphen in the package version.
+
+Later beta increments may advance the release/package version without changing
+schema identity when no persisted contract changes; any persisted-contract
+change requires a new explicit schema transition.
+
+Extend the existing explicit offline repository-store transition from schema
+13 to repository schema 14. Runtime open remains exact-version only and never
+migrates in place. The explicit installer/setup path creates or verifies the
+installation Functional Pyramid store at
+`<data_dir>/installation/functional-pyramid.db` with installation schema 1;
+the repository transition command remains repository-scoped, and pure runtime
+`ask` never creates or migrates either store.
+
+The repository schema-13 → schema-14 transition preserves every existing
+semantic/audit row and receipt exactly and adds the empty derived
+`functional_route_dependency_index`. The installation store begins with empty
+pyramid/version/member/exclusion/receipt state. Existing registered repositories
+therefore begin UNCONFIGURED because registration is not participation.
+Historical and current NORMATIVE revisions are **not** backfilled with invented
+FunctionalRouteSupport.
+
+Consequently, transition alone changes no semantic conclusion's support state.
+When a repository is later ACTIVATED, §20.3 selects current pre-activation
+NORMATIVE revisions without route support and returns them as
+REASSESSMENT_REQUIRED dependent effects. This is the only migration path from
+pre-Version-1 normative understanding into governed current understanding.
+
+The transition verifies:
+
+- every pre-existing semantic/audit count and reference under the current
+  schema-13 preservation rules;
+- repository schema-14 route index exists and is empty after transition;
+- installation schema-1 pyramid/member/exclusion/receipt state is empty;
+- no FunctionalRouteSupport is fabricated for existing revisions;
+- installation-store unique ACTIVE-member constraint is present;
+- ordinary repository receipts remain in their original per-repository namespace;
+- installation Functional Pyramid receipts are independently keyed;
+- full data-directory backup/restore includes the installation database, while
+  repository-portable backups continue to contain only that repository's
+  lifecycle store and never claim to carry cross-repository participation state.
+
+Existing archive/stage/verify/activate/rollback ownership remains unchanged.

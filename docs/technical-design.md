@@ -575,9 +575,9 @@ changing the mechanism authority they verify.
 ## Part C — Version 1 Functional Pyramid mechanisms
 
 Part C implements the binding Version-1 behavior in lifecycle §4/§7 and
-FD-61–FD-94. It does not redefine those requirements. Parts A/B remain evidence
-and mechanism authority for the pre-existing semantic lifecycle unless a Part-C
-decision explicitly adapts that mechanism.
+FD-61–FD-94. It does not redefine those requirements. Part B remains mechanism
+authority for the pre-existing semantic lifecycle unless a Part-C decision
+explicitly adapts that mechanism; former Part-A baseline evidence is historical.
 
 ### Part-C derivation map
 
@@ -1321,64 +1321,21 @@ completion merely because a later pyramid write occurs.
 **Authority:** F2–F4, F12; L4, L12–L15; FD-35–FD-48, FD-73, FD-79,
 FD-81, FD-85.
 
-The first Version-1 Beta release identity is **1.0.0 Beta 1** and its
-lifecycle store identity is schema 14. That one release identity has deterministic
-ecosystem serializations rather than independent version owners:
+Part C introduced the installation-level Functional Pyramid store at
+installation schema **1**. That installation schema remains current.
 
-- Python/PyPI package version and changelog section: `1.0.0b1` (PEP 440);
-- Git tag: `v1.0.0b1`;
-- GitHub Release: title `Span 1.0.0 Beta 1`, explicitly marked prerelease;
-- MCP Registry top-level server version: `1.0.0-beta.1` (SemVer);
-- MCP Registry PyPI package entry version: `1.0.0b1`.
+The active Beta-3 repository store is schema **15**, owned by Part D §25.
+Repository schemas **7–14** are explicit offline transition sources to schema
+15; runtime open never migrates a repository store in place.
 
-`src/span/__init__.py::__version__` remains the canonical package serialization.
-Release tooling derives the tag, changelog lookup and PyPI package version from
-that value and derives the MCP server SemVer deterministically; `server.json`
-metadata is a generated/validated release projection, not a second version
-authority. Prerelease detection must understand PEP-440 beta/rc/dev forms and
-must not rely on the presence of a hyphen in the package version.
+No transition fabricates Functional Pyramid participation, authority support, or
+curation approval. Repository registration and Functional Pyramid participation
+remain separate. Repository-portable backups carry repository lifecycle state,
+not installation-level participation state.
 
-Later beta increments may advance the release/package version without changing
-schema identity when no persisted contract changes; any persisted-contract
-change requires a new explicit schema transition.
-
-Extend the existing explicit offline repository-store transition from schema
-13 to repository schema 14. Runtime open remains exact-version only and never
-migrates in place. The explicit installer/setup path creates or verifies the
-installation Functional Pyramid store at
-`<data_dir>/installation/functional-pyramid.db` with installation schema 1;
-the repository transition command remains repository-scoped, and pure runtime
-`ask` never creates or migrates either store.
-
-The repository schema-13 → schema-14 transition preserves every existing
-semantic/audit row and receipt exactly and adds the empty derived
-`functional_route_dependency_index`. The installation store begins with empty
-pyramid/version/member/exclusion/receipt state. Existing registered repositories
-therefore begin UNCONFIGURED because registration is not participation.
-Historical and current NORMATIVE revisions are **not** backfilled with invented
-FunctionalRouteSupport.
-
-Consequently, transition alone changes no semantic conclusion's support state.
-When a repository is later ACTIVATED, §20.3 selects current pre-activation
-NORMATIVE revisions without route support and returns them as
-REASSESSMENT_REQUIRED dependent effects. This is the only migration path from
-pre-Version-1 normative understanding into governed current understanding.
-
-The transition verifies:
-
-- every pre-existing semantic/audit count and reference under the current
-  schema-13 preservation rules;
-- repository schema-14 route index exists and is empty after transition;
-- installation schema-1 pyramid/member/exclusion/receipt state is empty;
-- no FunctionalRouteSupport is fabricated for existing revisions;
-- installation-store unique ACTIVE-member constraint is present;
-- ordinary repository receipts remain in their original per-repository namespace;
-- installation Functional Pyramid receipts are independently keyed;
-- full data-directory backup/restore includes the installation database, while
-  repository-portable backups continue to contain only that repository's
-  lifecycle store and never claim to carry cross-repository participation state.
-
-Existing archive/stage/verify/activate/rollback ownership remains unchanged.
+The former Beta-1 package/release identity and schema-13→14 transition are
+historical and are retained in the
+[technical-design history](history/technical-design-pre-version1.md#historical-part-c-beta-1-transition-and-release-identity).
 
 ### 22. Host delivery, skills and Version-1 verification
 
