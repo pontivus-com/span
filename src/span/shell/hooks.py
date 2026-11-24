@@ -243,9 +243,7 @@ def _render_affected(repository_id, changed, *, close_prefix=False):
         )
 
     labels = [
-        understanding_id
-        if owner == repository_id
-        else f"{owner}:{understanding_id}"
+        understanding_id if owner == repository_id else f"{owner}:{understanding_id}"
         for owner, understanding_id in sorted(needing)
     ]
     names = labels[:HOOK_DIAGNOSTIC_LIMIT]
