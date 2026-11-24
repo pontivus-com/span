@@ -200,10 +200,9 @@ sublayers: `P2S` precedes `P2W`.
 - P1 rules are governed by applicable P0 rules. A missing or undecided parent is
   `UNRESOLVED_RULE_PARENT`; an unresolved relationship is not a valid accepted
   governing edge.
-- P2S rules identify applicable higher goals/invariants. A P2S rule cannot
-  derive from a P2W rule.
-- P2W rules identify the applicable contract-layer obligations they realize. A
-  P2W rule may explicitly identify a P2S rule as a direct governing rule.
+- P2S and P2W rules identify applicable higher goals/invariants.
+- A P2W rule may explicitly identify a P2S rule as a direct governing rule. A
+  P2S rule cannot derive from a P2W rule.
 - Applicability never creates that P2W-to-P2S relationship. It exists only when
   the P2W declaration names the P2S rule in its direct governing-rule IDs.
 - A governing edge within P2S or within P2W is invalid.
