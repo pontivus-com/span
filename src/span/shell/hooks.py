@@ -1,11 +1,11 @@
 """Host hook runner for Span lifecycle notices (read-only, bounded).
 
 One canonical rule: an automatic hook maps a native event onto the same
-readiness probe and support checks the ordinary runtime uses. Hooks never
-initialize, migrate, record, re-check, interpret, rebuild, or run
-repository-scale work. A missed or disabled hook cannot make stale
-understanding look current, because correctness is evaluated by
-`ask`/retrieval, not by hook delivery.
+readiness and dependency-effect projection the ordinary runtime uses. Hooks
+never initialize, migrate, record, issue re-establishment contexts, interpret,
+rebuild, or run repository-scale work. A missed or disabled hook cannot make
+stale understanding look current, because correctness is evaluated by the
+lifecycle operations, not by hook delivery.
 
 Output is one bounded line per event. Routine current state prints nothing.
 
@@ -25,7 +25,6 @@ import sys
 import typing as _typing
 
 from span.core import model as m
-from span.core import support_rules as _support_rules
 from span.shell.install.receipt import read_receipt
 from span.shell.policy import HOOK_DIAGNOSTIC_LIMIT
 from span.shell.readiness import probe_store
@@ -43,14 +42,13 @@ __all__ = [
 #: FD-58 adoption notice. It states existence, not currency; it names the
 #: operation and the direct tool; it names no surface and asks no question.
 ADOPTION_PRIMER = (
-    "Span governs semantic understanding for this repository. Use the direct "
-    "tools ending in `_ask`, `_record`, and `_reconsider`. Before any source "
-    "access used to derive understanding—including native read/search tools and "
-    "shell commands that read or search repository files—ask the relevant surface "
-    "with no question or request identity; "
-    "use exact recorded-question selection only when that metadata is known. "
-    "Record supported conclusions when established; reconsider changed paths "
-    "after editing and record the resulting dispositions before completing work."
+    "Span lifecycle is active for this repository. Before ordinary governed "
+    "work, use the direct tool ending in `_ask` with FunctionalPyramidSelector "
+    "to resolve participation and health; follow the span-functional-pyramid "
+    "skill for UNCONFIGURED or ACTIVE/DEGRADED state. For ACTIVE/VALID or "
+    "descriptive-only EXCLUDED work, ask the relevant surface before source "
+    "access used to derive understanding, with no question or request identity. "
+    "Use exact recorded-question selection only when that metadata is known."
 )
 
 
@@ -195,53 +193,74 @@ def _functional_pyramid_notice(
 
 
 def _affected_for_root(data_dir, root, rel_paths):
-    """Bounded dependent lookup for changed repository-relative locators."""
+    """Read the canonical changed-scope projection without issuing contexts."""
     from span.shell.installation_runtime import open_installation_runtime
 
     mapping = repo_map(data_dir)
     roots, repository_locator = _installation_inputs(mapping)
     repository_id = _repository_id(root)
-    affected: dict[str, m.SupportState] = {}
+    changed_paths = tuple(dict.fromkeys(rel_paths))[:HOOK_DIAGNOSTIC_LIMIT]
     with open_installation_runtime(
         data_dir,
         repository_locator=repository_locator,
         registered_repository_ids=lambda: tuple(sorted(roots)),
     ) as installation:
         context = installation.context_for_locator(root)
-        for locator in tuple(rel_paths)[:HOOK_DIAGNOSTIC_LIMIT]:
-            for observation_id in context.store.source_observation_ids_for_locator(
-                repository_id, locator
+        changed = context.reconsider.preview_changed_scope(
+            m.ReconsiderRequest(
+                repository_id=repository_id,
+                changed_paths=changed_paths,
+            )
+        )
+    return repository_id, changed
+
+
+def _render_affected(repository_id, changed, *, close_prefix=False):
+    needing: list[tuple[str, str]] = []
+    for surface in changed.surfaces:
+        for conclusion in surface.conclusions:
+            support = conclusion.support
+            if (
+                isinstance(support, m.SupportEvaluation)
+                and support.state is m.SupportState.CURRENT
             ):
-                for ref in context.store.support_dependents("SOURCE", observation_id):
-                    key = ref.understanding_id.value
-                    evaluation = context.support.evaluate_revision(ref)
-                    if key in affected:
-                        affected[key] = _support_rules.worse_state(
-                            affected[key], evaluation.state
-                        )
-                    else:
-                        affected[key] = evaluation.state
-    return repository_id, affected
+                continue
+            key = (
+                surface.surface.repository_id,
+                conclusion.ref.understanding_id.value,
+            )
+            if key not in needing:
+                needing.append(key)
 
+    if not needing and not changed.truncated:
+        return None
 
-def _render_affected(repository_id, affected, *, close_prefix=False):
-    if not affected:
-        return None
-    needing = {
-        key: state
-        for key, state in affected.items()
-        if state is not m.SupportState.CURRENT
-    }
-    if not needing:
-        return None
-    names = sorted(needing)[:HOOK_DIAGNOSTIC_LIMIT]
     label = "close" if close_prefix else "needs attention"
+    if not needing:
+        return (
+            f"span: {repository_id} {label}: affected projection truncated; "
+            "call reconsider after editing before completing work."
+        )
+
+    labels = [
+        understanding_id
+        if owner == repository_id
+        else f"{owner}:{understanding_id}"
+        for owner, understanding_id in sorted(needing)
+    ]
+    names = labels[:HOOK_DIAGNOSTIC_LIMIT]
     detail = ", ".join(names)
-    more = "" if len(needing) <= HOOK_DIAGNOSTIC_LIMIT else "; more omitted"
+    more = "" if len(labels) <= HOOK_DIAGNOSTIC_LIMIT else "; more omitted"
+    cross_repo = (
+        "; crosses repositories"
+        if any(owner != repository_id for owner, _ in needing)
+        else ""
+    )
+    truncated = "; projection truncated" if changed.truncated else ""
     return (
         f"span: {repository_id} {label}: {len(needing)} recorded "
-        f"understanding(s) affected ({detail}{more}); call "
-        "reconsider after editing, then investigate and record dispositions."
+        f"understanding(s) affected ({detail}{more}{cross_repo}{truncated}); "
+        "call reconsider after editing, then investigate and record dispositions."
     )
 
 
@@ -341,8 +360,8 @@ def cmd_source_changed(data_dir, paths):
         if line:
             print(line)
             continue
-        repository_id, affected = _affected_for_root(data_dir, root, rel_paths)
-        rendered = _render_affected(repository_id, affected)
+        repository_id, changed = _affected_for_root(data_dir, root, rel_paths)
+        rendered = _render_affected(repository_id, changed)
         if rendered:
             print(rendered)
 
@@ -358,8 +377,8 @@ def cmd_session_stop(data_dir, repo_root=None):
     rel_paths = _scoped_paths({root: root}, _stdin_paths()).get(root, [])
     if not rel_paths:
         return
-    repository_id, affected = _affected_for_root(data_dir, root, rel_paths)
-    rendered = _render_affected(repository_id, affected, close_prefix=True)
+    repository_id, changed = _affected_for_root(data_dir, root, rel_paths)
+    rendered = _render_affected(repository_id, changed, close_prefix=True)
     if rendered:
         print(rendered)
 

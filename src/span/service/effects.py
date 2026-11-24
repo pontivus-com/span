@@ -98,8 +98,18 @@ class DependencyEffectService:
             )
         return tuple(dict.fromkeys(refs))
 
-    def repository_change(self, request: m.ReconsiderRequest) -> m.Changed:
-        """Project one repository changed-scope root through the shared engine."""
+    def repository_change(
+        self,
+        request: m.ReconsiderRequest,
+        *,
+        issue_contexts: bool = True,
+    ) -> m.Changed:
+        """Project one repository changed-scope root through the shared engine.
+
+        ``issue_contexts=False`` is the read-only notice path: it returns the
+        identical affected projection without persisting re-establishment
+        contexts.
+        """
         if request.challenge is not None:
             raise ValueError("challenge is not a dependency-effect root")
         repository_id = request.bound_repository_id
@@ -137,6 +147,7 @@ class DependencyEffectService:
             root_scopes=root_scopes,
             max_depth=self._policy.default_query_bounds.max_depth,
             max_nodes=self._policy.default_query_bounds.max_results,
+            issue_contexts=issue_contexts,
         )
         surfaces_out, contexts, _, omitted, truncated = projected
         return m.Changed(
@@ -279,6 +290,7 @@ class DependencyEffectService:
         root_scopes: dict[str, tuple[m.EvidenceScope, ...]],
         max_depth: int | None,
         max_nodes: int | None,
+        issue_contexts: bool = True,
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
@@ -368,7 +380,11 @@ class DependencyEffectService:
             )
 
         projection = tuple(changed_surfaces)
-        contexts = self._reestablishment_contexts(projection, root_scopes)
+        contexts = (
+            self._reestablishment_contexts(projection, root_scopes)
+            if issue_contexts
+            else ()
+        )
         return (
             projection,
             contexts,

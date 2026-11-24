@@ -113,13 +113,14 @@ class LifecycleHooksTest(unittest.TestCase):
             root, data = _recorded(tmp)
             output = _capture(hooks.cmd_adoption_primer, data, str(root))
             self.assertEqual(output, hooks.ADOPTION_PRIMER)
-            self.assertIn("governs semantic understanding", output)
+            self.assertIn("lifecycle is active", output)
             self.assertIn("_ask", output)
-            self.assertIn("direct tools", output)
-            self.assertIn("native read/search", output)
-            self.assertIn("shell commands", output)
-            self.assertNotIn("current", output)
-            self.assertNotIn("stale", output)
+            self.assertIn("FunctionalPyramidSelector", output)
+            self.assertIn("span-functional-pyramid", output)
+            self.assertIn("ACTIVE/VALID", output)
+            self.assertIn("EXCLUDED", output)
+            self.assertNotIn("_record", output)
+            self.assertNotIn("_reconsider", output)
 
     def test_adoption_primer_reaches_a_cold_registered_repository(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -136,7 +137,7 @@ class LifecycleHooksTest(unittest.TestCase):
             store.close()
             output = _capture(hooks.cmd_adoption_primer, data, str(root))
             self.assertEqual(output, hooks.ADOPTION_PRIMER)
-            self.assertIn("Record supported conclusions", output)
+            self.assertIn("FunctionalPyramidSelector", output)
 
     def test_adoption_primer_is_silent_without_a_store(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -374,6 +375,12 @@ class LifecycleHooksTest(unittest.TestCase):
         self.assertIn("ACTIVE/DEGRADED", notice)
         self.assertIn("FunctionalPyramidSelector", notice)
         self.assertIn("span-functional-pyramid", notice)
+
+    def test_hook_source_uses_canonical_changed_scope_projection(self):
+        source = pathlib.Path(hooks.__file__).read_text(encoding="utf-8")
+        self.assertIn("preview_changed_scope", source)
+        self.assertNotIn("source_observation_ids_for_locator", source)
+        self.assertNotIn('support_dependents("SOURCE"', source)
 
     def test_hook_source_has_no_semantic_writer_or_builder(self):
         source = pathlib.Path(hooks.__file__).read_text(encoding="utf-8")

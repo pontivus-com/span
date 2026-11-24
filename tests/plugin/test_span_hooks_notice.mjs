@@ -93,10 +93,8 @@ test("the edit-time notice reaches event.system once", async () => {
       registered["session:context"](first);
       assert.equal(first.system.length, 1);
       assert.match(first.system[0].text, /1 recorded understanding/);
-      assert.match(
-        first.system[0].text,
-        /reconsider\(changed_paths=\["src\/a\.js"\]\)/,
-      );
+      assert.match(first.system[0].text, /"repository_id":/);
+      assert.match(first.system[0].text, /"changed_paths":\["src\/a\.js"\]/);
 
       const second = { sessionID: "session-1", system: [] };
       registered["session:context"](second);

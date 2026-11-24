@@ -1157,3 +1157,17 @@ class ReconsiderServiceTest(unittest.TestCase):
                         context.scope, m.EvidenceScope(paths=("src/b.py",))
                     )
                 )
+
+    def test_changed_scope_preview_reuses_projection_without_context_issuance(self):
+        request = m.ReconsiderRequest(
+            repository_id="repo-1",
+            changed_paths=("src/a.py",),
+        )
+        preview = self.service.preview_changed_scope(request)
+        normal = self.service.reconsider(request)
+
+        self.assertEqual(preview.surfaces, normal.surfaces)
+        self.assertEqual(preview.omitted, normal.omitted)
+        self.assertEqual(preview.truncated, normal.truncated)
+        self.assertEqual(preview.reestablishment_contexts, ())
+        self.assertTrue(normal.reestablishment_contexts)

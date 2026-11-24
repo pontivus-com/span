@@ -238,9 +238,12 @@ export default {
           if (!notice) return;
           const relative = relativePaths(paths, locationRoot);
           const reminder = relative.length
-            ? " call reconsider(changed_paths=" +
-              JSON.stringify(relative) +
-              ") after editing; investigate and record supported dispositions before completing work."
+            ? " call reconsider " +
+              JSON.stringify({
+                repository_id: path.basename(path.resolve(locationRoot)),
+                changed_paths: relative,
+              }) +
+              " after editing; investigate and record supported dispositions before completing work."
             : "";
           rememberNotice(
             pending,

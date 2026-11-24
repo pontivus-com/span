@@ -166,6 +166,27 @@ class SpecializedSkillTest(unittest.TestCase):
         self.assertIn("does not change curation", after)
         self.assertIn("requires separate curation", after)
 
+    def test_skill_prose_matches_beta3_action_and_review_contract(self):
+        router = _text(ROUTER)
+        before = _text(BEFORE)
+        after = _text(AFTER)
+        record = _text(RECORD)
+        pyramid = _text(FUNCTIONAL_PYRAMID)
+
+        self.assertIn("deactivate/exclude", router)
+        self.assertIn("next_after", router)
+        self.assertIn("next_after", before)
+        self.assertIn("next_after", record)
+        self.assertIn("surface declaration or Functional Pyramid lifecycle", record)
+        self.assertNotIn("action` is used only for a", record)
+        self.assertIn('"assertion_nature": "NORMATIVE"', record)
+        self.assertIn("Span derives the challenge", after)
+        self.assertIn("not a semantic-truth certification", after)
+        self.assertIn(
+            "#71-functional-pyramid-initializationadoption-lifecycle",
+            pyramid,
+        )
+
     def test_functional_pyramid_skill_covers_result_driven_lifecycle(self):
         text = _text(FUNCTIONAL_PYRAMID)
         for required in (
