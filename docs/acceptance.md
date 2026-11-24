@@ -20,26 +20,26 @@ typing ratchet, `977 passed, 1 skipped, 148 subtests`, 85% aggregate coverage,
 standalone plugin-notice delivery and the installed production-topology
 acceptance surface.
 
-Private first-adopter revalidation passed on 2026-11-24 against the committed
-Legal product revision
-`d4e4e45189041de3e960e1d2d0904c7c5f63adfb` and root-correct
-repository-qualified seed/binding configuration. From an empty Span data
-directory, `span-install` created repository schema 15 and the separate
-installation Functional Pyramid schema 1 through the canonical provisioning
-path. The public server exposed exactly `ask`, `record`, and `reconsider`.
-The adopter Functional Pyramid candidate was activation-ready with no
-validation or graph findings; the real Clause Workbench kickoff surface
-returned a RESOLVED governing path through its accepted P1/P0 authority chain.
-A representative NORMATIVE conclusion was support-CURRENT but withheld as
-`pending_curation`, appeared in pending discovery, became reusable only after
-an explicit exact-revision curation disposition, and returned as an Answer from
-a fresh MCP process with the same RESOLVED governing projection.
+Private first-adopter revalidation passed on 2026-11-24 against
+repository-controlled adopter inputs whose identities and contents are retained
+outside this public repository. From an empty Span data directory,
+`span-install` created repository schema 15 and the separate installation
+Functional Pyramid schema 1 through the canonical provisioning path. The public
+server exposed exactly `ask`, `record`, and `reconsider`. The adopter
+Functional Pyramid candidate was activation-ready with no validation or graph
+findings; a real governed adopter surface returned a RESOLVED governing path
+through its accepted P1/P0 authority chain. A representative NORMATIVE
+conclusion was support-CURRENT but withheld as `pending_curation`, appeared in
+pending discovery, became reusable only after an explicit exact-revision
+curation disposition, and returned as an Answer from a fresh MCP process with
+the same RESOLVED governing projection.
 
-The first-adopter result is intentionally sanitized. Raw transcripts, receipts,
-local data stores and manifests remain outside Span Git. Exact-byte validation
-also caught incorrect initial adopter content fingerprints before the passing
-run; the configuration was corrected rather than weakening support/currentness
-evaluation.
+Only generic acceptance outcomes are retained in Span. Adopter repository
+identities, revisions, paths, authority identifiers, configuration payloads,
+transcripts, receipts, local data stores and manifests remain outside Span Git.
+Exact-byte validation also caught incorrect initial adopter content fingerprints
+before the passing run; the private adopter configuration was corrected rather
+than weakening support/currentness evaluation.
 
 The assembled Beta-2 release identity is package `1.0.0b2`, registry
 `1.0.0-beta.2`, repository lifecycle schema 15, and installation Functional
