@@ -72,31 +72,6 @@ function sessionKeyFromHook(event) {
   return typeof value === "string" && value ? value : "*";
 }
 
-function relativePaths(paths, root) {
-  const rootPath = root ? path.resolve(root) : null;
-  const found = [];
-  for (const item of paths) {
-    let value = item;
-    if (rootPath && path.isAbsolute(item)) {
-      const relative = path.relative(rootPath, item);
-      if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-        continue;
-      }
-      value = relative;
-    }
-    if (
-      typeof value !== "string" ||
-      !value ||
-      path.isAbsolute(value) ||
-      value.startsWith("..")
-    ) {
-      continue;
-    }
-    found.push(value.split(path.sep).join("/"));
-  }
-  return [...new Set(found)];
-}
-
 function pendingState(pending, sessionID) {
   const current = pending.get(sessionID);
   if (current) return current;
@@ -210,8 +185,9 @@ function handleSessionEvent(event, pending, checked, locationRoot) {
 //
 // The installed span-hooks runner supplies lifecycle and support notices.
 // Operational registered repositories receive one composed entry notice.
-// Helper failure does not abort the session; missing session identity and
-// undelivered capacity expiry are diagnosed. Repo root is ctx.location.directory.
+// Helper failure does not abort the session; missing or incomplete native scope
+// is diagnosed without discarding retained changed paths. Repo root is
+// ctx.location.directory.
 export default {
   id: "span-hooks",
   async setup(ctx) {
