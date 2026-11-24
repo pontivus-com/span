@@ -1,162 +1,186 @@
 # Glossary
 
-**Understanding** — A saved explanation of a question over a scope, with a
-stable identity and immutable versions. See [lifecycle](lifecycle.md).
+Start with the core terms if you are using Span. The advanced section is for
+exact protocol, audit, governance, and implementation discussions.
 
-**Version** — A full membership snapshot of exact conclusion revisions,
-recorded question gaps, and provenance. It is not a conclusion revision
-counter.
+## Core product terms
 
-**Conclusion revision** — One immutable explanation or withdrawal in a lineage.
-The agent owns its meaning and the evidence-to-statement reasoning.
+**Understanding** — A retained explanation of a question about a software scope,
+with stable identity and preserved history. See [Agent lifecycle](lifecycle.md).
 
-**Recorded question gap** — An unanswered question with a stated basis in a
-saved version. It is not a supported conclusion.
+**Surface** — The software unit an understanding is about: a file, symbol,
+service, or domain.
 
-**Gap** — The `ask` result when no matched conclusion is current. It carries
-exactly one reason: `invalidated`, `unverifiable`, or `unassessed`,
-the prior non-current conclusions as historical content, and a recovery that
-names the next action.
+**Scope** — The declared software boundary an investigation, conclusion, or
+verification applies to. Incomplete or truncated scope remains explicit.
 
-**Historical conclusion** — A non-current conclusion returned as content in a
-`Gap`: exact revision, understanding version, statement, evidence references,
-and present non-current state. It never becomes current answer content.
+**Support** — The recorded dependencies that established a conclusion, such as
+source evidence, declared authority, another exact conclusion, observed
+membership, or a Functional Pyramid route.
 
-**Surface document view** — The pure surface/reference `ask` result: current
-conclusions grouped by the recorded question they answer, plus status, gaps, and
-verification. It is assembled on read and cannot drift.
+**CAPTURED** — The exact semantic revision has been retained from engineering
+work but has not yet been accepted for shared reuse by a separate reviewer.
 
-**Surface-first reuse** — Reading the surface document view and selecting the
-current conclusion that answers the task. Targeted reuse uses
-`RecordedQuestionSelector` only when the exact recorded question is known; a
-different or paraphrased value does not similarity-match and is
-`Gap/unassessed`.
+**CURATED** — A reviewer has explicitly accepted that exact semantic revision
+for shared reuse. Curation does not certify semantic truth and does not replace
+support currency.
 
-**Rejection cause** — The exact server message and typed cause kind carried by a
-`Rejected` result, with the required action and the structured current version
-or boundary version when one exists. It is not derived from keyword matching.
+**CURRENT** — The recorded support required by the conclusion still passes its
+present checks. This is not proof that the interpretation is correct or
+complete.
 
-**Surface** — The unit an answer is scoped to: a file, symbol, service, or
-domain. A path or declared name resolves to a surface; more than one match is
-`AmbiguousSurface`.
+**REASSESSMENT_REQUIRED** — Something the conclusion depends on changed; the
+meaning must be investigated again before ordinary reuse.
+
+**UNVERIFIABLE** — Required support cannot currently be established.
+Operational failure is reported separately. See
+[Support currency and reassessment](freshness.md).
+
+**Gap** — The requested reusable understanding is not currently available for
+the selected scope. A gap may represent unassessed knowledge, invalidated
+knowledge, or support that cannot presently be established.
+
+**Challenge** — An explicit semantic dispute about retained knowledge. A
+challenge is resolved through an explicit disposition; matching source bytes or
+a passing test do not settle it automatically.
+
+**Verification run** — An independent record of an external execution or review,
+including its scope, observed outcome, evidence, time, observer, and
+limitations. Qualification checks whether the recorded support still holds; it
+does not rerun the verification.
+
+**Functional Pyramid** — Span's declared project-governance graph. It connects
+software scope to applicable project goals, principles, contracts, functional
+design, and technical design while leaving canonical rule content at its owning
+source.
+
+**Authority binding** — An explicit declaration that identifies governing
+project material together with its status and applicability. Relevance alone
+does not create authority.
+
+**Hook** — An optional event-local lifecycle reminder. Hook silence or
+configuration does not establish semantic completeness or support currency. See
+[Lifecycle hooks](hooks.md).
+
+**Readiness** — Operational availability of the required Span runtime/store
+boundary. Readiness does not mean the repository has been semantically
+understood.
+
+## Retrieval and lifecycle reference terms
+
+**Answer** — The ordinary reusable knowledge returned for one surface, together
+with its current status, recorded gaps, and applicable verification.
+
+**Surface document view** — The surface-first `ask` result that assembles
+reusable conclusions grouped by the recorded questions they answer, plus status,
+gaps, and verification.
+
+**Surface-first reuse** — Starting from a file, symbol, service, or domain and
+reading the maintained knowledge associated with it, without requiring a saved
+internal understanding ID or previous conversation.
 
 **Exact surface** — The public `{kind, locator}` identity supplied to `ask`.
-It resolves by identity, never containment. An `AmbiguousSurface` candidate is
-copied back verbatim.
+It resolves by identity rather than containment.
 
-**Declared surface** — A service or domain created or updated through
-`record(kind="surface")` with a boundary and optional parent. Its boundary has
-its own compare-and-set version.
+**Declared surface** — A service or domain whose boundary is explicitly
+declared through Span. File and symbol surfaces do not require that declaration.
 
-**Historical snapshot** — A `RetrievedUnderstanding` selected by exact
-understanding/version. It is never merged into a current `Answer`.
+**Recorded question gap** — An unanswered question retained with its basis in an
+understanding version. It is not a supported conclusion.
 
-**Continuation** — An opaque, stateless token that resumes selected evidence
-from explicit evidence admission. It is valid only for its bound live context
-and always advances; an unusable continuation is a typed rejection.
+**Historical conclusion** — A prior non-current conclusion retained for history
+or recovery. Historical content is not automatically current Answer content.
 
-**Possible impact** — A conclusion was included in a `reconsider` result because
-its surface or dependency was considered. It may still be `CURRENT`.
+**Historical snapshot** — An exact retained understanding/version retrieved for
+audit or recovery rather than ordinary current reuse.
 
-**Actual loss** — A conclusion whose support is `REASSESSMENT_REQUIRED` or
-`UNVERIFIABLE`; it requires re-establishment.
+**Version** — A complete immutable membership snapshot of the conclusion
+revisions and recorded question gaps belonging to one understanding at that
+point in history.
 
-**Answer** — Current conclusions for one surface with per-conclusion support,
-surface status (including `stale_refs`), recorded gaps, and applicable
-verification.
+**Conclusion revision** — One immutable semantic statement or withdrawal in a
+conclusion lineage.
 
-**Surface status** — The distribution over a surface: current, stale,
-unassessed, unexamined, and descendant statuses. `stale_refs` names each stale
-conclusion by exact revision, understanding version, and present state; the
-count and references describe the same set. The status carries no statement
-content.
+**Basis** — The investigator's account of how evidence or premises led to a
+conclusion or lifecycle action. Acceptance of a basis does not certify the
+statement true.
 
-**Scope** — The declared paths/evidence references bounding the investigation,
-conclusion, or verification run. Unexamined and truncated scope stays explicit.
+**Possible impact** — A conclusion appeared in a `reconsider` result because
+its surface or dependency was considered. It may still be current.
 
-**Observation** — Immutable admitted source reference, content hash and delivered
-ranges, or a recorded discovery-membership fingerprint. See [authority](authority-trust.md).
+**Actual loss** — A conclusion whose support is
+`REASSESSMENT_REQUIRED` or `UNVERIFIABLE` and therefore requires
+re-establishment before ordinary reuse.
 
-**Functional Pyramid** — The installation-scoped declared governance graph over
-registered repositories. It carries repository participation, Functional
-Scopes, Functional Contexts, Functional Rules, owner references and governing
-edges; it carries no copied canonical rule prose.
+## Evidence and bounded-retrieval terms
 
-**Functional Pyramid participation** — Exact repository state: `UNCONFIGURED`,
-`EXCLUDED`, or `ACTIVE`. Registration is not participation. One repository may
-belong to at most one ACTIVE pyramid.
+**Observation** — Immutable admitted evidence identity, such as a source
+reference/content hash/range or an observed discovery-membership fingerprint.
+
+**Continuation** — An opaque token used to retrieve the next portion of source
+evidence already selected for an investigation. It is bound to that
+investigation and is not a general repository cursor.
+
+**Cursor** — An opaque position for resuming a listing operation. It is not an
+evidence continuation.
+
+**Bounds** — Explicit limits on operational work or results. Omitted or
+truncated material remains visible rather than being silently treated as
+complete.
+
+**Rejection cause** — The stable public reason a caller-correctable request was
+rejected, together with the action or current coordinate needed to recover when
+available.
+
+## Functional Pyramid reference terms
+
+**Functional Pyramid participation** — A repository's explicit relationship to
+a Functional Pyramid. The durable participation states are
+`UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`. Registration alone does not mean
+participation.
 
 **Functional Scope** — The explicitly declared portion of an ACTIVE repository
-to which Functional Pyramid governance may apply. Scope relation is
-`OUTSIDE_FUNCTIONAL_SCOPE`, `COVERED`, `UNCOVERED`, or `MIXED`.
+to which Functional Pyramid governance may apply.
 
-**Functional Context** — A declared governance context whose explicit coverage
-and inheritance determine applicability for semantic scope. Matching contexts
-compose; there is no most-specific-wins rule.
+**Functional Context** — A declared governance context whose coverage and
+inheritance determine which rules apply to a software scope. Applicable contexts
+compose rather than following a most-specific-wins rule.
 
-**Functional Rule** — A stable rule identity in the declared pyramid graph.
-Canonical governing content remains with its `FunctionalRuleOwner` authority
-reference; Span retains identity, relationships and applicability, not prose.
+**Functional Rule** — A stable rule identity in the Functional Pyramid graph.
+The canonical rule content remains at its declared owner.
 
-**Functional route support** — Server-derived support for the exact Functional
-Pyramid route that governed a NORMATIVE conclusion when recorded. Route
-identity tracks applicability/topology separately from canonical authority
-currency.
+**Functional route support** — Server-derived support identifying the exact
+Functional Pyramid route that governed a normative conclusion when it was
+recorded. Route applicability and canonical authority content remain separate
+dependencies.
 
-**Support** — A declared dependency on a source observation, authority binding,
-exact premise revision, discovery observation, or Functional Pyramid route.
+## Operational and concurrency terms
 
-**CURRENT** — Declared support passed its present checks. This is neither
-semantic truth nor proof of complete investigation.
-
-**REASSESSMENT_REQUIRED** — Support changed or a premise was superseded or
-withdrawn; investigate before treating the explanation as current.
-
-**UNVERIFIABLE** — Required support cannot be established. Operational failure
-is reported separately. See [freshness](freshness.md).
-
-**Authority binding** — Declared governance with evidence, kind, status,
-applicability, and any explicitly stated precedence. Relevance does not confer it.
-
-**Basis** — The account of how evidence or premises led to a conclusion or action.
-An accepted basis does not certify the prose as true.
-
-**Challenge** — An explicit dispute with an independent revision counter and
-history. Settlement requires a named disposition tied to resulting state.
-
-**Context** — Recoverable, expiring operational investigation state. It binds a
-caller request to a repository and scope, and retains admitted evidence.
+**Context** — Recoverable, expiring operational investigation state that binds
+an operation to repository/scope and may retain admitted evidence. It is not the
+semantic understanding itself.
 
 **Receipt** — Immutable acceptance record for a recording identity and content.
-Matching replay can succeed after context expiry while the receipt is retained.
+A retained receipt enables safe replay after a lost response.
 
-**Recording identity** — `(repository_id, request_id)`, preserved
-by the caller before dispatch. Same identity with different content conflicts.
+**Recording identity** — The caller-owned `(repository_id, request_id)` pair
+used to identify one recording decision. Reusing the identity with different
+content conflicts.
 
-**Compare-and-set** — Accept an update only at the expected understanding or
-challenge revision, preventing conflicting concurrent changes.
-
-**Verification run** — Independent record of actual external execution with its
-declared scope, command or scenario, outcome, time, observer, limitations, and
-the observations or evidence it tested. It applies to surfaces within its
-declared scope. Qualification checks currency and does not rerun it or change
-its outcome.
-
-**Cursor** — Opaque listing position. Resume the same operation with the same
-request arguments and identity. It is not an interpretation continuation.
-
-**Bounds** — Operational work/result limits with explicit omissions and
-continuations. Question byte budgets do not measure total host context size.
-
-**Readiness** — Store/provider availability and root binding, separate from
-understanding, correctness, or completeness.
-
-**Hook** — Optional event-local notice. Silence and configured wiring do not
-prove delivery or semantic completeness. See [hooks](hooks.md).
+**Compare-and-set** — Update only when the caller's expected version still
+matches the current version, preventing silent concurrent overwrite.
 
 **Structural evidence** — Provider-observed symbols, locations, and adjacency.
-It supports investigation and grants no semantic or normative authority.
+It can help investigation but grants no semantic meaning or governing authority.
 
-**Legacy terminology** — Claim taxonomies, coverage campaigns, and suspended
-interpretation continuations in historical exports or older evidence. They are
-not the current public lifecycle. See [design references](design-references.md).
+## Legacy terminology
+
+Historical exports and older evidence may contain retired claim taxonomies,
+coverage-campaign terms, or suspended interpretation-continuation vocabulary.
+
+Those terms are historical and are not the current public lifecycle. See
+[Historical design references](design-references.md) when working with older
+artifacts.
+
+For exact wire-level result and carrier definitions, use the
+[MCP reference](mcp.md).
