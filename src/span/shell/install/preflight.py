@@ -48,10 +48,8 @@ def _evidence_refs(
 
     validated: list[m.EvidenceRef] = []
     for index, item in enumerate(_json_object_list(path, label="authority seeds")):
-        payload = dict(item)
-        payload.setdefault("$type", "EvidenceRef")
         try:
-            validated.append(m.from_canonical(m.EvidenceRef, payload))
+            validated.append(m.from_canonical(m.EvidenceRef, item))
         except m.CanonicalDecodeError as exc:
             raise SystemExit(
                 f"authority seeds file {path}: authority seeds[{index}]: "
@@ -78,10 +76,8 @@ def _authority_bindings(
 
     validated: list[m.AuthorityBinding] = []
     for index, item in enumerate(_json_object_list(path, label="authority bindings")):
-        payload = dict(item)
-        payload.setdefault("$type", "AuthorityBinding")
         try:
-            validated.append(m.from_canonical(m.AuthorityBinding, payload))
+            validated.append(m.from_canonical(m.AuthorityBinding, item))
         except m.CanonicalDecodeError as exc:
             raise SystemExit(
                 f"authority bindings file {path}: authority bindings[{index}]: "

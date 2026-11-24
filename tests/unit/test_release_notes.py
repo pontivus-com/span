@@ -96,5 +96,17 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertIn("no changelog section", result.stderr)
 
 
+    def test_release_requires_explicit_manual_authorization(self):
+        workflow = (REPO_ROOT / ".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotRegex(workflow, r"(?m)^  push:")
+        self.assertIn("confirm_version:", workflow)
+        self.assertIn('REF_NAME: ${{ github.ref_name }}', workflow)
+        self.assertIn('if [[ "${REF_NAME}" != "master" ]]', workflow)
+        self.assertIn('if [[ "${requested}" != "${version}" ]]', workflow)
+
+
 if __name__ == "__main__":
     unittest.main()

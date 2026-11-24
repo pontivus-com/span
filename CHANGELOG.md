@@ -1,6 +1,16 @@
 # Changelog
 
-## 1.0.0b2 — 2026-11-24
+## 1.0.0b3 — 2026-11-24
+
+### Beta 3 corrective integrity
+
+- Enforce repository authority ingress as the strict canonical boundary:
+  authority seed and binding files must carry their canonical discriminators;
+  the installer no longer synthesizes missing `$type` values before decoding.
+- Make publication an explicit release-owner action. Merging or pushing to
+  `master` does not publish; the release workflow is manual-only and requires
+  the exact package version to be supplied when it is deliberately dispatched.
+
 
 ### Qualified reuse and explicit curation
 
