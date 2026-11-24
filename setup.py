@@ -15,11 +15,18 @@ from sync_assets import sync_assets  # noqa: E402
 
 
 class build_py(_build_py):
-    """Copy the canonical skills and snippet into the built package."""
+    """Copy canonical generated assets and declare them as wheel outputs."""
 
     def run(self) -> None:
         super().run()
-        sync_assets(pathlib.Path(self.build_lib) / "span" / "_assets")
+        self._span_generated_assets = sync_assets(
+            pathlib.Path(self.build_lib) / "span" / "_assets"
+        )
+
+    def get_outputs(self, include_bytecode: bool = True) -> list[str]:
+        outputs = list(super().get_outputs(include_bytecode=include_bytecode))
+        generated = getattr(self, "_span_generated_assets", ())
+        return outputs + [str(path) for path in generated]
 
 
 setup(cmdclass={"build_py": build_py})
