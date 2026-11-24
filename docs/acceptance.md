@@ -23,23 +23,23 @@ on top of that baseline. Those corrections require their own exact-head CI befor
 the candidate can be called release-ready.
 
 External integration revalidation passed on 2026-11-24 against
-repository-controlled adopter inputs whose identities and contents are retained
+repository-controlled integration inputs whose identities and contents are retained
 outside this public repository. From an empty Span data directory,
 `span-install` created repository schema 15 and the separate installation
 Functional Pyramid schema 1 through the canonical provisioning path. The public
-server exposed exactly `ask`, `record`, and `reconsider`. The adopter
+server exposed exactly `ask`, `record`, and `reconsider`. The integration
 Functional Pyramid candidate was activation-ready with no validation or graph
-findings; a real governed adopter surface returned a RESOLVED governing path
+findings; a real governed integration surface returned a RESOLVED governing path
 through its accepted P1/P0 authority chain. A representative NORMATIVE
 conclusion was support-CURRENT but withheld as `pending_curation`, appeared in
 pending discovery, became reusable only after an explicit exact-revision
 curation disposition, and returned as an Answer from a fresh MCP process with
 the same RESOLVED governing projection.
 
-Only generic acceptance outcomes are retained in Span. Adopter repository
+Only generic acceptance outcomes are retained in Span. Integration repository
 identities, revisions, paths, authority identifiers, configuration payloads,
 transcripts, receipts, local data stores and manifests remain outside Span Git.
-Exact-byte validation also caught incorrect initial adopter content fingerprints
+Exact-byte validation also caught incorrect initial integration content fingerprints
 before the passing run; the external integration configuration was corrected rather
 than weakening support/currentness evaluation.
 
@@ -115,7 +115,7 @@ Version-1 live model delivery through Codex, OpenCode and Claude Code is
 **UNVERIFIED**. No verified managed-host delivery claim is made for Beta 1;
 registration/installer support is not promoted into model-delivery evidence.
 No comparative G5/F8 score is required to publish Beta 1. Product-value
-validation continues through real-world use in the legal project, where cold
+validation continues through real-world integration use, where cold
 investigation, fresh-session reuse, implementation and governance changes,
 re-establishment, recovery, and ordinary failures can be observed in the actual
 workflow. Findings become inputs to follow-up Beta patch releases. Historical
@@ -301,8 +301,7 @@ remain **UNVERIFIED**. Hook wiring is separate from observed arrival.
 ## Product value
 
 Beta product value is evaluated in real engineering use rather than through a
-synthetic equivalent-task release score. The legal project is the primary
-post-release adopter surface for Version 1. Observe cold investigation,
+synthetic equivalent-task release score. Real-world integration use is the primary post-release validation surface for Version 1. Observe cold investigation,
 fresh-session reuse, implementation and governance changes, focused
 re-establishment, recovery, failures, omissions, and recording overhead as they
 occur in normal work.
