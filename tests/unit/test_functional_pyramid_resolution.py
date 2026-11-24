@@ -1229,4 +1229,3 @@ class FunctionalPyramidContractSublayerTest(unittest.TestCase):
             [item.rule_id for item in view.rules],
             ["rule-p0", "rule-p1", "rule-p2s", "rule-p2w"],
         )
-
