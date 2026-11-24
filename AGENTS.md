@@ -14,7 +14,7 @@ into operations, payloads, contract laws, and the boundary between the agent's
 work and Span's internals. [`docs/functional-design.md`](docs/functional-design.md)
 (layer 3) states the behaviour that makes the contract deterministic.
 [`docs/technical-design.md`](docs/technical-design.md) (layer 4) records the
-implementation baseline, what is retained, and the minimal refactoring set.
+implementation mechanisms that realize the higher-layer behavior.
 [`docs/requirements-pyramid.md`](docs/requirements-pyramid.md)
 governs how those layers are structured: what each owns, where a new requirement
 belongs, and why a restatement is a defect. All of these are binding on design,
