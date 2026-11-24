@@ -122,7 +122,8 @@ Implementation change and governance change can both affect retained knowledge.
 
 Span therefore uses the same service-owned dependency/effect composition for:
 
-- ordinary changed-scope `reconsider`; and
+- ordinary changed-scope `reconsider`;
+- the read-only lifecycle-hook changed-scope preview; and
 - Functional Pyramid participation/governance effects.
 
 There is no shell-side semantic coordinator and no reduced repository-local

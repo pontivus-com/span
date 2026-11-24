@@ -12,8 +12,9 @@
 > artifact conflicts with those owners, this file is the defect.
 
 The derived invariants are: initialization is explicit, never implicit;
-readiness is operational state, not semantic trust; hooks never interpret,
-record, re-check, or rebuild.
+readiness is operational state, not semantic trust; hook execution remains
+outside initialization and durable semantic/governance mutation (FD-58;
+Technical Design §22).
 
 ## Contract
 
