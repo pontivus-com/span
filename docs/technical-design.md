@@ -343,7 +343,6 @@ Current compatibility and release boundaries are stated by the active contract,
 current transition design, and release workflow.
 
 ## 10. Repository lifecycle layout and indexes
-## 10. Schema-13 layout and indexes
 
 **Authority:** FD-1–FD-8, FD-30, FD-35–FD-36, FD-42–FD-48,
 FD-95–FD-102.
@@ -573,7 +572,6 @@ This Layer-4 document does not maintain a second table of test status or
 candidate completion. Test names and release evidence may change without
 changing the mechanism authority they verify.
 
-## Part C — Version 1 Functional Pyramid mechanisms
 ## Part C — Version 1 Functional Pyramid mechanisms
 
 Part C implements the binding Version-1 behavior in lifecycle §4/§7 and
