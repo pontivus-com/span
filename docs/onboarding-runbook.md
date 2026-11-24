@@ -61,7 +61,7 @@ tools or make the engineering judgment for you.
 
 If you need source content selected through Span itself, follow the evidence
 path returned by `ask`. Exact evidence-admission and continuation mechanics
-are documented in [Using Span](usage.md#ask-a-surface) and the
+are documented in [Using Span](usage.md#start-a-task-with-what-is-already-known) and the
 [MCP reference](mcp.md#ask).
 
 The goal of this step is not to produce notes for Span. It is to establish the
@@ -82,7 +82,7 @@ session.
 Capture does not automatically make the conclusion shared knowledge for every
 future agent. That separation is deliberate.
 
-See [Using Span — Investigate and record](usage.md#investigate-and-record) for
+See [Using Span — Investigate and record](usage.md#capture-useful-understanding-while-it-is-fresh) for
 the operating procedure and [MCP reference — record](mcp.md#record) for exact
 grammar.
 
@@ -101,7 +101,7 @@ the existing `record` lifecycle.
 
 **Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
-See [Using Span — Curate captured knowledge](usage.md#curate-captured-knowledge)
+See [Using Span — Curate captured knowledge](usage.md#review-captured-knowledge-before-broad-reuse)
 for the review workflow.
 
 ## 6. Prove reuse in a fresh session
@@ -138,7 +138,7 @@ revision through review before it becomes shared knowledge again.
 This is the second half of the loop: **maintained knowledge stays accountable to
 the software and guidance it depends on.**
 
-See [Using Span — After a change](usage.md#after-a-change) for the operating
+See [Using Span — After a change](usage.md#after-code-or-project-guidance-changes) for the operating
 procedure.
 
 ## If your repository uses project governance
@@ -153,7 +153,7 @@ its declared goals, principles, contracts, functional design, and technical
 design.
 
 If you are responsible for configuring that participation, follow
-[Using Span — Check Functional Pyramid participation](usage.md#check-functional-pyramid-participation)
+[Using Span — Check Functional Pyramid participation](usage.md#project-guidance-and-the-functional-pyramid)
 and the exact reference material linked from there. It is setup/governance work,
 not a prerequisite for learning the basic Span workflow.
 
