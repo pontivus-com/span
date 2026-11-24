@@ -19,6 +19,12 @@ grammar; [Agent lifecycle](lifecycle.md) explains the product model.
 
 Skills use exactly `ask`, `record`, and `reconsider`.
 
+For governed repositories, the router resolves Functional Pyramid participation
+before ordinary governed work: ACTIVE + VALID proceeds, ACTIVE + DEGRADED
+requires governance repair, UNCONFIGURED routes to the Functional Pyramid
+lifecycle when governed use is intended, and EXCLUDED is the explicit
+descriptive-only path.
+
 The working-agent path captures supported meaning through `record`. The
 reviewer path discovers pending captures and uses the curation action inside the
 same `record` tool; there is no fourth curation operation.
