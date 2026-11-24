@@ -4,6 +4,11 @@ Consult Span before deriving semantic understanding. Record supported
 conclusions when established. After edits, reconsider changed paths and record
 the supported dispositions before completing the work.
 
+Before ordinary governed work, resolve Functional Pyramid participation:
+ACTIVE + VALID proceeds; ACTIVE + DEGRADED requires governance repair;
+UNCONFIGURED routes through the Functional Pyramid lifecycle when governed use
+is intended; EXCLUDED is the explicit descriptive-only path.
+
 - Before any source access used to understand a surface — native `Read`/`Grep` or shell reads/searches such as `cat`, `rg`, or `grep` — `ask` the exact surface or reference with no question or request identity.
 - Use `RecordedQuestionSelector` only when you already know the exact recorded question; it is exact surface-scoped lookup, not semantic matching.
 - If a Gap's source pointers need bytes, make an explicit evidence-admission `ask`; follow only the continuation it returns.

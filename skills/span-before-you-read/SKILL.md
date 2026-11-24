@@ -9,8 +9,13 @@ Complete the applicable lifecycle before task completion; report named operation
 blockers explicitly. [Lifecycle authority](https://github.com/pontivus-com/span/blob/master/docs/lifecycle-contract.md#required-agent-completion).
 
 
-Call `ask` with the surface and no question or request identity. This is both
-the reuse path and the cold-start probe:
+For governed work, Functional Pyramid participation is resolved first. If
+status is UNCONFIGURED, use `span-functional-pyramid` before relying on
+governing orientation; ACTIVE + DEGRADED requires governance repair. EXCLUDED
+continues with the descriptive lifecycle.
+
+Then call `ask` with the surface and no question or request identity. This is
+both the reuse path and the cold-start probe:
 
 ```json
 {

@@ -18,6 +18,12 @@ application tests, selects a model, or decides a semantic claim.
 
 ## Start here
 
+Before ordinary governed work, resolve Functional Pyramid participation.
+ACTIVE + VALID proceeds normally. ACTIVE + DEGRADED routes to governance
+repair. UNCONFIGURED routes to the `span-functional-pyramid` skill when
+governed use is intended; an intentionally non-governed repository is
+explicitly EXCLUDED.
+
 | About to… | Do instead |
 | --- | --- |
 | Native `Read`/`Grep` to understand source | `ask` |
