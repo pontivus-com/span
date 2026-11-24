@@ -1,19 +1,39 @@
 # Lifecycle hooks
 
-Hooks are optional reminders that help Span's lifecycle appear at the moment an
-agent is likely to need it.
+Hooks are optional agentic lifecycle reminders. Their foundational purpose is to
+reduce lifecycle non-compliance caused by agent omission: an agent can start,
+read, edit or finish work without voluntarily calling Span even when the
+lifecycle requires an action.
 
-They are useful for things such as:
+The binding behavior is owned by Functional Design FD-58/FD-94 and Technical
+Design §22. In practical terms, Span operations preserve correctness when they
+are used; hooks make the required operation visible at host-observable moments
+where the agent could otherwise skip it.
 
-- reminding an agent to consult Span when a session starts;
-- noticing that edited paths may affect retained knowledge; and
-- prompting the agent to run the appropriate lifecycle action after change.
+Hooks do **not** make the lifecycle correct by themselves. Span's normal
+`ask`, `record`, and `reconsider` operations still enforce the relevant
+support and reuse rules when hooks are absent, disabled, delayed, or missed.
 
-Hooks do **not** make the lifecycle correct by themselves.
+## Lifecycle interception points
 
-Span's normal `ask`, `record`, and `reconsider` operations still enforce
-the relevant support and reuse rules when hooks are absent, disabled, delayed,
-or missed.
+A hook is appropriate only for an externally observable moment that can create
+or expose an omitted lifecycle obligation:
+
+| Host moment | Semantic-understanding plane | Functional Pyramid plane |
+| --- | --- | --- |
+| Session start/resume/compact | remind the agent to orient before deriving understanding | surface UNCONFIGURED, EXCLUDED, ACTIVE/VALID or ACTIVE/DEGRADED status as the canonical participation/health state requires |
+| Pre-investigation source access, only where a host exposes it reliably | remind the agent to `ask` before semantic derivation | ACTIVE governance orientation is composed into that same lifecycle; do not invent a second authority action |
+| External edit/write | preserve the complete changed scope for `reconsider` | the same canonical effect projection determines authority/route/cross-repository consequences |
+| Idle/stop/completion | remind only about known outstanding work from this session | preserve known governance/effect obligations; do not perform a repository-wide speculative scan |
+
+Either plane may require action, both may require action, or neither may require
+action. That is a notice-selection decision over canonical Span results, not a
+new hook state machine or public carrier.
+
+Transitions already exposed by an `ask`, `record`, or `reconsider` result
+remain result-owned. Hooks do not rediscover curation state, challenge
+disposition, candidate-validation outcomes, or the dependent effects already
+returned by an accepted Functional Pyramid write.
 
 ## What hooks can report
 
@@ -31,7 +51,9 @@ projection. Change notices do not maintain a second SOURCE-only dependency scan
 or freshness policy; they consume the same containment/direct/indirect,
 discovery, authority, Functional Pyramid route, premise-closure and
 cross-repository projection owned by reconsideration, without issuing
-re-establishment contexts.
+re-establishment contexts. The complete changed scope available from the host is
+evaluated before notice rendering is bounded; repeated edits remain accumulated
+until their lifecycle obligation is handed off.
 
 ## Hooks are advisory, not semantic actors
 
