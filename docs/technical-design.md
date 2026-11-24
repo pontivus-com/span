@@ -46,7 +46,7 @@ required by Layers 0–3.
 
 **Version-1 implementation update (2026-11-23).** T01–T10 implemented and
 verified the Part-C mechanisms and generic functional acceptance on the
-reconciled release branch. T11 private first-adopter acceptance passed and is
+reconciled release branch. T11 external integration acceptance passed and is
 closed. T13 owns assembled-`1.0.0b1` release verification, candidate-specific
 managed-host qualification where claimed, and the Part-C derivation audit.
 G5/F8 product-value validation continues after release through real adopter use;
@@ -1758,7 +1758,7 @@ remains in the installer/context setup path; MCP startup registration does not
 restore a public or implicit provisioning path.
 
 **Beta-2 administrative initialization correction (B2-D01/B2-D02).** Beta-1
-first-adopter use exposed a composition defect, not a missing Functional Pyramid
+external integration use exposed a composition defect, not a missing Functional Pyramid
 product rule. The released `span-install` never invokes the already-owned
 `provision_repository_runtime(InitializeRepositoryRequest)` path, and its
 installed production-topology fixture manufactures repository/binding state

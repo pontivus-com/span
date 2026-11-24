@@ -20,7 +20,7 @@ typing ratchet, `977 passed, 1 skipped, 148 subtests`, 85% aggregate coverage,
 standalone plugin-notice delivery and the installed production-topology
 acceptance surface.
 
-Private first-adopter revalidation passed on 2026-11-24 against
+External integration revalidation passed on 2026-11-24 against
 repository-controlled adopter inputs whose identities and contents are retained
 outside this public repository. From an empty Span data directory,
 `span-install` created repository schema 15 and the separate installation
@@ -38,7 +38,7 @@ Only generic acceptance outcomes are retained in Span. Adopter repository
 identities, revisions, paths, authority identifiers, configuration payloads,
 transcripts, receipts, local data stores and manifests remain outside Span Git.
 Exact-byte validation also caught incorrect initial adopter content fingerprints
-before the passing run; the private adopter configuration was corrected rather
+before the passing run; the external integration configuration was corrected rather
 than weakening support/currentness evaluation.
 
 The assembled Beta-2 release identity is package `1.0.0b2`, registry
@@ -70,13 +70,13 @@ the physically separate repository-A / repository-B / installation-database
 governance journey required by Technical Design §22.
 
 This establishes the **generic** Version-1 functional/architecture candidate.
-Private first-adopter acceptance also passed on 2026-11-22 using the
-adopter-owned gitignored corpus. Raw adopter evidence remains outside Span Git;
+External integration acceptance also passed on 2026-11-22 using the
+repository-controlled external integration corpus. Raw external integration evidence remains outside Span Git;
 only this sanitized outcome is published. T11 is therefore closed. By explicit
 release-owner direction, that approved T11 result carries into the assembled
 `1.0.0b1` candidate because the post-T11 diff contains no semantic/runtime
 implementation change; documentation, release identity and tests do not reopen
-the private acceptance gate.
+the external integration acceptance gate.
 
 The assembled `1.0.0b1` repository candidate passed exact-head CI run
 `45035881725` on `e3d9e99fc89896373cb6a90f8d16e63d210fea5c`:
@@ -320,5 +320,5 @@ fails G6.
 ## Reporting results
 
 Release notes report sanitized verification outcomes and their limits. Raw
-acceptance captures, transcripts, receipts and manifests remain private local
+external integration captures, transcripts, receipts and manifests remain outside Span Git
 working material, excluded from Git and distributions.

@@ -279,9 +279,7 @@ distribution, non-editable installed stdio MCP coverage, the FA-01–FA-64
 functional acceptance surface, and the combined installer + Functional Pyramid
 + capture/curation production-topology lane. Live model-host delivery for this
 candidate is still **UNVERIFIED** and is not inferred from registration,
-configured hooks, or historical captures. The private first-adopter cold-install
-gate is separately blocked by adopter-controlled configuration and is not
-presented as a successful delivery capture.
+configured hooks, or historical captures.
 
 | Host | Beta-2 candidate status |
 | --- | --- |
@@ -320,11 +318,8 @@ them `UNCONFIGURED` until participation is declared. The public operations
 remain exactly `ask`, `record`, and `reconsider`.
 
 Beta-2 repository, installer, Functional Pyramid, capture/curation and installed
-production-topology acceptance are green. Private first-adopter revalidation is
-not currently claimed as passed: repository-controlled adopter configuration
-still blocks the required cold-install + governing-projection lane. The release
-therefore is **not release-ready** until that adopter-owned blocker is cleared
-and the final T14 candidate gates pass. See
+production-topology acceptance are green. Release readiness and publication are
+tracked by the release acceptance record rather than this product overview. See
 [the Beta-2 implementation plan](docs/implementation-plans/1.0.0-beta2.md),
 [acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 
