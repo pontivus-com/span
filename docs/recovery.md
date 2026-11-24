@@ -1,24 +1,52 @@
 # Backup and recovery
 
-Span stores its retained understanding in a SQLite data directory outside any
-target repository. This page is the canonical policy and operator runbook for
-protecting that directory and for deploying a repository with its retained
-understanding.
+Span has two different backup jobs:
 
-Span stores evidence **references and hashes**, not source-file copies. A
-recovery artifact therefore carries conclusions, support, observations,
-declared surfaces, repository bindings and the content hashes those
-observations reference. The repository files remain the authority and are
-re-read when delivery or support evaluation needs them.
+1. **Move one repository together with its retained Span knowledge.**
+2. **Recover an entire Span installation.**
 
-## Two artifact classes
+Choose the artifact that matches the job. They are intentionally different.
 
-| Class | Location | Git | Purpose |
+Span stores references and hashes for source evidence rather than copying source
+files into its knowledge store. The repository remains the source of those
+bytes.
+
+## Which backup do I need?
+
+| Need | Artifact | Location | Commit to Git? |
 | --- | --- | --- | --- |
-| **Repository-portable** | `<repo>/.span/backups/<UTC timestamp>/` | **Committed** | Deploy the repository with its Span understanding |
-| **Full data-directory** | `<DATA_DIR>/backups/<UTC timestamp>/` | Not committed | Recover the whole installation, including `install.json` |
+| Move/deploy one repository with its retained Span knowledge | **Repository-portable backup** | `<repo>/.span/backups/<UTC timestamp>/` | **Yes, when repository access is appropriate for the retained knowledge** |
+| Recover the whole Span installation | **Full data-directory backup** | `<DATA_DIR>/backups/<UTC timestamp>/` | **No** |
 
-### Repository-portable artifact
+Repository-portable backups intentionally do not carry installation-level
+Functional Pyramid participation. Full installation backups do.
+
+## Repository-portable backup
+
+Use this when retained knowledge should travel with a repository.
+
+Create the artifact:
+
+```bash
+span-install --backup-repository <REPO_ROOT>
+```
+
+Verify it without changing anything:
+
+```bash
+span-install --verify-repository-backup <ARTIFACT_DIR>
+```
+
+Remove older working-tree artifacts when you choose:
+
+```bash
+span-install --reap-repository-backups <REPO_ROOT> <KEEP>
+```
+
+There is no default retention interval. Reaping touches only directories with a
+valid Span repository-backup manifest.
+
+A repository-portable artifact contains:
 
 ```text
 <REPO_ROOT>/.span/backups/<UTC timestamp>/
@@ -27,38 +55,32 @@ re-read when delivery or support evaluation needs them.
   manifest.sha256
 ```
 
-- One repository's store only; no `install.json`, `structural/` or
-  `transitions/`.
-- Functional Pyramid participation, pyramid versions, exclusions and installation
-  receipts are not repository-portable state; they remain in the installation
-  database and are deliberately excluded from this artifact.
-- `manifest.json` uses `span-repository-backup/1`: repository id, source root,
-  created at, running code version, artifact path/hash/size, schema version,
-  integrity and highest conclusion revision.
-- The artifact is intended to be committed with the code. Span writes it; the
-  operator runs `git add` / `git commit`. Span never invokes Git.
-- The store contains recorded conclusions and evidence text references; it does
-  not contain source-file copies. Committing it exposes the recorded
-  understanding to everyone with repository access and in history. Commit only
-  to a repository whose access controls are appropriate.
-- `structural/` is regenerable and excluded; install rebuilds it.
+It contains one repository's retained semantic/audit state. It does **not**
+contain:
 
-```bash
-# Write one artifact into the repository.
-span-install --backup-repository <REPO_ROOT>
+- the installation receipt;
+- the managed structural index;
+- store-transition artifacts; or
+- Functional Pyramid participation, pyramid versions, exclusions, or
+  installation-scoped receipts.
 
-# Verify it without changing anything.
-span-install --verify-repository-backup <ARTIFACT_DIR>
+Those belong to the installation.
 
-# Remove older working-tree artifacts; Git history is unaffected.
-span-install --reap-repository-backups <REPO_ROOT> <KEEP>
-```
+### Security consequence
 
-`KEEP` is explicit; there is no default retention interval. Reaping removes
-only directories carrying a valid Span repository manifest and leaves any other
-directory untouched.
+The repository backup contains retained conclusions and evidence references.
+Committing it exposes that maintained knowledge to everyone who can read the
+repository and to repository history.
 
-### Deploy a repository with its Span data
+Commit repository-portable backups only where those access controls are
+appropriate.
+
+Span writes the artifact. The operator decides whether to add and commit it;
+Span does not invoke Git.
+
+## Deploy a repository with retained Span knowledge
+
+For a repository carrying a repository-portable backup:
 
 ```bash
 git clone <remote> repository-clone
@@ -68,72 +90,120 @@ span-install --load-repository-backup .
 span-install --verify-only
 ```
 
-1. `--repo .` installs the runtime, receipt, host registration, AGENTS block and
-   structural index, and binds the clone's canonical root.
-2. `--load-repository-backup .` verifies the newest artifact, snapshots the
-   current data directory, replaces `<DATA_DIR>/<repository-id>.db`, and
-   explicitly rebinds the store's recorded root from the artifact's
-   `source_root` to the clone's canonical root.
-3. `--verify-only` reports readiness. The agent can then ask a recorded surface
-   and receive the retained conclusions.
+The order matters:
 
-Rules:
+1. **Install first.** This establishes the runtime, receipt, host integration,
+   canonical repository root, and structural index.
+2. **Load the repository backup.** Span verifies the artifact, snapshots the
+   current data directory, replaces that repository's lifecycle store, and
+   rebinds the recorded repository root to the clone.
+3. **Verify.** Confirm the restored installation is operational before using it.
 
-- The clone directory basename must equal the artifact's `repository_id`.
-  Renamed clones are refused because Span's repository identity is the basename.
-- Load never rewrites `install.json`; install first.
-- Load refuses a store held by a live process, a tampered artifact, a legacy
-  schema and a third recorded root. It snapshots the current data directory
-  before replacing anything.
-- A `pre-load` snapshot is written to the full data-directory backup location.
+The clone directory basename must match the artifact's repository ID. A renamed
+clone is refused rather than silently treated as the same repository.
 
-### Full data-directory artifact
+Loading also refuses tampered artifacts, unsupported direct-load schemas, live
+store ownership, and conflicting recorded roots.
 
-The full artifact is the disaster-recovery path for the whole installation. It
-contains every top-level repository `*.db`, the installation Functional Pyramid
-database at `installation/functional-pyramid.db`, `install.json`,
-`structural-indexer.json`, a manifest of sizes, SHA-256 digests and per-database
-facts, and its digest. It is not committed.
+A pre-load snapshot is written to the full data-directory backup location before
+the repository store is replaced.
+
+## Full installation backup
+
+Use a full data-directory backup before destructive installation changes, store
+transitions, or restore operations.
+
+Create one:
 
 ```bash
 span-install --data-dir <DATA_DIR> --backup [--backup-root <DIR>]
+```
+
+Verify it:
+
+```bash
 span-install --verify-backup <BACKUP_DIR>
+```
+
+Restore it:
+
+```bash
 span-install --data-dir <DATA_DIR> \
   --restore-backup <BACKUP_DIR> --restore-confirm <name>
+```
+
+Reap older full backups explicitly:
+
+```bash
 span-install --data-dir <DATA_DIR> --reap-backups <KEEP>
 ```
 
-`structural/` (regenerable) and `transitions/` (superseded-store rollback
-archives) are excluded with the reason recorded in the manifest. The restore
-requires the artifact directory name as explicit confirmation, refuses a
-live-held store, snapshots the current data directory, clears stale
-WAL/SHM/journal files and re-hashes every restored file. Stop every Span process
-before restoring.
+Stop every Span process before restoring.
+
+The full artifact carries the installation state needed for disaster recovery,
+including:
+
+- every top-level repository lifecycle database;
+- `installation/functional-pyramid.db`;
+- `install.json`;
+- `structural-indexer.json`; and
+- a manifest containing file digests and database facts.
+
+The managed `structural/` directory is regenerable and is excluded.
+`transitions/` is also excluded because transition rollback artifacts have
+their own lifecycle. The manifest records those exclusions.
+
+Restore snapshots the current data directory first, rejects live-held stores,
+clears stale SQLite sidecar files, restores the artifact, and verifies the
+restored content.
 
 ## Integrity and compatibility
 
-- The repository and full artifacts verify the manifest digest, every file's
-  size and SHA-256, each database's `PRAGMA integrity_check`, its
-  `meta.schema_version` and its highest conclusion revision.
-- The current repository lifecycle schema is 14. Repository artifacts must hold
-  schema 14 to load directly; schemas 7–13 are supported offline-transition
-  sources. The installation Functional Pyramid database has its own schema
-  identity and is verified independently from repository lifecycle schemas.
-- The manifest records the installer version, the running Span code version (or
-  `null` when the package cannot be imported), and each database's schema
-  version.
+Both artifact classes verify:
 
-## Verification record
+- manifest integrity;
+- file size and SHA-256;
+- SQLite integrity;
+- recorded schema identity; and
+- the highest retained conclusion revision.
 
-The durable verification record is the artifact's own `manifest.json` plus a
-sanitized summary in the change record that required recovery: manifest digest,
-restored revisions, isolated target, and the lifecycle read-back result. Keep a full data-directory artifact out of Git; a repository-portable artifact
-is committed by design. A sanitized summary is sufficient evidence for the
-full data-directory artifact.
+For the Beta-3 line, the current repository lifecycle schema is **15**.
+A repository-portable artifact must contain schema 15 to load directly.
 
-## Owner and triggers
+Repository schemas 7 through 14 are supported as **offline transition sources**,
+not as direct Beta-3 repository-backup loads. Follow
+[Install and connect — Upgrade an existing store](install.md#upgrade-an-existing-store)
+before treating an older store as current.
 
-Owner: the operator of this Span installation. Span keeps no server-side copy.
-Take a repository artifact when the retained understanding must travel with the
-code; take a full data-directory artifact before a destructive change to the
-installation, before a schema transition, and before restoring.
+The installation Functional Pyramid database has its own schema identity and is
+verified independently from repository lifecycle databases.
+
+## What verification proves
+
+A verified backup proves that the artifact matches its manifest and that its
+databases pass the defined integrity/compatibility checks.
+
+It does not prove that every retained semantic conclusion is correct. After a
+restore or repository deployment, normal Span support checks still determine
+whether retained knowledge remains reusable against the current repository.
+
+For audit, retain the artifact's own `manifest.json` and a sanitized recovery
+summary where the operation needs to be recorded.
+
+Full data-directory artifacts remain outside Git. Repository-portable artifacts
+are designed to be committed when appropriate.
+
+## When to take a backup
+
+Take a **repository-portable backup** when retained Span knowledge needs to
+travel with the repository.
+
+Take a **full installation backup**:
+
+- before a destructive installation change;
+- before a repository store transition;
+- before restoring another artifact; or
+- whenever your installation recovery policy requires one.
+
+The operator owns backup retention. Span keeps no remote/server-side copy of
+these artifacts.
