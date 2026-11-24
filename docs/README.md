@@ -105,8 +105,8 @@ method; it is not a requirements layer.
 These documents answer **what has been demonstrated**, not **what Span is
 required to do**.
 
-- [Acceptance and evidence](acceptance.md) — current candidate evidence first,
-  with older candidate evidence retained for audit.
+- [Acceptance and evidence](acceptance.md) — current Beta-3 candidate verdict and evidence.
+- [Historical acceptance evidence](acceptance-history.md) — superseded candidate and campaign evidence retained for audit.
 - [Functional acceptance matrix](functional-acceptance.md) — traceability from
   functional requirements to executable tests.
 - [Invariant audit matrix](invariants.md) — cross-layer verification boundaries.

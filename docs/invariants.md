@@ -1,5 +1,10 @@
 # Invariant audit matrix
 
+> **Document role: architectural verification traceability.** Use this matrix
+> when you need to see how cross-layer invariants are mechanically enforced or
+> explicitly review-enforced. For the current candidate verdict, start with
+> [Acceptance and evidence](acceptance.md).
+
 Method: each invariant traced from canonical ingress through
 storage, service composition, and MCP output to its tests. Verdict
 `Test` = mechanically test-enforced; `Review` = code-inspection

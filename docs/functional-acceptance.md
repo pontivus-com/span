@@ -1,5 +1,9 @@
 # Version 1 Beta functional acceptance matrix
 
+> **Document role: executable verification traceability.** Use this matrix when
+> you need to see which live tests demonstrate each Functional Design acceptance
+> case. For the current candidate verdict, start with [Acceptance and evidence](acceptance.md).
+
 This matrix is the executable traceability surface for
 [Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance).
 It does not redefine the acceptance cases. Each row names the live boundary tests
