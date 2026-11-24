@@ -87,20 +87,47 @@ This SHA is the last fully recorded **pre-documentation-remediation corrective
 baseline**. It must not be described as the current branch head after the
 documentation remediation that followed it.
 
-### Current documentation-remediation head
+### Documentation-remediation verification
 
-The Beta-3 branch has advanced through the F14 documentation remediation after
-the corrective baseline above.
+The F14 documentation/authority remediation was completed on the last
+content-changing remediation head
+`f3ca2065a7bbee1af02ef9bd61006f210f0952c9`.
 
-Those changes are intended to be documentation-only, but the current branch
-must still pass final exact-head CI before release-readiness is re-established.
-A prior green SHA is evidence for its own tree; it is not evidence that a later
-head passed.
+GitHub Actions CI run `45329316520` passed on that tree:
 
-Until that final verification is recorded here, the correct release-verification
-state is:
+- build/distribution passed;
+- Ruff and Black passed;
+- typing remained at **0 errors**;
+- pytest reported **980 passed, 1 skipped, 150 subtests**;
+- aggregate coverage remained **85%**;
+- plugin notice delivery passed; and
+- the coverage artifact uploaded successfully.
 
-**documentation remediation in progress / final exact-head CI pending.**
+The remediation also completed the repository-relative documentation link audit:
+all current Markdown surfaces resolve their repository file targets after the
+history split, and the primary/authority/verification navigation anchors checked
+during the pass resolve to their owning sections.
+
+This acceptance file and the Beta-3 programme record are the closure receipts
+for that verified content tree. They add no runtime/product mechanism. The
+authoritative exact-head closure proof is therefore the required GitHub CI check
+attached to the current commit. Its run identifier is intentionally not embedded
+here, because embedding the run identifier would itself create a new commit and
+invalidate the exact-head claim.
+
+The documentation remediation corrected, among other things:
+
+- problem/outcome-first public narrative and progressive disclosure under F14;
+- user guides separated from exact MCP/operator reference;
+- current verification separated from historical acceptance evidence;
+- current Layer-4 authority separated from historical technical-design
+  archaeology;
+- repository schema references reconciled to schema **15** and offline
+  transition sources **7–14**;
+- the manual-only release authorization boundary;
+- stale transition docstrings/comments; and
+- documentation tests that incorrectly encoded presentation order rather than
+  the OpenCode registration contract they were intended to protect.
 
 ## Release identity and authorization
 
