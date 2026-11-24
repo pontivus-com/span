@@ -50,19 +50,17 @@ function run(bin, args, input) {
       input,
       stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
     });
-    return (out || "").trim();
+    return { ok: true, text: (out || "").trim() };
   } catch {
-    return "";
+    return { ok: false, text: "" };
   }
 }
 
-//: One bounded pending lifecycle state per session. Session-entry text and
-//: changed-scope obligations are retained independently so delivering one cannot
-//: discard the other. Only the session context hook is proven to reach the
-//: model; successful delivery hands off the corresponding notice. Operations
-//: check answer support independently of notice delivery (FD-52).
-const PENDING_LIMIT = 8;
-const NOTICE_LIMIT = 2000;
+//: One transient pending lifecycle state per session. Session-entry text and
+//: changed-scope obligations are retained independently until delivery or the
+//: host explicitly discards the session. Only the session context hook is proven
+//: to reach the model. Operations check answer support independently of notice
+//: delivery (FD-52).
 
 function sessionKeyFromNativeEvent(event) {
   const value = event && event.data && event.data.sessionID;
@@ -99,16 +97,7 @@ function relativePaths(paths, root) {
   return [...new Set(found)];
 }
 
-function ensurePendingCapacity(pending, sessionID) {
-  if (pending.size >= PENDING_LIMIT && !pending.has(sessionID)) {
-    const oldest = pending.keys().next().value;
-    console.warn("span: undelivered lifecycle obligations expired at the session bound; consult Span before completing work.");
-    pending.delete(oldest);
-  }
-}
-
 function pendingState(pending, sessionID) {
-  ensurePendingCapacity(pending, sessionID);
   const current = pending.get(sessionID);
   if (current) return current;
   const created = { entryText: "", changeText: "", paths: [] };
@@ -119,7 +108,7 @@ function pendingState(pending, sessionID) {
 function rememberEntryNotice(pending, sessionID, notice) {
   if (!notice) return;
   const state = pendingState(pending, sessionID);
-  state.entryText = notice.slice(0, NOTICE_LIMIT);
+  state.entryText = notice;
 }
 
 function rememberChangedPaths(pending, sessionID, paths) {
@@ -131,7 +120,7 @@ function rememberChangedPaths(pending, sessionID, paths) {
 function rememberChangeNotice(pending, sessionID, notice) {
   if (!notice) return;
   const state = pendingState(pending, sessionID);
-  state.changeText = notice.slice(0, NOTICE_LIMIT);
+  state.changeText = notice;
 }
 
 function removeEmptyPending(pending, sessionID, state) {
@@ -140,14 +129,37 @@ function removeEmptyPending(pending, sessionID, state) {
   }
 }
 
-function filePathsFromEditEvent(event) {
-  if (!event || !["edit", "write"].includes(event.tool)) return [];
-  const input = event.input;
-  if (!input || typeof input !== "object" || typeof input.path !== "string") {
-    console.warn("span: OpenCode edit/write hook skipped because documented input.path is absent.");
-    return [];
+function patchPaths(patchText) {
+  if (typeof patchText !== "string") return null;
+  const prefixes = [
+    "*** Add File: ",
+    "*** Update File: ",
+    "*** Delete File: ",
+    "*** Move to: ",
+  ];
+  const found = [];
+  let sawFileMarker = false;
+  for (const line of patchText.split(/\r?\n/)) {
+    for (const prefix of prefixes) {
+      if (!line.startsWith(prefix)) continue;
+      sawFileMarker = true;
+      const value = line.slice(prefix.length).trim();
+      if (!value) return null;
+      found.push(value);
+      break;
+    }
   }
-  return [input.path];
+  return sawFileMarker ? [...new Set(found)] : null;
+}
+
+function filePathsFromEditEvent(event) {
+  if (!event || !["edit", "write", "patch"].includes(event.tool)) return [];
+  const input = event.input;
+  if (!input || typeof input !== "object") return null;
+  if (event.tool === "patch") {
+    return patchPaths(input.patchText);
+  }
+  return typeof input.path === "string" ? [input.path] : null;
 }
 
 function handleSessionEvent(event, pending, checked, locationRoot) {
@@ -155,25 +167,31 @@ function handleSessionEvent(event, pending, checked, locationRoot) {
   if (event.type === "session.created") {
     const key = sessionKeyFromNativeEvent(event);
     if (key === "*" || checked.has(key)) return;
-    const notice = run(resolveBin(), [
+    const result = run(resolveBin(), [
       "--repo-root",
       locationRoot,
       "session-start",
     ]);
-    if (notice) {
+    if (result.ok && result.text) {
       checked.add(key);
-      rememberEntryNotice(pending, key, notice);
+      rememberEntryNotice(pending, key, result.text);
     }
   } else if (event.type === "session.idle") {
     const key = sessionKeyFromNativeEvent(event);
     const waiting = pending.get(key);
     if (!waiting || waiting.paths.length === 0) return;
-    const notice = run(resolveBin(), [
+    const result = run(resolveBin(), [
       "--repo-root",
       locationRoot,
       "session-stop",
     ], JSON.stringify(waiting.paths.map((file_path) => ({ file_path }))));
-    rememberChangeNotice(pending, key, notice);
+    if (!result.ok) return;
+    if (result.text) {
+      rememberChangeNotice(pending, key, result.text);
+    } else {
+      waiting.paths = [];
+      removeEmptyPending(pending, key, waiting);
+    }
   } else if (event.type === "session.deleted") {
     pending.delete(sessionKeyFromNativeEvent(event));
     checked.delete(sessionKeyFromNativeEvent(event));
@@ -227,27 +245,39 @@ export default {
           // OpenCode V2 documents execute.after as one mutable event with
           // event.tool, event.input and event.sessionID. Do not guess adjacent
           // legacy shapes into semantic scope.
-          if (!event || !["edit", "write"].includes(event.tool)) return;
+          if (!event || !["edit", "write", "patch"].includes(event.tool)) return;
           const key = sessionKeyFromHook(event);
           if (key === "*") {
             console.warn("span: edit notice has no session identity; reconsider changed paths before completing work.");
             return;
           }
           const paths = filePathsFromEditEvent(event);
+          if (paths === null) {
+            rememberChangeNotice(
+              pending,
+              key,
+              "span: OpenCode observed an edit/write event but could not normalize " +
+                "its complete changed scope from the documented native payload; " +
+                "reconsider the complete edited scope before completing work.",
+            );
+            return;
+          }
           if (paths.length === 0) return;
-          const completePaths = rememberChangedPaths(pending, key, paths);
-          const notice = run(resolveBin(), ["source-changed", ...completePaths]);
-          if (!notice) return;
-          const relative = relativePaths(completePaths, locationRoot);
-          const reminder = relative.length
-            ? " call reconsider " +
-              JSON.stringify({
-                repository_id: path.basename(path.resolve(locationRoot)),
-                changed_paths: relative,
-              }) +
-              " after editing; investigate and record supported dispositions before completing work."
-            : "";
-          rememberChangeNotice(pending, key, notice + reminder);
+          const absolutePaths = paths.map((value) =>
+            path.isAbsolute(value) ? value : path.join(locationRoot, value),
+          );
+          const completePaths = rememberChangedPaths(pending, key, absolutePaths);
+          const result = run(resolveBin(), ["source-changed", ...completePaths]);
+          if (!result.ok) return;
+          if (result.text) {
+            rememberChangeNotice(pending, key, result.text);
+          } else {
+            const state = pending.get(key);
+            if (state) {
+              state.paths = [];
+              removeEmptyPending(pending, key, state);
+            }
+          }
         } catch {
           // Never break the session on hook failure.
         }
@@ -292,12 +322,12 @@ export default {
           // session-start check as the fallback. It never emits a second entry.
           if (!checked.has(sessionID)) {
             checked.add(sessionID);
-            const notice = run(resolveBin(), [
+            const result = run(resolveBin(), [
               "--repo-root",
               locationRoot,
               "session-start",
             ]);
-            rememberEntryNotice(pending, sessionID, notice);
+            if (result.ok) rememberEntryNotice(pending, sessionID, result.text);
           }
 
           const state = pending.get(sessionID);
