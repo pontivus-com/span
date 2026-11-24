@@ -17,7 +17,7 @@
 - Preserve exactly three public MCP tools: `ask`, `record`, and
   `reconsider`.
 
-### Installer, governance and first-adopter correction
+### Installer, governance and external-integration correction
 
 - Fix B2-D01 at the owning setup seam: `span-install` now accepts
   repository-qualified authority seed/binding files and invokes the existing
@@ -108,7 +108,7 @@
   Ruff/Black, the zero-error typing ratchet, the complete pytest suite
   (`919 passed, 1 skipped, 144 subtests`), installed non-editable MCP and the
   FA-01–FA-44 matrix.
-- T11 private first-adopter acceptance passed on 2026-11-22 using adopter-owned
+- T11 external integration acceptance passed on 2026-11-22 using integration-owned
   gitignored evidence. Raw adopter topology and captures remain outside Span
   Git; only the sanitized pass result is published.
 - The assembled `1.0.0b1` candidate passed the repository-verifiable T13
