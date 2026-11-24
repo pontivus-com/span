@@ -658,6 +658,19 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
                 ),
             ),
         )
+        for rule_id in ("p0", "p1", "p2s", "p2w"):
+            locator = f"rules/{rule_id}.md"
+            self.authority.bindings[("repo-a", locator)] = m.AuthorityBinding(
+                evidence_ref=m.EvidenceRef(
+                    evidence_id=m.EvidenceId(f"ev-{rule_id}"),
+                    repository_id="repo-a",
+                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                    locator=locator,
+                    revision_or_fingerprint=f"digest-{rule_id}",
+                ),
+                authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+                status=m.AuthorityStatus.ACCEPTED,
+            )
         intent = m.FunctionalPyramidMemberIntent(
             repository_id="repo-a",
             declaration_sources=(request,),
