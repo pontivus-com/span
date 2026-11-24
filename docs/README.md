@@ -73,22 +73,21 @@ These pages explain how Span is built and where implementation changes belong.
 
 ## Binding authority
 
-Span uses a Functional Pyramid so product decisions have one canonical owner and
-lower-level design remains traceable to the outcome it serves:
+Span's binding product authority is read in dependency order:
 
-1. [Requirements pyramid](requirements-pyramid.md) — how requirements are
-   placed, derived, and kept single-source.
-2. [Goals](goals.md) — layer 0: the problem, outcomes, success, and non-goals.
-3. [Foundations](foundations.md) — layer 1: axioms and principles.
-4. [Lifecycle contract](lifecycle-contract.md) — layer 2: public lifecycle
+1. [Goals](goals.md) — layer 0: the problem, outcomes, success, and non-goals.
+2. [Foundations](foundations.md) — layer 1: axioms and principles.
+3. [Lifecycle contract](lifecycle-contract.md) — layer 2: public lifecycle
    requirements and contract laws.
-5. [Functional design](functional-design.md) — layer 3: deterministic product
+4. [Functional design](functional-design.md) — layer 3: deterministic product
    behavior.
-6. [Technical design](technical-design.md) — layer 4: implementation
+5. [Technical design](technical-design.md) — layer 4: implementation
    mechanisms.
 
-[Method grounding](method-grounding.md) provides supporting evidence for the
-method; it is not a requirements layer.
+The [requirements pyramid](requirements-pyramid.md) governs placement,
+derivation, and single-source ownership across those layers.
+[Method grounding](method-grounding.md) supplies supporting evidence; it is not
+a requirements layer.
 
 ## Verification and evidence
 
