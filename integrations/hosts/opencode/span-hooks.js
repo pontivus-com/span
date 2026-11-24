@@ -246,7 +246,11 @@ export default {
           );
           const completePaths = rememberChangedPaths(pending, key, absolutePaths);
           const result = run(resolveBin(), ["source-changed", ...completePaths]);
-          if (!result.ok) return;
+          if (!result.ok) {
+            const state = pending.get(key);
+            if (state) state.changeText = "";
+            return;
+          }
           const reminder =
             `span: OpenCode observed ${completePaths.length} changed path(s); ` +
             `call reconsider with the complete changed scope from this ${event.tool} ` +

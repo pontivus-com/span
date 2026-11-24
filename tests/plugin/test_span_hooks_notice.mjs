@@ -135,7 +135,9 @@ esac
     const event = {sessionID:"session-1", system:[]};
     registered["session:context"](event);
     assert.equal(event.system.length, 1);
-    assert.equal(event.system[0].text, "changed");
+    assert.match(event.system[0].text, /^changed /);
+    assert.match(event.system[0].text, /2 changed path\(s\)/);
+    assert.match(event.system[0].text, /call reconsider with the complete changed scope/);
   } finally {
     dispose();
     if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
@@ -183,7 +185,9 @@ esac
     ]);
     const event = { sessionID: "session-1", system: [] };
     registered["session:context"](event);
-    assert.equal(event.system[0].text, "changed");
+    assert.match(event.system[0].text, /^changed /);
+    assert.match(event.system[0].text, /4 changed path\(s\)/);
+    assert.match(event.system[0].text, /from this patch/);
   } finally {
     dispose();
     if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
@@ -331,6 +335,71 @@ esac
       event.system[0].text,
       /call reconsider with the complete changed scope/,
     );
+  } finally {
+    dispose();
+    if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("failed newer preview cannot hand off the retained union with a stale notice", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-preview-retry-"));
+  const bin = path.join(root, "fake-span-hooks");
+  const count = path.join(root, "count");
+  const received = path.join(root, "received.txt");
+  fs.writeFileSync(
+    bin,
+    `#!/bin/sh
+case "$*" in
+  *source-changed*)
+    current=$(cat "${count}" 2>/dev/null || echo 0)
+    current=$((current + 1))
+    printf '%s' "$current" > "${count}"
+    if [ "$current" -eq 2 ]; then exit 1; fi
+    printf '%s\\n' "$@" > "${received}"
+    echo "changed"
+    ;;
+esac
+`,
+    { mode: 0o755 },
+  );
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  const { ctx, registered } = fakeContext(root);
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    const first = path.join(root, "src/a.js");
+    const second = path.join(root, "src/b.js");
+    const third = path.join(root, "src/c.js");
+
+    registered["tool:execute.after"]({
+      sessionID: "session-1",
+      tool: "edit",
+      input: { path: first },
+    });
+    registered["tool:execute.after"]({
+      sessionID: "session-1",
+      tool: "edit",
+      input: { path: second },
+    });
+
+    const afterFailure = { sessionID: "session-1", system: [] };
+    registered["session:context"](afterFailure);
+    assert.equal(afterFailure.system.length, 0);
+
+    registered["tool:execute.after"]({
+      sessionID: "session-1",
+      tool: "edit",
+      input: { path: third },
+    });
+    const args = fs.readFileSync(received, "utf8").trim().split("\\n");
+    assert.deepEqual(args, ["source-changed", first, second, third]);
+
+    const recovered = { sessionID: "session-1", system: [] };
+    registered["session:context"](recovered);
+    assert.equal(recovered.system.length, 1);
+    assert.match(recovered.system[0].text, /3 changed path\\(s\\)/);
   } finally {
     dispose();
     if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
