@@ -546,13 +546,8 @@ def wire_codex_hooks(hook_bin, data_dir, dry_run=False):
         ),
         (
             "PostToolUse",
-            "apply_patch|Write|Edit|MultiEdit",
-            [hook_bin, "source-changed", "--data-dir", str(data_dir)],
-        ),
-        (
-            "Stop",
-            "",
-            [hook_bin, "session-stop", "--data-dir", str(data_dir)],
+            "^apply_patch$",
+            [hook_bin, "codex-post-tool", "--data-dir", str(data_dir)],
         ),
     ]
     added = 0
