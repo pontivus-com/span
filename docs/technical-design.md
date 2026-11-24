@@ -547,16 +547,17 @@ registration/hook/plugin integration. Generated or managed copies are derived
 from their canonical sources and foreign host configuration is preserved.
 
 The OpenCode integration includes the bounded prompt-admission readiness wait
-needed so the first model turn can see Span tools, plus context/edit lifecycle
-notices. Those notices are usability aids only: they do not author meaning,
-change support, mutate Functional Pyramid state, or replace the server-owned
-lifecycle.
+needed so the first model turn can see Span tools. Host-specific lifecycle-hook
+composition and notice behavior are owned by §22; this section owns only the
+general host/managed-asset boundary.
 
 OpenCode plugin scope and host-specific configuration are installer mechanisms
-documented operationally in [Install and connect](install.md). Codex and Claude
-Code use their own supported registration/guidance adapters. A configured host
-integration is not by itself evidence that an authenticated model received the
-behavior; delivery claims belong to [Acceptance and evidence](acceptance.md).
+documented operationally in [Install and connect](install.md). Codex, Claude
+Code and OpenCode hook registration must preserve the exact configured Span
+installation identity, including a non-default data directory, rather than
+silently falling back to another installation. A configured host integration is
+not by itself evidence that an authenticated model received the behavior;
+delivery claims belong to [Acceptance and evidence](acceptance.md).
 
 Product-value measurement remains governed by G5/F8. No universal time/token
 claim or synthetic release threshold is created by this technical layer.
@@ -1337,9 +1338,9 @@ The former Beta-1 package/release identity and schema-13→14 transition are
 historical and are retained in the
 [technical-design history](history/technical-design-pre-version1.md#historical-part-c-beta-1-transition-and-release-identity).
 
-### 22. Host delivery, skills and verification ownership
+### 22. Host delivery, lifecycle hooks, skills and verification ownership
 
-**Authority:** A4, A8, A9; F6, F8, F10, F12; L8, L12–L16; FD-38–FD-58,
+**Authority:** A4, A8, A9; F6–F8, F10, F12; L8, L12–L16; FD-38–FD-58,
 FD-92–FD-94 and functional acceptance §15.
 
 Generate selector/result branches from the canonical model/schema owner. The
@@ -1350,17 +1351,101 @@ advertised tools remain `ask`, `record`, and `reconsider`.
 Managed skills/notices are generated or maintained from the same lifecycle
 contract. They may guide the agent through Functional Pyramid participation,
 capture/curation, and post-change disposition, but they do not create another
-operation, semantic writer, support evaluator, or governance model.
+operation, semantic writer, support evaluator, governance model, or hook-owned
+lifecycle state.
 
-Host adapters and managed notices use the installation composition root and
-canonical status/effect paths. A configured host integration is not proof of
-authenticated model delivery.
+#### 22.1 Hook execution architecture
+
+A managed hook is an attention interrupt for host-observable activity that can
+leave a required Span lifecycle action omitted. Its execution path is:
+
+```text
+native host event
+  -> normalize registered repository + event scope
+  -> obtain canonical readiness / Functional Pyramid status / effect projection
+  -> determine semantic-understanding obligation
+  -> determine Functional Pyramid obligation
+  -> select the smallest existing public lifecycle action(s)
+  -> render and deliver one bounded advisory notice
+```
+
+The two obligation decisions are conceptual projections over existing canonical
+results only. Do not introduce a hook-state DTO, enum, persistence model or
+parallel state machine for `NONE | SEMANTIC | FUNCTIONAL_PYRAMID | BOTH`.
+Where the existing public lifecycle already composes both concerns into one
+operation, the notice names that operation rather than inventing two calls.
+
+Hooks attach only to external host moments covered by FD-58: session
+start/resume/compact; a pre-investigation source-access event when the host
+exposes one reliably; external edit/write; and idle/stop/completion for
+outstanding obligations already observed in that session. Do not infer a
+pre-investigation event from arbitrary shell text or command semantics. A
+transition communicated by an accepted/rejected/unavailable
+`ask`/`record`/`reconsider` result is result-owned and is not re-evaluated
+by a hook.
+
+#### 22.2 Canonical read-only projections
+
+Session participation/health notices obtain
+`FunctionalPyramidStatus` through the installation composition root. Change
+notices construct the existing repository-scoped `ReconsiderRequest` from the
+complete normalized changed scope and invoke a read-only projection of the same
+installation-aware `DependencyEffectService` used by ordinary
+`reconsider(changed_scope)`.
+
+The preview may suppress re-establishment-context issuance and public receipt
+creation, but it may not change dependency traversal, support qualification,
+containment, premise closure, route/authority analysis or cross-repository
+projection. It performs no semantic, curation, verification, participation,
+authority or support-current write. There is one canonical affected-set owner.
+
+Operational bounds apply after canonical lifecycle evaluation. A diagnostic may
+show only a bounded subset of affected identities, but the hook must not slice
+changed paths, drop already observed edits or otherwise reduce semantic input
+before effect computation. Changed paths observed for one session are
+deduplicated and accumulated until the corresponding lifecycle obligation is
+handed off or the session is explicitly discarded. If a host event itself is
+known to be incomplete, that fact is surfaced as incomplete input and the subset
+is never represented as the complete changed scope.
+
+#### 22.3 Host wiring and delivery
+
+Every managed hook invocation must resolve the same installed Span runtime as
+the associated MCP registration. Installer-managed Codex and Claude commands and
+the OpenCode wrapper/plugin therefore carry the exact configured data-directory
+identity; a non-default installation may not fall through to the default data
+directory.
+
+Host adapters translate only documented native event fields. Unsupported or
+ambiguous event shapes are skipped or diagnosed rather than guessed into a
+repository/path set. OpenCode may retain transient per-session changed paths and
+notice text solely for next-context/idle delivery; that host-local memory is not
+Span semantic state and is discarded with the host session.
+
+Hook failure must not make unsafe understanding servable: FD-52 remains the
+correctness boundary. It may reduce lifecycle adherence and therefore cannot be
+promoted into a successful delivery claim. A configured host integration,
+source-level invocation test, or installer wiring test is not proof of
+authenticated model delivery; FD-53/Acceptance own that evidence boundary.
+
+#### 22.4 Result-owned lifecycle transitions
+
+No hook replays or rediscovers transitions already made explicit by a Span
+result. In particular:
+
+- semantic `record` qualification and pending curation are result/queue owned;
+- challenge disposition remains `reconsider(challenge)` + `record` owned;
+- Functional Pyramid candidate validation is `ask` owned; and
+- accepted activate/revise/deactivate already returns its canonical
+  `dependent_effects` and `reestablishment_contexts`, so the hook neither
+  recomputes that projection nor asks for a second changed-scope
+  `reconsider`.
 
 Mechanism verification is owned by the executable
 [functional-acceptance matrix](functional-acceptance.md), the
 [invariant audit matrix](invariants.md), installed/package lanes, and
 [Acceptance and evidence](acceptance.md). This Layer-4 section does not maintain
-a duplicate candidate-specific test checklist or dated delivery verdict.
+a candidate-specific test checklist or dated delivery verdict.
 
 ## Part D — Beta 3 capture/curation mechanisms
 
