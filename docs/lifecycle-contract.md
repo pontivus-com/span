@@ -11,18 +11,16 @@ agent sends and receives, and what is deliberately not the agent's job. The
 Authority and derivation between layers are defined in the
 [requirements pyramid model](requirements-pyramid.md).
 
-**1.0 Beta target contract, 21 November 2026.** Runtime implementation and host
-delivery are pending. These requirements describe the target behavior; they do
-not certify that the installed server already conforms.
+**1.0 Beta contract.** This document states the binding public lifecycle
+requirements. Implementation and delivery conformance are evidenced separately
+in [acceptance](acceptance.md); conformance evidence never changes this contract.
 
 ## 1. Position in the pyramid
 
-This document is layer 2. Layer 0 is [goals](goals.md), layer 1 is
-[foundations](foundations.md), layer 3 is the
-[functional design](functional-design.md), and layer 4 is the
-[technical design](technical-design.md). The ownership of each layer, the
-placement test for a new statement, the rule against restatement, and the
-direction of derivation are defined in the [requirements pyramid model](requirements-pyramid.md).
+This document owns Layer-2 public lifecycle requirements: operations, public
+state/transitions, agent inputs/results, contract laws, and the agent/internal
+boundary. The [requirements pyramid](requirements-pyramid.md) owns placement and
+derivation; this layer references rather than restates Layers 0–1.
 
 ## 2. Terminology
 
@@ -58,39 +56,13 @@ neither**: ordinary shared Answer content is both supported and curated.
 
 ## 3. The three public lifecycle operations
 
-| Decision | Source |
-| --- | --- |
-| The surface is obtain, retain, re-align — and no more | F6 |
-| Correctness cannot depend on the agent remembering a step | A4 |
-| The agent supplies only what it already holds | F7 |
-| A refusal must carry the way forward | A8 |
-| Only valid content is an answer | F2, A7 |
-| Scope is a surface and status is reported at its granularity | F9 |
-| Understanding is retained, versioned, and reachable without the transcript | F3 |
-| Reuse must beat maintaining documentation or acting on stale understanding | F8 |
-| Surface-bound semantic content is the documentation, not a separate artifact | G6 |
-| Canonical governing sources remain canonical and are referenced rather than copied | G6, F1, F11 |
-| The governing path from first principles to implementation is available at orientation | G7, F10, F11 |
-| Repository registration and Functional Pyramid participation are different lifecycle states | G8, F12 |
-| Functional Pyramid adoption and revision use the same obtain/retain/re-align lifecycle | G8, F6, F12 |
-| Cross-repository governance effects follow the explicit Functional Pyramid instance | G3, F4, F12 |
-| There are no per-intent operations | F5 |
+F6 fixes the lifecycle boundary and L8 fixes the public MCP surface: exactly
+`ask`, `record`, and `reconsider`. Section 4 owns their public contract.
 
-*What does this do*, *what depends on it*, *what breaks if I change it*, and
-*is this still true* remain questions over retained understanding rather than
-operations. Declared governance is different: for an ACTIVE repository, Span resolves the
-Functional Pyramid as server-owned orientation and support state. It does not generate an answer to "what should govern"; it returns what
-the repository explicitly declared to govern the selected scope. The agent still
-judges semantic and conformance meaning.
-
-Audit needs no sixth operation. Every answer carries the surface status, because
-a reader who cannot tell current from stale has not been answered (F9).
-
-Exactly three public tools realize these moments: `ask`, `record`, `reconsider`.
-The installer binds repositories; the host supplies general structural
-navigation. Functional Pyramid resolution is not general structural navigation:
-it is deterministic resolution of explicit governance declarations and is folded
-into the three lifecycle operations.
+Repository installation/registration remains setup rather than another MCP
+operation. General structural navigation remains host-owned. Functional Pyramid
+orientation and participation are branches of the same lifecycle rather than a
+parallel public API.
 
 ## 4. Public lifecycle operations
 
@@ -497,8 +469,6 @@ answer content: to read the statement, `ask` with
 `UnderstandingSnapshotSelector{understanding_id, version}`. The status never
 auto-withdraws or auto-corrects a conclusion (FD-23, FD-35, FD-36). *(L2, L9)*
 
-**How it helps.** One call replaces re-reading the code, tells the agent what of
-it is current, and names what is not.
 
 ### 4.2 `record` — retain
 
@@ -923,8 +893,6 @@ revisions/dependencies and their live qualification, with evaluation time.
 Neither historical retrieval becomes Answer content. Omission remains explicit
 and recoverable; compact output is not permission to drop audit state.
 
-**How it helps.** It converts an investigation the agent already performed into
-retained understanding, in one call, through its retained conclusions.
 
 ### 4.3 `reconsider` — re-align
 
@@ -1018,31 +986,6 @@ actionable, while historical revisions remain traversable as dependencies.
 `Challenged` carries the challenge and its derived context; challenges are
 settled through `record` with named dispositions.
 
-**How it helps.** It answers the question no per-question API can: *what did my
-change invalidate, and at which granularity?* Without it, re-establishment is
-discovered by accident.
-
-**Safety and participation.** F2 makes every `ask` check declared support.
-The agent calls `reconsider` after changes and completes the applicable
-re-establishment work under §7.
-
-**Public agent boundary.** Agent-facing request schemas, results, rejections,
-unavailable results, recoveries, examples and tool descriptions contain only
-lifecycle-contract vocabulary, semantic/user-visible coordinates and opaque
-contract handles. `Rejected.cause` and `Unavailable.failure` are public
-descriptions produced from typed public failure classification; raw exception
-messages are never serialized. Public recovery names only an action available
-through the lifecycle or supported setup surface.
-
-Implementation class/module names, exception types or tracebacks, filesystem or
-store paths, database/table/index/schema mechanics, internal context/request
-issuance keys or digests, context-origin mechanics and administrative state are
-not agent-facing data. A returned `InvestigationContextRef`,
-`ReceiptRetrievalSelector`, understanding/version/revision coordinate or
-observation identifier is an opaque contract handle: the agent may copy it into
-a declared operation but never needs to parse it or infer the mechanism that
-created it. A wire discriminator, when required, is explicit public protocol
-vocabulary rather than a runtime type/class name. *(A4, A8, A9, F6, F7, F10)*
 
 ## 5. The internal boundary
 
@@ -1351,101 +1294,25 @@ consultation before deriving understanding.
 
 ## 8. One round trip
 
-```text
-1. ask(repository_id="repo", surface={kind:"FILE", locator:"opencode.json"})
-   ← Gap(unassessed; status; source pointers; recovery)
-
-2. record(kind="surface", action="create",
-          surface={kind:"SERVICE", locator:"mcp-registration",
-                   boundary:{paths:["opencode.json"]}})
-   ← SurfaceDeclared(boundary version 1)
-
-3. record(kind="understanding",
-          surface={kind:"SERVICE", locator:"mcp-registration"},
-          question="what governs it?",
-          conclusion="opencode.json registers the local span server.",
-          locator="opencode.json")
-   ← UnderstandingRecorded(version 1, receipt_selector, qualification=CURRENT, status)
-
-4. reconsider(changed_paths=["opencode.json"])
-   ← Changed(affected=[path surface opencode.json,
-                        mcp-registration service surface],
-             per-conclusion state, source references, update coordinates)
-
-5. record(kind="understanding", understanding_id="u:…",
-          expected_version=1, actions={correct:[…]})
-   ← UnderstandingRecorded(version 2, receipt_selector, qualification=CURRENT, history preserved)
-```
-
-Steps 1–3 are the agent's existing work plus the record calls. Steps 4–5 are its
-existing edit plus two calls. Each step serves the current investigation, and none
-requires a memory from a previous session.
+Worked user examples belong to [First investigation](onboarding-runbook.md),
+[Using Span](usage.md), and the exact [MCP reference](mcp.md). This binding
+layer does not maintain a second tutorial representation of the contract.
 
 ## 9. Decisions recorded
 
-| ID | Decision | Rationale | Revisit |
-| --- | --- | --- | --- |
-| D-1 | Obtain forms are owned by §4.1 | preserves the three lifecycle operations (L8) | amend this layer |
-| D-3 | The caller supplies a request identity for every write and explicit source admission, not pure obtain or a retry token | same identity + same content is a replay; same identity + different content is a conflict; a new identity with identical content is a new act. This distinguishes a retry from an intentional repetition without exposing Span internals (A2, A4, F7). A pure change-scope `reconsider` is a read and carries none | amend this layer |
-| D-4 | `ask` has no `change` parameter | before-change understanding uses surface obtain; Span does not author proposed-change analysis (F5) | amend this layer |
-| D-5 | A parent's own conclusions are separate from descendant status | merging would blur granularity and double-count (F9) | amend this layer |
+The normative decisions are the operation contracts in §4 and laws L1–L17 in
+§6. Historical design decisions remain available through repository history and
+programme records; they do not form a parallel Layer-2 decision catalogue.
 
 ## 10. Constraints on the functional design and implementation
 
-Layer 3 must specify the behaviour that satisfies these constraints; layer 4
-must provide the mechanisms.
+Layer 3 must derive deterministic behavior from §4 and L1–L17. Layer 4 must
+realize that behavior without adding public requirements or promoting internal
+bookkeeping into agent work.
 
-- declared surfaces with a stable identity and an evolvable boundary, and path
-  surfaces identified by path or canonical locator;
-- containment mapping, so a changed path resolves to every enclosing surface;
-- explicit, versioned Functional Pyramid instance membership with durable
-  UNCONFIGURED/EXCLUDED/ACTIVE participation state and separately computed
-  VALID/DEGRADED active health, distinct from repository registration;
-- pure action-aware candidate validation and atomic
-  activation/revision/deactivation/exclusion over repository-owned declaration
-  references, with one explicit functional scope and PARTIAL/COMPLETE coverage
-  per member;
-- Functional Pyramid declarations and deterministic many-to-many path/context
-  resolution, distinct from semantic surface containment;
-- additive context inheritance and explicit cross-repository rule references,
-  with cycles, missing repositories, missing rules and invalid governing edges
-  kept unresolved;
-- canonical functional-rule identity and direct governing-rule traversal without
-  copying canonical rule text into Span;
-- server-derived Functional Pyramid route and authority support for normative
-  conclusions;
-- bidirectional governing-graph traversal and governance-change propagation
-  through the same support/reconsideration model used for other declared
-  dependencies, including affected understanding in other repositories of the
-  same Functional Pyramid instance and exactly one existing repository-bound
-  re-establishment context per affected repository;
-- dependency evaluation that follows premise chains transitively, so indirect
-  support loss is reported alongside direct loss;
-- immutable understanding versions, with supersession rather than overwrite;
-- typed support dependencies, evaluated against present source on every read;
-- content identity derived from source, not from caller input;
-- surface status computed on read, including `unexamined` from the boundary;
-- a surface document view assembled on read from current conclusions, with no
-  separately stored document artifact;
-- ordinary retained receipts keyed by repository + caller request identity and
-  Functional Pyramid receipts keyed by caller request identity in the distinct
-  installation-level Functional Pyramid write namespace, each replayable across
-  restart within its window;
-- compare-and-set on every update;
-- exactly `ask`, `record`, and `reconsider`, with no per-intent or
-  Functional-Pyramid-only MCP tools;
-- host delivery verified against the three declared schemas;
-- host notices that never carry currency or acceptance.
-
-Layer 4 may choose tables, schemas, transports, and host adapters freely. It may
-not revive an internal concern from §5 as a public operation, and it may not
-move evaluation from read time to write time.
-
-Layer 2 also imposes a release gate that neither the functional design nor the
-implementation can satisfy by itself: each supported task class must be measured
-against maintaining parallel documentation and against acting on stale
-understanding (F8). A design that is correct but priced above the work it removes
-has not met this contract.
+No additional restatement list is maintained here: if a downstream design
+cannot cite the owning Layer-2 requirement directly, the requirement is missing
+or the downstream design is unjustified.
 
 ## 11. What this layer does not define
 
