@@ -1,95 +1,54 @@
 # Install and connect
 
-Span runs locally over stdio. The installer provisions its own virtual
-environment, links the `span-mcp` and `span-hooks` executables, provisions the
-managed structural indexer, and registers supported hosts.
+If you want to use Span with a repository, the normal path is:
+
+1. install the package;
+2. run `span-install` for the repository;
+3. verify the installation;
+4. reconnect your coding agent; and
+5. start a real task with [First investigation](onboarding-runbook.md).
+
+The sections after that path cover host-specific and advanced operator concerns.
 
 ## Requirements
 
-Span currently requires:
+The currently verified installation path requires:
 
 - Python 3.12 or newer;
-- Node.js plus npm (installation provisions the managed structural
-  indexer into Span's tools directory; no separate indexer download);
-- Linux for the currently verified installation path.
-
-Span uses a managed structural wiring graph as structural evidence.
-Installer provisioning may build the provider-owned structural index when it is
-missing, stale, or the working tree is dirty (the build then reflects the
-current tree and freshness stays `UNVERIFIABLE`). MCP process startup
-registration is read-only: it registers repository identity for discovery and
-performs no structural build. Installer `--verify-only` is observational and
-never initializes or rebuilds. There is no separate refresh operation in the
-public surface.
-
-The index lives at:
-
-```text
-<DATA_DIR>/structural/<repository-id>/.graph/wiring.json
-```
-
-Builds are wiring-only (`--no-deep`, no credentials, no target
-writes: `--no-gitignore --no-ignore`). Explicit setup performs at
-most one bounded rebuild. Ordinary reads (`ask`, `reconsider`), hooks, and
-background paths never build.
+- Node.js plus npm; and
+- Linux.
 
 macOS and Windows paths are reserved but are not currently verified.
 
----
+## Install Span
 
-## Install
-
-Install the package, then run the installer:
+Install the package:
 
 ```bash
 pipx install span-mcp        # or: pip install span-mcp
-span-install \
-  --repo <TARGET_REPO> \
-  --data-dir <DATA_DIR>
 ```
 
-`--repo` may be repeated for multiple target repositories. The canonical
-repository ID is the selected repository root's basename.
-
-### Repository-qualified authority configuration
-
-Authority setup is explicit and repository-qualified. Repeat either option for
-each selected repository that needs declared authority configuration:
+Then register and provision the repository:
 
 ```bash
-span-install \
-  --repo /work/repo-a \
-  --repo /work/repo-b \
-  --authority-seeds-file repo-a /config/repo-a-seeds.json \
-  --authority-bindings-file repo-b /config/repo-b-bindings.json \
-  --data-dir <DATA_DIR>
+span-install --repo <TARGET_REPO>
 ```
 
-Each seeds file is a strict JSON list of canonical `EvidenceRef` values; each
-bindings file is a strict JSON list of canonical `AuthorityBinding` values.
-The repository ID in every item must match the repository-qualified CLI mapping,
-and every locator must resolve inside that selected repository root. Duplicate
-mappings, unselected repository IDs, malformed canonical content, identity
-mismatches, or unknown locators are rejected rather than guessed.
+You may repeat `--repo` to install Span for several repositories in one
+installation.
 
-For each repository and each authority family:
-
-- no mapping preserves the configured value;
-- a mapped `[]` clears it;
-- a mapped non-empty list replaces it exactly.
-
-All deterministic file decoding and routing validation completes before the
-first repository-store mutation. Normal installation then invokes the canonical
-repository provisioning owner once for each selected repository, producing the
-schema-15 repository store while leaving Functional Pyramid participation
-separate and `UNCONFIGURED`.
-
-If `--data-dir` is omitted, Span uses the platform default.
-
-On Linux:
+If `--data-dir` is omitted, Span uses the platform default. On Linux:
 
 ```text
 ~/.local/share/span/data
+```
+
+To choose it explicitly:
+
+```bash
+span-install \
+  --repo <TARGET_REPO> \
+  --data-dir <DATA_DIR>
 ```
 
 Preview installation without changing anything:
@@ -100,9 +59,13 @@ span-install \
   --dry-run
 ```
 
+The canonical repository ID is the selected repository root's basename. Keep
+that identity available for lifecycle operations and administration.
+
 ### From a source checkout
 
-Contributors, and anyone pinning to a commit, install from the repository root:
+Contributors, and anyone pinning to a commit, can install from the repository
+root:
 
 ```bash
 git clone https://github.com/pontivus-com/span.git
@@ -112,31 +75,41 @@ python3 scripts/install-span.py \
   --data-dir <DATA_DIR>
 ```
 
-A checkout installs the runtime from that source. A package install installs the
-same released version into Span's runtime environment and reads the skills and
-lifecycle snippet bundled in the package instead of the repository copies.
+A source checkout installs the runtime from that checkout. A package install
+uses the released package and its bundled lifecycle guidance.
 
-Installation establishes operational readiness only.
+## Verify the installation
 
-It does **not** mean Span already understands your repository.
+Run:
 
----
+```bash
+span-install --verify-only
+span-mcp --help
+```
 
-## Supported hosts
+`--verify-only` is read-only. It reports runtime/store readiness and the host
+registration information Span can inspect without changing the installation.
 
-Managed registration, skills, and lifecycle hooks are implemented for Codex,
-OpenCode, and Claude Code. These are the supported managed hosts. Claude's
-registration and health are inspectable, while authenticated model-delivery
-grammar and caller identity remain `UNVERIFIED`; registration does not prove
-model delivery. Replay safety is claimed only where the host preserves request
-identity (FD-50). Other MCP hosts connect manually without an assumed delivery
-guarantee. See
-[host status](../integrations/hosts/triggers.md). Span never invokes an LLM, chooses a
-model, stores provider credentials, edits source code, runs tests, or
-autonomously reinterprets your repository. Its state lives in a data
-directory outside the repositories it analyzes.
+When run without `--repo`, it uses the repository bindings retained in the
+current install receipt when those bindings are available.
+
+A successful verification means Span is operational for the repository. It does
+**not** mean Span already understands the repository.
+
+Continue with [First investigation](onboarding-runbook.md) or
+[Using Span](usage.md).
 
 ## Connect your coding agent
+
+Span runs locally over stdio.
+
+Managed registration, skills, and lifecycle-hook integration exist for Codex,
+OpenCode, and Claude Code. Other MCP hosts can connect to the stdio server
+manually.
+
+Registration and verified live model delivery are different claims. See
+[host status](../integrations/hosts/triggers.md) for the current delivery
+evidence.
 
 ### Codex
 
@@ -149,7 +122,7 @@ codex mcp add span -- \
   --repo <TARGET_REPO>
 ```
 
-Then verify:
+Then verify the registration:
 
 ```bash
 codex mcp list
@@ -159,7 +132,8 @@ Use the absolute path to `span-mcp` if it is not on Codex's `PATH`.
 
 ### Claude Code
 
-The installer registers Span through Claude Code's user-scope CLI command:
+The installer can register Span at Claude Code user scope. The equivalent
+registration command is:
 
 ```bash
 claude mcp add --scope user --transport stdio span -- \
@@ -170,51 +144,27 @@ claude mcp add --scope user --transport stdio span -- \
 
 `span-install` selects Claude automatically when its CLI or host footprint is
 present. Use `--with-claude` or `--no-claude` to make that choice explicit.
+
 Report-only lifecycle hooks are written only to an existing
-`~/.claude/settings.json`; foreign settings and hooks are preserved, and every
-hook command carries the installed `--data-dir`. Existing `~/.claude` roots
-can receive the canonical Span skills. `--uninstall` removes only Span's
-user-scope registration, hook entries, and ownership-marked skills. Doctor
-inspection is read-only and reports registration/configuration separately from
-the `UNVERIFIED` authenticated model-delivery state.
+`~/.claude/settings.json`. Foreign settings and hooks are preserved. Existing
+`~/.claude` roots can receive the canonical Span skills.
+
+`--uninstall` removes only Span's user-scope registration, Span-owned hook
+entries, and ownership-marked skills.
+
+Claude registration and health can be inspected, but authenticated model
+delivery remains a separate verification claim.
 
 ### OpenCode
 
 The installer can configure OpenCode automatically.
 
-For a fresh install, the default OpenCode plugin scope is `global`. When no
-explicit MCP path is supplied and no local `./opencode.json` exists, the
-installer uses the same global `~/.config/opencode/opencode.json` for both the
-Span lifecycle plugin and the `mcp.servers.span` registration. The selection
-precedence is:
+For a fresh install, the default plugin scope is `global`. When no explicit
+MCP path is supplied and no local `./opencode.json` exists, the installer uses
+the global `~/.config/opencode/opencode.json` for both the Span lifecycle
+plugin and MCP registration.
 
-1. explicit `--opencode-config PATH`;
-2. the prior install receipt's MCP path, when upgrading an existing install;
-3. local `./opencode.json` when present;
-4. the global OpenCode config when the effective plugin scope is `global`;
-5. no MCP selection for `local`/`none` scope without an explicit or local path.
-
-`--no-hooks` skips lifecycle hook and plugin wiring only; it does not skip the
-MCP server registration. A global registration is still rewritten with the
-current data directory and every `--repo` binding.
-
-Selected paths are stored as absolute receipt identities. A later bare install
-therefore reuses the same MCP file even when launched from another directory.
-An explicit path changes that selection; after the new registration succeeds,
-the previous recorded Span registration is removed.
-
-Before an explicit relocation, the prior receipt-owned file must be valid JSON
-and writable when it contains Span's registration. If that preflight fails, the
-new configuration is not created.
-
-The install receipt records the selected MCP and plugin configuration paths.
-Bare `span-install --verify-only` reuses the recorded MCP path before checking
-the local file, so verification does not require repeating the install flag.
-Uninstall removes each owned artifact from its recorded configuration and leaves
-foreign entries untouched. A present receipt that is not the current receipt
-contract fails closed; it is not treated as a fresh installation.
-
-The supported manual `opencode.json` entry is:
+The supported manual entry is:
 
 ```json
 {
@@ -236,12 +186,105 @@ The supported manual `opencode.json` entry is:
 }
 ```
 
-`disabled` may be omitted or set to `false`. Only `mcp.servers.span` is
-interpreted as Span's registration; other configuration keys are preserved.
+`disabled` may be omitted or set to `false`.
 
-The installer manages the Span lifecycle plugin under an explicit scope. The
-scope is an end-user choice; the installer never infers it from what happens to
-exist on disk:
+OpenCode exposes Span's `ask`, `record`, and `reconsider` tools directly.
+Its code-mode sandbox does not include MCP tools, so call the Span MCP tools
+directly rather than routing them through code-mode execution.
+
+Reload OpenCode after changing its MCP configuration.
+
+For plugin scope, path selection, relocation, and upgrade rules, see
+[Advanced OpenCode configuration](#advanced-opencode-configuration).
+
+## Optional project-authority configuration
+
+You only need this section when a repository already has explicit authority
+seeds or bindings that Span should provision.
+
+Authority input is repository-qualified:
+
+```bash
+span-install \
+  --repo /work/repo-a \
+  --repo /work/repo-b \
+  --authority-seeds-file repo-a /config/repo-a-seeds.json \
+  --authority-bindings-file repo-b /config/repo-b-bindings.json \
+  --data-dir <DATA_DIR>
+```
+
+Each seeds file is a strict JSON list of canonical `EvidenceRef` values. Each
+bindings file is a strict JSON list of canonical `AuthorityBinding` values.
+
+The repository ID in every item must match the repository-qualified CLI
+mapping, and every locator must resolve inside the selected repository root.
+Duplicate mappings, unselected repository IDs, malformed canonical content,
+identity mismatches, or unknown locators are rejected rather than guessed.
+
+For each repository and authority family:
+
+- no mapping preserves the configured value;
+- a mapped `[]` clears it; and
+- a mapped non-empty list replaces it exactly.
+
+All deterministic decoding and routing validation completes before the first
+repository-store mutation.
+
+Provisioning establishes repository state but does not automatically activate
+Functional Pyramid participation. A newly registered repository remains outside
+an active pyramid until that participation is explicitly recorded.
+
+## What installation provisions
+
+The installer provisions Span's runtime environment, executable links, managed
+structural indexer, repository stores, lifecycle guidance, and supported host
+integration selected for the installation.
+
+Span uses a managed structural wiring graph as structural evidence. Installer
+provisioning may build the provider-owned structural index when it is missing,
+stale, or the working tree is dirty.
+
+The index lives under:
+
+```text
+<DATA_DIR>/structural/<repository-id>/.graph/wiring.json
+```
+
+Structural builds are wiring-only and use no credentials or target-source
+writes. Ordinary `ask`, `reconsider`, hook delivery, and MCP process startup
+do not rebuild the structural index.
+
+`--verify-only` is observational and never initializes or rebuilds.
+
+The MCP runtime itself does not edit target source, invoke an LLM, choose a
+model, store provider credentials, or run application tests. Host integration
+and managed lifecycle guidance belong to the installer.
+
+## Advanced OpenCode configuration
+
+OpenCode MCP configuration selection follows this precedence:
+
+1. explicit `--opencode-config PATH`;
+2. the prior install receipt's MCP path when upgrading;
+3. local `./opencode.json` when present;
+4. global `~/.config/opencode/opencode.json` when the effective plugin scope
+   is `global`;
+5. no MCP selection for `local` or `none` scope without an explicit or local
+   path.
+
+`--no-hooks` skips lifecycle hook/plugin wiring only. It does not skip MCP
+server registration.
+
+Selected paths are stored as absolute receipt identities. A later bare install
+therefore reuses the recorded MCP file. An explicit path changes the selection;
+after the new registration succeeds, the previous recorded Span registration is
+removed.
+
+Before an explicit relocation, a prior receipt-owned file that contains Span's
+registration must be valid JSON and writable. If that preflight fails, the new
+configuration is not created.
+
+The installer manages the Span lifecycle plugin under an explicit scope:
 
 | Scope | Global `opencode.json` | Span data-root plugin | Targets passed with `--repo` | Receipt target not selected | Unregistered repos | User-managed global dirs |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -249,158 +292,114 @@ exist on disk:
 | `local` | remove Span-owned entry | remove Span-owned dir | report only | read-only; report only | never | report only |
 | `none` | remove Span-owned entry | remove Span-owned dir | report only | read-only; report only | never | report only |
 
-A fresh install defaults to `global`, printed. An upgrade uses the scope in the
-install receipt; when the receipt records no unambiguous scope, the installer
-stops and requires `--opencode-plugin-scope global|local|none`. It does not
-guess. A flag that changes the recorded scope prints the old and new values and
-cleans Span's old registration.
+A fresh install defaults to `global` and prints that choice. An upgrade uses
+the scope in the install receipt. If the receipt does not identify an
+unambiguous scope, rerun with:
+
+```text
+--opencode-plugin-scope global|local|none
+```
+
+The installer does not infer scope from incidental files on disk.
 
 Under `global`, the installer deploys the plugin under
 `<DATA_DIR>/../../opencode-plugin` and registers that directory once in the
-host's global `~/.config/opencode/opencode.json` (`plugins`). It does not write
-the plugin into a target repository. For every target passed with `--repo`, a
-Span plugin found under `.opencode/plugins` is reported as a conflict and left
-untouched. A receipt target that is not passed with `--repo` is inspected
-read-only; if a Span-owned copy remains there, the result is `conflict`, never
-`wired`.
+global OpenCode configuration. It does not write the plugin into a target
+repository.
 
-Under `local` and `none`, the target plugin is user-managed. Span removes only
-its own global registration and the data-root plugin, reports every local copy
-it finds, and leaves the target untouched. Exactly one user-managed copy is
-`external`; more than one is `conflict`; none is `absent` (`local`) or `disabled`
-(`none`).
+A Span plugin already found under a selected target's
+`.opencode/plugins` is reported as a conflict and left untouched.
 
-The MCP server itself never edits a target repository; host integration belongs
-to the installer. The current installer does not perform obsolete target-plugin
-compatibility migration. The plugin waits a bounded three
-seconds at prompt admission for the local MCP connection, so the first model
-request already sees the Span tools, and injects the lifecycle notice at session
-start for registered operational repositories, including cold stores. An edit-time notice names
-the changed paths and the exact `reconsider(changed_paths=[...])` call on the
-next context turn. The required agent lifecycle applies even if a notice is not delivered.
+Under `local` and `none`, target plugins are user-managed. Span removes only
+its own global registration and data-root plugin, reports local copies, and
+leaves the target untouched.
 
-OpenCode exposes the server's tools to the agent directly (`ask`, `record`,
-`reconsider`, prefixed by the server name). Its code-mode sandbox does not
-include MCP tools, so an agent that routes Span through `execute` sees
-`Unknown tool`; tell it to call the MCP tools directly, not through code mode.
+The current installer does not perform obsolete target-plugin compatibility
+migration.
 
-Reload OpenCode after changing its MCP configuration.
+The plugin waits a bounded three seconds at prompt admission for the local MCP
+connection so the first model request can see the Span tools. It also provides
+lifecycle notices for registered operational repositories. Correctness does not
+depend on those notices being delivered.
 
-### Upgrading an existing installation
+## Upgrade an existing installation
 
-The current installer reuses the receipt's absolute OpenCode MCP and plugin
+Re-run `span-install` with the current package or source checkout.
+
+For OpenCode, the installer reuses the receipt's recorded MCP and plugin
 configuration paths. If an upgrade receipt has no unambiguous plugin scope,
-rerun with `--opencode-plugin-scope global|local|none`; the installer does not
-guess. The current path does not migrate obsolete target-plugin copies. Use
-`span-install --verify-only` to inspect the current registration and scope, then
-restart the host after configuration changes.
+supply `--opencode-plugin-scope global|local|none`.
 
-When `--verify-only` is run without `--repo`, it also uses the repository
-bindings in the current receipt. This keeps registration and runtime readiness
-checks aligned with the installation being inspected.
-
----
-
-## Verify the installation
+Use:
 
 ```bash
 span-install --verify-only
-span-mcp --help
 ```
 
-The doctor is read-only. It reports runtime verification, store readiness, and
-supported host-registration observability. OpenCode and Claude are inspected
-from their user configuration when available; Codex registration is reported
-as `manual` because Span's read-only contract cannot deterministically inspect
-it. Registration health does not establish authenticated model delivery.
-Installation establishes operational readiness only; it does not mean Span
-already understands your repository. Continue with the [usage guide](usage.md).
+to inspect the resulting registration and scope, then restart the coding-agent
+host after configuration changes.
 
----
+A package upgrade by itself does not imply that older repository-store schemas
+have been transitioned. See [Upgrade an existing store](#upgrade-an-existing-store)
+when the runtime reports an explicit store transition requirement.
 
-## Back up, deploy and recover
+## Back up or recover an installation
 
-Span has two artifact classes.
+Backup, repository-portable deployment, restore, retention, and recovery are
+owned by [Backup and recovery](recovery.md).
 
-**Repository-portable** — one repository's store inside that repository at
-`.span/backups/`, intended to be committed with the code and loaded on a fresh
-deployment:
-
-```bash
-span-install --backup-repository <REPO_ROOT>
-span-install --verify-repository-backup <ARTIFACT_DIR>
-span-install --load-repository-backup <TARGET_ROOT>
-```
-
-The clone directory basename must match the repository id. Load verifies the
-artifact, snapshots the current data directory, replaces the store and
-explicitly rebinds its recorded root to the clone. Install first, then load:
-
-```bash
-span-install --repo .
-span-install --load-repository-backup .
-span-install --verify-only
-```
-
-**Full data-directory** — the whole installation, including the receipt,
-written outside Git:
-
-```bash
-span-install --data-dir <DATA_DIR> --backup
-span-install --verify-backup <BACKUP_DIR>
-span-install --data-dir <DATA_DIR> \
-  --restore-backup <BACKUP_DIR> --restore-confirm <name>
-```
-
-The installer takes the same full backup before a reinstall mutation.
-`structural/` is regenerable and excluded; the artifact records that reason.
-Retention is explicit (`--reap-backups KEEP`,
-`--reap-repository-backups <REPO_ROOT> <KEEP>`) and is never applied
-automatically. Stop every Span process before restoring or loading. The full
-policy, storage guidance, security consequence and isolated restore procedure
-are in [backup and recovery](recovery.md).
-
----
+Use that guide before a store transition or any operation where you need a
+restorable artifact. The installer also takes its defined backup before
+reinstall mutation according to the recovery contract.
 
 ## Remove or purge
 
-Installation has an explicit terminal. Nothing is removed automatically.
+Nothing is removed automatically.
+
+To remove Span-owned host integration:
 
 ```bash
 span-install --uninstall
+```
+
+`--uninstall` reverses only Span-owned host-side writes: MCP registration,
+hook entries, managed agent guidance/skills, and the install receipt. It does
+not remove repository data stores or structural indexes. Repeating it is a
+no-op.
+
+A malformed or duplicated managed marker is left for review rather than guessed
+at.
+
+To remove one repository's stored runtime data:
+
+```bash
 span-install --purge <repository-id>
+```
+
+This removes only that repository ID's lifecycle database/SQLite sidecars and
+structural directory. Repository IDs containing path separators or traversal
+are rejected.
+
+To inspect unreceipted repository IDs without deleting anything:
+
+```bash
 span-install --list-orphans
 ```
 
-`--uninstall` reverses only the host-side writes: the OpenCode/Codex/Claude MCP
-entry, Span's hook entries, the managed `AGENTS.md` block in each registered
-target, deployed skills carrying Span's origin marker, and the receipt. It never
-touches repository data (stores, structural indexes), and running it twice is a
-no-op. A malformed or duplicated `AGENTS.md` marker pair is left untouched for
-review rather than guessed at.
-
-`--purge <repository-id>` removes exactly that ID's
-`<data-dir>/<id>.db` (with any SQLite sidecars) and
-`<data-dir>/structural/<id>/`. The ID is one directory name; separators and
-traversal are rejected. Nothing else in the data directory is touched, so
-purging an unattributable store is also the recovery path for a repository
-identity conflict: re-initialize the same root afterwards.
-
-`--list-orphans` reports IDs present on disk and absent from the receipt. It
-deletes nothing. A repository can be registered through `--repo` alone, so
-absence from a receipt is evidence of an unreceipted ID, not proof that its
-data is unused.
+An orphan report means an ID exists on disk but is absent from the current
+receipt. It is not proof that the data is unused.
 
 ## Upgrade an existing store
 
-Beta 3 uses repository schema 15. The runtime never migrates at open; a
-supported older repository store fails closed with the explicit transition
-action. The separate installation Functional Pyramid store remains at
-installation schema 1; installer/setup creates or verifies it, and repository
-runtime open never manufactures it.
+Beta 3 uses repository schema 15. Runtime open never performs an implicit store
+migration. A supported older repository store fails closed with an explicit
+transition action.
 
-Stop every process using the repository stores, then run one phase at a time
-for each repository ID:
+The separate installation Functional Pyramid store remains at installation
+schema 1.
+
+Stop every process using the repository stores, then run one phase at a time for
+each repository ID:
 
 ```bash
 span-install --data-dir <DATA_DIR> \
@@ -416,57 +415,61 @@ span-install --data-dir <DATA_DIR> \
   --transition-root <TARGET_REPO>
 ```
 
-`inspect` and `verify` are observational. `apply` requires an explicit root
-whose basename matches the repository ID, holds exclusive store ownership
-through activation, archives a WAL-consistent copy, writes the lossless export
-and report, stages schema 15, verifies it, and atomically activates it.
+`inspect` and `verify` are observational.
+
+`apply` requires an explicit repository root whose basename matches the
+repository ID. It holds exclusive store ownership through activation, archives
+a WAL-consistent copy, writes the lossless export/report, stages schema 15,
+verifies it, and atomically activates it.
+
 Supported source repository schemas are 7 through 14.
 
-For schema 14, the Beta-3 transition copies every retained semantic, audit and
-governance table without reinterpretation, including the existing
-`functional_route_dependency_index`, and initializes
-`conclusion_curations` with zero dispositions. A migrated revision that is
-still CURRENT therefore begins CAPTURED and is discoverable as pending rather
-than being silently approved for shared reuse.
+### What the transition preserves
 
-For schema 13, the existing durable semantic/audit rows are copied into the
-schema-15 target and the repository-local `functional_route_dependency_index`
-is derived only from `FunctionalRouteSupport` already present in retained
-conclusions. No Functional Pyramid participation, installation receipt, route
-support, canonical authority support, or curation approval is invented.
-After transition, a registered repository is therefore still UNCONFIGURED until
-participation is explicitly recorded.
+For schema 14, the Beta-3 transition copies retained semantic, audit, governance,
+and route-index state without reinterpretation. It creates zero curation
+approvals. A migrated revision that is still support-current therefore begins
+as captured/pending knowledge rather than being silently approved for shared
+reuse.
 
-Earlier source schemas retain their documented preservation/mapping behavior
-while targeting the current schema-15 store. In particular, schema-12 context
-binding cannot be reconstructed from the old request digest, schema-10/11 use
-their durable mappings, and schemas 7–9 keep only the repository binding and
-declared authority seeds as current state while legacy semantic material remains
-in the transition export.
+For schema 13, durable semantic/audit rows are copied and the repository-local
+route dependency index is derived only from already-retained route support.
+Functional Pyramid participation, installation receipts, authority support, or
+curation approval are not invented.
+
+Earlier supported schemas retain their documented preservation boundaries while
+targeting schema 15. Older information that cannot be reconstructed remains in
+the transition export rather than being fabricated as current state.
 
 After repository transition, run normal installer/setup for the current
-candidate so `<DATA_DIR>/installation/functional-pyramid.db` exists with the
-current installation-store schema. That database owns Functional Pyramid
-participation, instance versions, exclusions and installation-scoped receipts;
-it is intentionally separate from every repository lifecycle database.
+candidate so the separate installation Functional Pyramid database is present
+and verified. Repository transition does not manufacture participation state.
 
-Roll back a repository transition before or after activation:
+### Roll back
+
+Rollback is explicit:
 
 ```bash
 span-install --data-dir <DATA_DIR> \
   --transition-store <repository-id> --transition-phase rollback
 ```
 
-Before activation, rollback discards only owned staging. After activation, it
-preserves writes made by the new-format repository store as
-`new-format-*.db` and restores the previous store. Restart the old binary
-after rollback. Functional Pyramid installation state has its own installation
-database and is not smuggled into a repository rollback artifact.
+Before activation, rollback discards owned staging. After activation, it
+preserves writes made by the new-format repository store as a new-format
+artifact and restores the previous store.
 
-The archive, export, mapping, report and restart-safe manifest live under
-`<DATA_DIR>/transitions/<repository-id>/`. Keep them until the new store and
-installation have been verified and retained according to your policy.
+Restart the old binary after rollback.
 
-Known limitation: an idle old process holding no SQLite lock cannot be detected,
-so the operator must stop old Span processes before transition. Rehearse on a
-disposable copy before a live upgrade.
+Transition artifacts live under:
+
+```text
+<DATA_DIR>/transitions/<repository-id>/
+```
+
+Keep the archive, export, mapping, report, and restart-safe manifest until the
+new store and installation have been verified and retained according to your
+policy.
+
+Known limitation: an idle old process holding no SQLite lock cannot be detected.
+Stop old Span processes before transition and rehearse on a disposable copy
+before a live upgrade.
