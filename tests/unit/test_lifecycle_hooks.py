@@ -141,7 +141,11 @@ class LifecycleHooksTest(unittest.TestCase):
                 m.FunctionalPyramidStatus(
                     state=m.FunctionalPyramidParticipationState.UNCONFIGURED
                 ),
-                ("UNCONFIGURED", "span-functional-pyramid", "Descriptive-only work remains available"),
+                (
+                    "UNCONFIGURED",
+                    "span-functional-pyramid",
+                    "Descriptive-only work remains available",
+                ),
             ),
             (
                 "excluded",
