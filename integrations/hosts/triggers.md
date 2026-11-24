@@ -5,19 +5,18 @@ Hooks deliver lifecycle reminders. The agent follows [the required lifecycle](..
 for investigation, retention and reassessment. Lifecycle operations check
 declared support independently of hook delivery.
 
-Beta-3 lifecycle-hook closure is currently reopened under programme tasks
-T14-H2–T14-H7. The tables below describe the managed wiring that exists today;
-they are not a claim that the corrected FD-58/FD-94 lifecycle-compliance
-contract is fully implemented. In particular, final closure still requires
-complete changed-scope handling, session edit accumulation, installation-identity
-parity, singular session-entry composition and expanded executable acceptance.
+Beta-3 T14-H2–H6 lifecycle-hook implementation and executable acceptance are
+present on the correction branch. T14-H7 owns the exact-head CI closure. The
+tables below describe the delivered managed wiring; they do not promote
+configured wiring or automated acceptance into an authenticated live-model
+delivery claim.
 
 ## Managed integration
 
 | Host | Implemented integration | Version-1 delivery qualification |
 | --- | --- | --- |
 | Codex | MCP registration, skills, managed repository snippet; hooks appended to an existing `~/.codex/hooks.json` with the same configured Span data directory as the MCP registration. | Managed wiring is supported and installer-tested. Authenticated Beta-3 model-delivered hook behavior remains **UNVERIFIED**. |
-| OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait plus the FD-58 adoption notice. | Managed integration and packaged notice delivery are verified by the automated plugin lane. Authenticated Beta-3 live-model delivery remains **UNVERIFIED**. |
+| OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait, one composed session-entry notice, complete changed-scope accumulation and completion handoff. | The packaged plugin has an executable real-wrapper/real-`span-hooks`/temporary-store acceptance path. Authenticated Beta-3 live-model delivery remains **UNVERIFIED**. |
 | Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`. | Registration/health and installer behavior are verified. Authenticated Beta-3 model-delivered grammar and caller identity remain **UNVERIFIED**. |
 
 The supported managed hosts are Codex, OpenCode, and Claude Code. Current
@@ -34,15 +33,15 @@ The canonical installer implementation is
 | Event | Command |
 | --- | --- |
 | `SessionStart` | `span-hooks session-start` |
-| OpenCode prompt admission | bounded wait for the MCP connection, then `span-hooks adoption-primer` through the `context` hook |
+| OpenCode session creation / first-context fallback | `span-hooks session-start`; both delivery paths share the same composed entry obligation and do not emit competing primers |
 | `PostToolUse` for configured edit tools | `span-hooks source-changed` |
 | `Stop` | `span-hooks session-stop` |
 
 Every installer-managed command carries the configured Span data-directory
 identity; a non-default installation does not fall through to the platform
 default. OpenCode's deployed wrapper already provides this identity, Claude
-commands already carry it explicitly, and Beta-3 H4 now applies the same rule
-to Codex.
+commands already carry it explicitly, and Beta-3 applies the same rule to
+Codex.
 
 ### Pre-investigation event qualification
 

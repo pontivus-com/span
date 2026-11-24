@@ -43,6 +43,15 @@
 - Keep hooks advisory: they do not record, curate, make support current, create
   Functional Pyramid participation, or turn configured wiring into a claim of
   authenticated live-model delivery.
+- Evaluate the complete changed scope before bounding diagnostic presentation
+  and preserve the union of unconsumed edits until lifecycle handoff.
+- Compose session entry once from readiness, Functional Pyramid state and
+  semantic orientation; completion notices operate only on known outstanding
+  session work.
+- Preserve the configured Span data-directory identity across Codex, Claude and
+  OpenCode hook execution, and translate only documented native host fields.
+  Pre-investigation remains guidance-only where a host cannot provide a reliable
+  non-blocking advisory interception point.
 
 ### Installer, governance and external-integration correction
 

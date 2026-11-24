@@ -41,12 +41,14 @@ Span ships hook commands for a small set of lifecycle moments:
 
 | Hook command | Purpose |
 | --- | --- |
-| `session-start` | Check whether Span is operational for the registered repository containing the working directory. |
-| `adoption-primer` | Remind the agent of the required Span lifecycle when a registered repository is ready. |
-| `source-changed` | Inspect bounded changed paths for retained knowledge that may need attention. |
+| `session-start` | Compose one readiness, Functional Pyramid participation/health and semantic-orientation notice for the active repository. |
+| `adoption-primer` | Emit the standalone lifecycle primer when invoked directly; managed OpenCode session entry uses the composed `session-start` path. |
+| `source-changed` | Evaluate the complete normalized changed scope through the canonical reconsider preview, then render bounded diagnostic detail. |
 | `session-stop` | Report bounded support effects associated with supplied session paths. |
 
-These notices reuse Span's normal readiness and canonical dependency-effect
+Session entry is lifecycle-singular: readiness, Functional Pyramid state and
+semantic orientation are composed into one notice rather than competing host
+instructions. These notices reuse Span's normal readiness and canonical dependency-effect
 projection. Change notices do not maintain a second SOURCE-only dependency scan
 or freshness policy; they consume the same containment/direct/indirect,
 discovery, authority, Functional Pyramid route, premise-closure and
@@ -117,7 +119,7 @@ Span can wire lifecycle reminders for its supported managed hosts.
 
 The exact installation behavior differs by host:
 
-- **Codex** — hook configuration can be managed alongside the MCP setup;
+- **Codex** — hook configuration is managed alongside the MCP setup and carries the same configured Span data directory;
 - **Claude Code** — supported session/edit/stop hook entries can be added to an
   existing user settings file while preserving unrelated configuration; and
 - **OpenCode** — the Span lifecycle plugin supplies the host-side reminder
