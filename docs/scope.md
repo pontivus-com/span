@@ -9,8 +9,6 @@ Span has a deliberately narrow job:
 It does not replace the coding agent, the source of project authority, or the
 engineering tools used to do the work.
 
-This page explains where that boundary sits.
-
 ## What Span owns
 
 Span owns the lifecycle around maintained software knowledge.

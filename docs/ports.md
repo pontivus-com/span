@@ -1,8 +1,5 @@
 # Port contracts
 
-Use this page when a contributor needs to change a capability boundary between
-Span's semantic composition and an effectful implementation.
-
 Ports carry canonical domain types directly. Services compose these contracts;
 shell implementations own effects. A port is not a place to introduce a second
 DTO/domain shape or to relocate semantic decisions into an adapter.

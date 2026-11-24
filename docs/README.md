@@ -14,7 +14,7 @@ knowledge-factory problem framing.
 
 | I want to… | Start here |
 | --- | --- |
-| Try Span for the first time | [First investigation](onboarding-runbook.md) |
+| Try Span for the first time | [Install and connect](install.md) → [First investigation](onboarding-runbook.md) |
 | Use Span during normal coding work | [Using Span](usage.md) |
 | Understand the knowledge lifecycle | [Agent lifecycle](lifecycle.md) |
 | Understand how Span keeps knowledge aligned with change | [Support currency and reassessment](freshness.md) |

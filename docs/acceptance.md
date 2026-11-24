@@ -4,8 +4,6 @@
 > active Beta-3 candidate has demonstrated and what remains unverified. It does
 > not define product requirements; those remain in the Functional Pyramid.
 
-Use this page to answer one question:
-
 > **What can we currently claim about the Beta-3 candidate, based on evidence?**
 
 Historical Beta-1 and 0.11 campaign evidence has moved to
@@ -117,7 +115,7 @@ invalidate the exact-head claim.
 
 The documentation remediation corrected, among other things:
 
-- problem/outcome-first public narrative and progressive disclosure under F14;
+- problem/outcome-first public narrative and dependency-ordered guidance under F14;
 - user guides separated from exact MCP/operator reference;
 - current verification separated from historical acceptance evidence;
 - current Layer-4 authority separated from historical technical-design

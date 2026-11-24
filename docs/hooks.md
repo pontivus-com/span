@@ -125,5 +125,4 @@ Use:
 - [Install and connect](install.md) for hook/plugin configuration; and
 - [Acceptance and evidence](acceptance.md) for verified host-delivery evidence.
 
-The shipped runtime remains the implementation source for exact hook behavior;
-this guide explains their user-facing role and boundaries.
+The shipped runtime remains the implementation source for exact hook behavior.

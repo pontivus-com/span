@@ -1,7 +1,5 @@
 # Agent Skills integration
 
-Use this page when contributing to the packaged agent guidance.
-
 Agent work follows [the required Span lifecycle](lifecycle-contract.md#required-agent-completion).
 The skills project that lifecycle into the moments a coding agent or reviewer
 recognizes; they do not create another semantic or requirements owner.

@@ -1,8 +1,5 @@
 # Repository overview
 
-Use this page when you are about to change Span and need to find the right
-implementation area.
-
 For the architectural reasoning behind these boundaries, read
 [Architecture](architecture.md).
 

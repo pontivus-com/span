@@ -1,8 +1,5 @@
 # Architecture
 
-This page is for contributors who need to understand **where Span's behavior is
-owned** before changing it.
-
 Span follows a functional-core / imperative-shell design:
 
 ```mermaid

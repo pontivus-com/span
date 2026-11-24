@@ -1,13 +1,10 @@
 # Lifecycle vocabulary
 
-Use this page when contributing to Span code and you need the canonical domain
-carrier names behind the public lifecycle.
+Canonical lifecycle carriers are exported from `span.core.model`.
+Reference-only public record wire contracts live in
+`span.core.schema.record_wire`.
 
-Canonical carriers are exported from `span.core.model`. Reference-only public
-record wire contracts live in `span.core.schema.record_wire`.
-
-The installed schemas and [MCP reference](mcp.md) own executable public grammar;
-this page explains the internal canonical vocabulary.
+The installed schemas and [MCP reference](mcp.md) own executable public grammar.
 
 ## Understandings and conclusions
 
