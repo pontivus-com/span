@@ -30,10 +30,12 @@ document does not add a second Functional Pyramid contract.
 
 The reopened T14 hook review strengthened FD-58/FD-94 and the corresponding
 hook invariants. I-28 now names live complete-input, canonical-preview,
-composed-entry, native Codex translation and deployed packaged-host evidence;
-the Node plugin lane additionally proves native multi-file patch normalization,
-explicit incomplete input, no silent session eviction, multi-edit union and
-completion handoff. Exact-head release closure remains separate under T14-H7.
+composed-entry, native Codex and Claude Code translation and deployed
+packaged-host evidence; the Node plugin lane additionally proves native
+multi-file patch normalization, explicit incomplete input, no silent session
+eviction, multi-edit union, clean-preview/clean-completion handoff and
+stale-notice invalidation with retained-union retry. Exact-head release closure
+remains separate under T14-H7.
 
 | ID | Invariant | Verdict | Evidence |
 |---|---|---|---|
@@ -64,7 +66,7 @@ completion handoff. Exact-head release closure remains separate under T14-H7.
 | I-25 | Runtime independence from skill text | Test | `test_implementation_ignores_skills` (no implementation file depends on skill content) |
 | I-26 | Lifecycle placement | Test | `AnswerServiceTest`; `test_unknown_surface_is_unassessed` |
 | I-27 | Offline bootstrap isolation | Test | `InitializationContractTest`; `test_cs07_uninitialized_context_creates_no_store` |
-| I-28 | Hook canonical-effect reuse, complete-input evaluation and read-only preview | Test | `test_session_entry_composes_four_participation_health_branches_once`; `test_changed_scope_projection_receives_complete_input_before_render_bound`; `test_changed_scope_preview_reuses_projection_without_context_issuance`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_codex_post_tool_emits_structured_context_for_complete_native_scope`; `test_codex_post_tool_reports_incomplete_native_scope_without_guessing`; `test_packaged_opencode_plugin_reaches_real_installed_hook_store`; `tests/plugin/test_span_hooks_notice.mjs` (native patch, incomplete input, no eviction, multi-edit union, handoff) |
+| I-28 | Hook canonical-effect reuse, complete-input evaluation and read-only preview | Test | `test_session_entry_composes_four_participation_health_branches_once`; `test_changed_scope_projection_receives_complete_input_before_render_bound`; `test_changed_scope_preview_reuses_projection_without_context_issuance`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_codex_post_tool_emits_structured_context_for_complete_native_scope`; `test_codex_post_tool_keeps_reconsider_obligation_when_preview_is_clean`; `test_codex_post_tool_reports_incomplete_native_scope_without_guessing`; `test_claude_post_tool_uses_documented_absolute_path_and_structured_context`; `test_claude_post_tool_reports_incomplete_native_scope_without_guessing`; `test_packaged_opencode_plugin_reaches_real_installed_hook_store`; `tests/plugin/test_span_hooks_notice.mjs` (native patch, incomplete input, no eviction, multi-edit union, clean handoff, stale-notice retry) |
 | I-29 | No automatic semantic interpretation | Test | `LifecycleHooksTest`; `test_hooks_never_build` (hook paths never build or record) |
 | I-30 | No automatic refresh | Test | `LifecycleHooksTest`; `test_changed_scope_preview_reuses_projection_without_context_issuance` (preview leaves persisted lifecycle state unchanged) |
 | I-31 | Readiness/trust separation | Test | `StartupRegistrationTest`; `SupportServiceTest` (readiness is not currency) |

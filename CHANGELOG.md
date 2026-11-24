@@ -59,6 +59,14 @@
 - Cover OpenCode's documented multi-file `patch` tool, diagnose incomplete
   native edit payloads without guessing, and retain per-session changed scope
   without arbitrary eviction or correctness-bearing notice truncation.
+- Keep the post-edit lifecycle obligation independent from preview content: a
+  clean canonical preview still requires `reconsider(changed_scope)`; a failed
+  newer OpenCode preview invalidates any stale older notice while preserving the
+  full accumulated path union for retry.
+- Align Claude Code hooks with its native contract: documented `Write|Edit`
+  PostToolUse absolute `tool_input.file_path` is translated to structured
+  model-visible context; ambiguous path shapes are diagnosed, and no redundant
+  Stop hook is installed.
 - Package skills, lifecycle guidance and the OpenCode plugin from one canonical
   asset manifest, and prove the wheel-bundled plugin through the isolated
   installed `span-hooks` acceptance path.

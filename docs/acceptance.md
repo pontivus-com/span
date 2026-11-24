@@ -160,10 +160,12 @@ workstream:
   re-establishment contexts;
 - native host adapters evaluate complete changed scope before notice bounding:
   Codex translates canonical `apply_patch` PostToolUse input to structured
-  additional context, while OpenCode retains documented edit/write/patch scope
-  until handoff and diagnoses incomplete native payloads rather than guessing;
-  host-trigger documentation no longer carries stale Beta-1/T13 candidate
-  claims; and
+  additional context; Claude Code translates documented `Write|Edit`
+  PostToolUse absolute `file_path` input to the same structured lifecycle
+  handoff; and OpenCode retains documented edit/write/patch scope until
+  handoff, including clean previews and retry after helper failure, while
+  diagnosing incomplete native payloads rather than guessing. Host-trigger
+  documentation no longer carries stale Beta-1/T13 candidate claims; and
 - the new semantic skill/hook regressions increased the measured
   `test_lines` ratchet from **32,443 to 32,486**. No production/source-quality
   ceiling or product gate was weakened.
@@ -172,11 +174,15 @@ The earlier F14 and skill/hook runs remain evidence only for their exact trees.
 The deeper lifecycle review corrected FD-58/FD-94 and Technical Design §22.
 T14-H2–H6 now implement complete changed-scope evaluation, session edit
 accumulation without arbitrary eviction/truncation, managed data-directory
-identity, documented native Codex/OpenCode event mapping, singular
-session-entry/completion composition, representative preview purity/parity, and
-the minimum executable hook acceptance set. The installed lane now builds from
-the canonical packaging inputs and proves the wheel-bundled OpenCode plugin can
-be deployed through the real installed `span-hooks` path.
+identity, documented native Codex/Claude/OpenCode event mapping, mandatory
+post-edit handoff even when preview finds no affected retained conclusion,
+stale-notice invalidation without path loss, singular session-entry/completion
+composition, representative preview purity/parity, and the minimum executable
+hook acceptance set. The installed lane now builds from the canonical packaging
+inputs and proves the wheel-bundled OpenCode plugin can be deployed through the
+real installed `span-hooks` path. The post-audit executable evidence raises
+only the measured Python `test_lines` ratchet, from **32,771 to 33,110**; no
+source-quality ceiling or product gate is weakened.
 
 The authoritative Beta-3 T14 closure proof is the required GitHub CI check
 attached to the exact H7 candidate commit. Its run identifier is intentionally
@@ -223,7 +229,9 @@ For the current Version-1 candidate:
   `span-hooks` → temporary-store acceptance path;
 - Codex managed hook acceptance covers canonical `apply_patch` PostToolUse
   payload normalization and structured `additionalContext` output;
-- Claude Code registration/health/installer support is present; and
+- Claude Code managed hook acceptance covers documented `Write|Edit`
+  PostToolUse absolute-path normalization, structured `additionalContext`,
+  clean-preview handoff and explicit incomplete-input diagnostics; and
 - authenticated live Version-1 model delivery remains **UNVERIFIED** unless a
   separate recorded acceptance run establishes it.
 

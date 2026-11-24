@@ -17,7 +17,7 @@ delivery claim.
 | --- | --- | --- |
 | Codex | MCP registration, skills, managed repository snippet; `SessionStart` plus canonical `apply_patch` `PostToolUse` hooks are appended to an existing `~/.codex/hooks.json` with the same configured Span data directory as the MCP registration. The post-tool adapter reads documented `tool_input.command`, normalizes exact patch file markers, evaluates the canonical changed-scope preview and returns structured `additionalContext`. | Managed wiring and native-payload translation are executable-tested. Authenticated Beta-3 model-delivered hook behavior remains **UNVERIFIED**. |
 | OpenCode | MCP registration, skills, managed snippet, and the installer-deployed lifecycle plugin: a bounded MCP readiness wait, one composed session-entry notice, documented `edit`/`write`/`patch` normalization, retained complete changed-scope accumulation and completion handoff. Unsupported native shapes are diagnosed as incomplete rather than guessed. | The wheel-bundled plugin has an executable deployed-wrapper/real-`span-hooks`/temporary-store acceptance path. Authenticated Beta-3 live-model delivery remains **UNVERIFIED**. |
-| Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`. | Registration/health and installer behavior are verified. Authenticated Beta-3 model-delivered grammar and caller identity remain **UNVERIFIED**. |
+| Claude Code | User-scope MCP registration, skills under an existing `~/.claude` root, and lifecycle hooks in `~/.claude/settings.json`: `SessionStart` plus documented `Write|Edit` `PostToolUse` with absolute `tool_input.file_path`, canonical preview and structured `additionalContext`. | Native-payload translation and installer behavior are executable-tested. Authenticated Beta-3 model-delivered hook behavior remains **UNVERIFIED**. |
 
 The supported managed hosts are Codex, OpenCode, and Claude Code. Current
 Beta-3 documentation claims only the delivery evidence actually observed for
@@ -33,10 +33,9 @@ The canonical installer implementation is
 | Host event | Managed behavior |
 | --- | --- |
 | Codex `SessionStart` | `span-hooks session-start` |
-| Codex `PostToolUse` matching canonical `apply_patch` | `span-hooks codex-post-tool`; reads documented `tool_input.command`, normalizes exact add/update/delete/move patch markers, evaluates the canonical changed-scope projection, and emits structured `hookSpecificOutput.additionalContext` when action is required |
+| Codex `PostToolUse` matching canonical `apply_patch` | `span-hooks codex-post-tool`; reads documented `tool_input.command`, normalizes exact add/update/delete/move patch markers, evaluates the canonical changed-scope projection, and always emits structured `hookSpecificOutput.additionalContext` carrying the post-edit reconsider handoff |
 | Claude Code `SessionStart` | `span-hooks session-start` |
-| Claude Code `PostToolUse` for `Write|Edit|MultiEdit` | `span-hooks source-changed` |
-| Claude Code `Stop` | `span-hooks session-stop` |
+| Claude Code `PostToolUse` for documented `Write|Edit` | `span-hooks claude-post-tool`; consumes documented absolute `tool_input.file_path`, evaluates the canonical preview, and always emits structured `hookSpecificOutput.additionalContext` carrying the post-edit reconsider handoff |
 | OpenCode session creation / first-context fallback | `span-hooks session-start`; both delivery paths share the same composed entry obligation and do not emit competing primers |
 | OpenCode `tool.execute.after` for documented `edit`, `write` or `patch` | normalize `input.path` or `input.patchText`, preserve the complete per-session union, then invoke `span-hooks source-changed` |
 | OpenCode `session.idle` | invoke `span-hooks session-stop` only for retained changed paths that have not yet been handed off |
@@ -68,8 +67,11 @@ patch sections (including the move target carried by the native patch grammar).
 Missing or adjacent legacy-shaped fields are not guessed into a changed-scope
 carrier; the plugin emits an explicit incomplete-scope reminder instead. The
 per-session path union has no arbitrary capacity eviction or correctness-bearing
-notice truncation and is released only after successful handoff/no-action
-projection or explicit session deletion.
+notice truncation. A clean canonical preview still creates the mandatory
+post-edit handoff; if a newer union cannot be previewed, any older pending
+notice is invalidated without discarding paths, and the complete union remains
+for retry. Scope is released only after successful lifecycle handoff or explicit
+session deletion.
 
 For Codex, the managed post-edit interception point is canonical `apply_patch`
 `PostToolUse`. The adapter consumes documented `tool_name` and
@@ -77,6 +79,14 @@ For Codex, the managed post-edit interception point is canonical `apply_patch`
 model-visible structured `additionalContext`. Plain PostToolUse stdout is not
 used. Span does not install a Codex `Stop` hook because this adapter retains no
 host-local changed-scope state after the immediate post-tool handoff.
+
+For Claude Code, the managed post-edit interception point is documented
+`Write|Edit` `PostToolUse`. The adapter consumes only the documented
+absolute `tool_input.file_path`, rejects missing/relative shapes as incomplete,
+evaluates the same canonical preview and returns structured
+`hookSpecificOutput.additionalContext`. A clean preview still carries the
+mandatory reconsider handoff. Span does not install a Claude Code `Stop` hook
+because this adapter retains no host-local changed-scope state after PostToolUse.
 
 The OpenCode plugin scope is explicit: `--opencode-plugin-scope
 global|local|none`. Under `global` the plugin is deployed under Span's own data

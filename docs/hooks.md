@@ -46,6 +46,7 @@ Span ships hook commands for a small set of lifecycle moments:
 | `source-changed` | Evaluate the complete normalized changed scope through the canonical reconsider preview, then render bounded diagnostic detail. |
 | `session-stop` | Report bounded support effects associated with supplied session paths. |
 | `codex-post-tool` | Translate the documented Codex `PostToolUse`/`apply_patch` payload into complete changed scope and emit structured model-visible `additionalContext`. |
+| `claude-post-tool` | Translate documented Claude Code `Write|Edit` PostToolUse absolute `tool_input.file_path` into complete changed scope and structured model-visible `additionalContext`. |
 
 Session entry is lifecycle-singular: readiness, Functional Pyramid state and
 semantic orientation are composed into one notice rather than competing host
@@ -76,10 +77,12 @@ Hooks do not:
 When a hook reports that something may need attention, the agent follows the
 normal lifecycle to investigate and record the result.
 
-For example, an edit notice can tell the agent to call `reconsider` with the
-changed paths. The hook may preview the canonical affected projection to decide
-whether a notice is useful, but it does not persist a reconsideration context,
-perform a disposition, or make support current.
+For example, an edit notice tells the agent to call `reconsider` with the
+changed paths. The hook may preview the canonical affected projection to add
+bounded diagnostic context, but a clean preview does **not** cancel the
+post-edit lifecycle transition: a complete observed external edit still hands
+off `reconsider(changed_scope)`. The preview never persists a reconsideration
+context, performs a disposition, or makes support current.
 
 ## Silence does not mean everything is current
 
@@ -121,8 +124,11 @@ Span can wire lifecycle reminders for its supported managed hosts.
 The exact installation behavior differs by host:
 
 - **Codex** — hook configuration is managed alongside the MCP setup and carries the same configured Span data directory; session entry uses `SessionStart`, while canonical `apply_patch` edits use documented `PostToolUse` input and structured `additionalContext` rather than plain stdout;
-- **Claude Code** — supported session/edit/stop hook entries can be added to an
-  existing user settings file while preserving unrelated configuration; and
+- **Claude Code** — session entry and documented `Write|Edit` PostToolUse
+  hooks can be added to an existing user settings file while preserving
+  unrelated configuration; the post-tool adapter consumes absolute
+  `tool_input.file_path` and emits structured `additionalContext`, with no
+  redundant Stop hook; and
 - **OpenCode** — the Span lifecycle plugin supplies the host-side reminder
   path under the configured plugin scope.
 
