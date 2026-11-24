@@ -435,7 +435,9 @@ class LifecycleHooksTest(unittest.TestCase):
             result["hookSpecificOutput"]["additionalContext"],
         )
 
-    def test_claude_post_tool_uses_documented_absolute_path_and_structured_context(self):
+    def test_claude_post_tool_uses_documented_absolute_path_and_structured_context(
+        self,
+    ):
         payload = {
             "hook_event_name": "PostToolUse",
             "tool_name": "Write",

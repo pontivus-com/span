@@ -2164,9 +2164,7 @@ class HookWiringTest(unittest.TestCase):
                 config["hooks"]["PostToolUse"][0]["matcher"],
                 "Write|Edit",
             )
-            self.assertTrue(
-                any("claude-post-tool" in command for command in commands)
-            )
+            self.assertTrue(any("claude-post-tool" in command for command in commands))
             self.assertTrue((settings_path.with_suffix(".json.bak-span")).is_file())
 
     def test_claude_missing_settings_skips(self):

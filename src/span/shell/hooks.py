@@ -518,7 +518,6 @@ def cmd_codex_post_tool(data_dir, repo_root=None):
     )
 
 
-
 def _claude_post_tool_notice(data_dir, payload) -> str | None:
     """Translate only Claude Code's documented PostToolUse file-tool shape."""
     if not isinstance(payload, dict):
@@ -571,6 +570,7 @@ def cmd_claude_post_tool(data_dir, repo_root=None):
             separators=(",", ":"),
         )
     )
+
 
 def cmd_session_stop(data_dir, repo_root=None):
     mapping = repo_map(data_dir)
