@@ -1151,6 +1151,7 @@ class FunctionalPyramidResolverTest(unittest.TestCase):
         self.assertEqual(broad_view.scope_relation, m.FunctionalScopeRelation.COVERED)
         self.assertIn("ctx-child", {item.context_id for item in broad_view.contexts})
 
+
 class FunctionalPyramidContractSublayerTest(unittest.TestCase):
     def test_explicit_p2w_to_p2s_governing_edge_is_valid(self):
         member = _member(
