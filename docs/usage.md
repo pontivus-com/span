@@ -1,16 +1,17 @@
 # Using Span
 
-Span has two ordered lifecycles:
+Span has two related lifecycles.
 
-1. resolve Functional Pyramid participation for the repository's intended
-   governance mode; then
-2. run the ordinary engineering lifecycle.
+For **governed use**, Functional Pyramid initialization/adoption comes first;
+the ordinary engineering lifecycle then consumes that governing orientation.
+The governance lifecycle is revisited when project governance changes.
 
-For governed repositories, the first lifecycle is completed once and revisited
-when governance changes. The second lifecycle repeats during normal software
-work.
+For **descriptive-only use**, the ordinary semantic lifecycle remains available
+without an ACTIVE Functional Pyramid. EXCLUDED records an explicit
+non-participation decision; UNCONFIGURED remains descriptive-capable but is not
+a completed governance setup.
 
-## Before normal work: resolve Functional Pyramid participation
+## Before governed work: resolve Functional Pyramid participation
 
 Check the repository's Functional Pyramid status.
 
@@ -34,7 +35,7 @@ The exact Functional Pyramid selectors and lifecycle actions are in the
 
 ## The ordinary engineering loop
 
-Once participation is intentionally resolved, normal work follows:
+Normal semantic work follows:
 
 1. **ask before you derive understanding**;
 2. **investigate with your normal tools**;
@@ -167,7 +168,8 @@ and verification contracts.
 
 ## The operating rule
 
-After governance participation is resolved:
+For governed work, complete the required governance initialization first. The
+repeating semantic lifecycle is:
 
 > **Ask before deriving → investigate normally → capture what you establish →
 > review for shared reuse → reconsider after change.**

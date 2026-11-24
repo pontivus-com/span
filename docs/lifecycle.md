@@ -7,14 +7,16 @@ initialization/adoption establishes the governing map first. The ordinary
 software-knowledge lifecycle then uses that governing orientation during each
 task.
 
+Repositories not using governance can enter the descriptive semantic lifecycle
+without ACTIVE participation. UNCONFIGURED remains a valid descriptive state;
+EXCLUDED records an explicit non-participation decision.
+
 ```text
 repository installed and ready
-  ↓
-resolve Functional Pyramid participation
-  ├─ ACTIVE + VALID ───────────────┐
-  └─ EXCLUDED ────────────────────┤
-                                  ↓
-                           start a task
+  ├─ governed use → initialize/adopt → ACTIVE + VALID ─┐
+  └─ descriptive use → UNCONFIGURED or EXCLUDED ──────┤
+                                                       ↓
+                                                start a task
                                   ↓
                         ask what is known
                                   ↓
@@ -32,9 +34,8 @@ resolve Functional Pyramid participation
                                   ↺
 ```
 
-UNCONFIGURED is a valid product state but not a completed governance setup.
-ACTIVE + DEGRADED requires governance repair before the repository is treated as
-governance-ready.
+UNCONFIGURED is not a completed governance setup. ACTIVE + DEGRADED requires
+governance repair before the repository is treated as governance-ready.
 
 ## Initialize governing context before governed runtime
 
@@ -47,9 +48,10 @@ infer governance from repository layout, filenames, or semantic similarity, and
 it does not copy governing prose into a second authority store.
 
 Once a repository is ACTIVE + VALID, ordinary `ask` resolves the governing
-projection for the same software scope as the semantic request. An explicitly
-EXCLUDED repository continues with the descriptive semantic lifecycle without a
-governing projection.
+projection for the same software scope as the semantic request. UNCONFIGURED and
+EXCLUDED repositories can continue with the descriptive semantic lifecycle
+without an ACTIVE governing projection; UNCONFIGURED must be initialized before
+the user relies on governed behavior.
 
 See [First investigation](onboarding-runbook.md) for the first setup/use flow and
 [Evidence, authority, and interpretation](authority-trust.md) for the proof
@@ -141,7 +143,8 @@ See [Interpretation and recording](interpretation.md).
 
 ## Ordinary runtime in one sentence
 
-After participation is intentionally resolved:
+For governed work, complete initialization/adoption first. The repeating
+semantic lifecycle is:
 
 > **Ask before deriving → investigate normally → capture what you establish →
 > review for shared reuse → reconsider after change.**
