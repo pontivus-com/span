@@ -1,4 +1,4 @@
-"""Build hook: materialize the packaged assets from their canonical sources."""
+"""Build hook: expose canonical external assets as generated package data."""
 
 from __future__ import annotations
 
@@ -11,22 +11,25 @@ from setuptools.command.build_py import build_py as _build_py
 ROOT = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from sync_assets import sync_assets  # noqa: E402
+from sync_assets import asset_manifest  # noqa: E402
 
 
 class build_py(_build_py):
-    """Copy canonical generated assets and declare them as wheel outputs."""
+    """Map canonical assets directly into the wheel package-data build."""
 
-    def run(self) -> None:
-        super().run()
-        self._span_generated_assets = sync_assets(
-            pathlib.Path(self.build_lib) / "span" / "_assets"
-        )
-
-    def get_outputs(self, include_bytecode: bool = True) -> list[str]:
-        outputs = list(super().get_outputs(include_bytecode=include_bytecode))
-        generated = getattr(self, "_span_generated_assets", ())
-        return outputs + [str(path) for path in generated]
+    def get_data_files(self):
+        files = list(super().get_data_files())
+        asset_root = pathlib.Path(self.build_lib) / "span" / "_assets"
+        for source, relative in asset_manifest():
+            files.append(
+                (
+                    "span",
+                    str(source.parent),
+                    str(asset_root / relative.parent),
+                    [source.name],
+                )
+            )
+        return files
 
 
 setup(cmdclass={"build_py": build_py})
