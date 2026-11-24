@@ -1,8 +1,5 @@
 # Frequently asked questions
 
-These answers are intentionally short. Follow the linked guide or reference when
-you need the full workflow or exact mechanics.
-
 ## What problem does Span solve?
 
 Coding agents often have to rediscover understanding that previous engineering
@@ -42,13 +39,17 @@ These capabilities can complement each other.
 
 ## What does an agent actually do with Span?
 
-For ordinary work:
+For governed use, first resolve Functional Pyramid participation so the project
+guidance is ACTIVE + VALID. Then ordinary work follows:
 
 > **Ask before deriving → investigate normally → capture what you establish →
 > review for shared reuse → reconsider after change.**
 
-See [Using Span](usage.md) for the normal workflow and
-[First investigation](onboarding-runbook.md) for a first end-to-end example.
+An explicitly EXCLUDED repository uses the same descriptive lifecycle without a
+governing projection.
+
+Start with [First investigation](onboarding-runbook.md), then use
+[Using Span](usage.md) for normal work.
 
 ## Does installation explain my repository automatically?
 
@@ -88,14 +89,17 @@ See [Evidence, authority, and interpretation](authority-trust.md).
 
 ## Do I have to configure the Functional Pyramid before using Span?
 
-No.
+If the repository is intended to use project governance, yes: resolve
+Functional Pyramid participation before relying on governed Span work.
 
-The ordinary descriptive knowledge lifecycle works without Functional Pyramid
-participation. Governance participation adds the applicable project-guidance
-side of the task context.
+A governed repository proceeds as ACTIVE + VALID. A repository deliberately
+outside the governance model can be explicitly EXCLUDED and use the descriptive
+semantic lifecycle without a governing projection.
 
-If you are responsible for configuring it, use the exact Functional Pyramid
-reference in [MCP reference](mcp.md).
+UNCONFIGURED is a real state, but it is not a completed governance setup.
+
+Start with [First investigation](onboarding-runbook.md). Exact Functional
+Pyramid operations are in the [MCP reference](mcp.md).
 
 ## What happens when project guidance changes in another repository?
 

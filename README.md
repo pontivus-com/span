@@ -158,28 +158,28 @@ For a published package release, install `span-mcp` and run:
 span-install --repo /path/to/your/repo
 ```
 
-Then reconnect your coding agent and use Span from the engineering task you were
-already going to do.
+Then reconnect your coding agent.
 
-See [Install and connect](docs/install.md) for setup details and
-[First investigation](docs/onboarding-runbook.md) for the first end-to-end
-workflow.
+For repositories that use project governance, the first-use flow resolves
+Functional Pyramid participation before governed engineering work begins. That
+establishes which canonical goals, principles, contracts, functional design,
+and technical design apply without copying those documents into Span.
+
+See [Install and connect](docs/install.md) for setup details, then follow
+[First investigation](docs/onboarding-runbook.md).
 
 ## Go deeper
 
-The README is intentionally the overview. The documentation set uses progressive
-disclosure so you can go deeper only when you need to.
+1. [First investigation](docs/onboarding-runbook.md) — initialize project
+   guidance where applicable and complete the first end-to-end knowledge loop.
+2. [Using Span](docs/usage.md) — the normal day-to-day workflow after setup.
+3. [Concepts and product model](docs/README.md#concepts) — maintained knowledge,
+   change, evidence, and project guidance.
+4. [MCP reference](docs/mcp.md) — exact public tool grammar.
 
-- [Using Span](docs/usage.md) — the normal day-to-day workflow.
-- [First investigation](docs/onboarding-runbook.md) — a complete first-use
-  walkthrough.
-- [Concepts and product model](docs/README.md#concepts) — how maintained
-  knowledge, change, evidence, and project guidance fit together.
-- [MCP reference](docs/mcp.md) — exact public tool grammar.
-- [Install and connect](docs/install.md) — host configuration, upgrades, and
-  operator detail.
-- [Documentation index](docs/README.md) — contributor, authority, verification,
-  and programme material.
+Use [Install and connect](docs/install.md) for host configuration, upgrades, and
+operator detail, and the [documentation index](docs/README.md) for contributor,
+authority, verification, and programme material.
 
 Span 1.0 is currently in Beta. Exact candidate verification and host-delivery
 status are recorded in [acceptance](docs/acceptance.md).

@@ -418,6 +418,14 @@ provides, and credible evidence or context for why the problem matters. It
 introduces Span mechanisms only to the degree needed for the reader to
 understand, trust, or act on that outcome.
 
+Information order follows product dependency order. A prerequisite state,
+initialization step, or orientation must appear before the workflow that depends
+on it. For governed use, Functional Pyramid participation is intentionally
+resolved before the ordinary runtime lifecycle consumes governing orientation:
+ACTIVE + VALID is the governed path, while EXCLUDED is the explicit
+non-governed path. UNCONFIGURED is a real product state, not a completed
+governance setup.
+
 Detail is disclosed progressively. User guidance explains the task and next
 action; concept documentation explains the product model; reference
 documentation owns exact operational mechanics; contributor documentation
@@ -426,16 +434,25 @@ single owner of binding product authority. A public guide may explain the
 consequence of a canonical rule for its reader, but it links to that rule rather
 than reproducing the normative contract.
 
+Public documentation does not narrate its own information architecture or
+editorial method. Headings, sequence, links, and document boundaries perform
+that work. Self-referential commentary such as why a document is organized a
+certain way, that it uses progressive disclosure, or that it is intentionally
+high-level is omitted unless the statement is itself operationally necessary,
+for example to distinguish authority, verification evidence, or historical
+material.
+
 External sources may establish industry context, evidence, or credibility for a
 problem or practice. They do not become Span product authority and do not import
 another product's architecture or requirements into Span.
 
-*Demonstration:* a new reader can understand the problem Span solves, the
-outcome it offers, and the next useful action without reading the requirements
-corpus; a user can follow the operating workflow without learning implementation
-internals; exact mechanics and authority remain reachable at the next appropriate
-documentation depth; and the public corpus contains no competing copy of a
-normative rule.
+*Demonstration:* a new reader can understand the problem Span solves, follow the
+required setup in dependency order, and reach the first successful workflow
+without learning implementation internals. A governed first-use path resolves
+Functional Pyramid participation before ordinary governed runtime work. Exact
+mechanics and authority remain reachable at the next appropriate depth; public
+pages do not explain the documentation strategy itself; and the corpus contains
+no competing copy of a normative rule.
 
 ## 4. Lifecycle responsibilities
 

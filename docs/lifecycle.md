@@ -1,82 +1,102 @@
 # Agent lifecycle
 
-Span exists so useful understanding produced during software work can improve
-future work without becoming stale, unreviewed memory.
+Span maintains two related lifecycles.
 
-The lifecycle is easiest to understand as one loop:
+For repositories intended to use project governance, Functional Pyramid
+initialization/adoption establishes the governing map first. The ordinary
+software-knowledge lifecycle then uses that governing orientation during each
+task.
 
 ```text
-start a task
+repository installed and ready
   ↓
-ask what is already known
-  ↓
-investigate what is missing
-  ↓
-capture useful understanding
-  ↓
-review stable knowledge for shared reuse
-  ↓
-future tasks start better informed
-  ↓
-code or project guidance changes
-  ↓
-reconsider affected knowledge
-  ↺
+resolve Functional Pyramid participation
+  ├─ ACTIVE + VALID ───────────────┐
+  └─ EXCLUDED ────────────────────┤
+                                  ↓
+                           start a task
+                                  ↓
+                        ask what is known
+                                  ↓
+                    investigate what is missing
+                                  ↓
+                    capture useful understanding
+                                  ↓
+                 review stable knowledge for reuse
+                                  ↓
+                    future tasks start better informed
+                                  ↓
+                    code or guidance changes
+                                  ↓
+                    reconsider affected knowledge
+                                  ↺
 ```
 
-This page explains that model. [Using Span](usage.md) explains what to do during
-ordinary work, and the [MCP reference](mcp.md) owns exact operation grammar.
+UNCONFIGURED is a valid product state but not a completed governance setup.
+ACTIVE + DEGRADED requires governance repair before the repository is treated as
+governance-ready.
+
+## Initialize governing context before governed runtime
+
+Functional Pyramid initialization/adoption establishes or revises the explicit
+relationship from software scope to canonical project goals, principles,
+contracts, functional design, and technical design.
+
+Only explicit lifecycle actions change durable participation. Span does not
+infer governance from repository layout, filenames, or semantic similarity, and
+it does not copy governing prose into a second authority store.
+
+Once a repository is ACTIVE + VALID, ordinary `ask` resolves the governing
+projection for the same software scope as the semantic request. An explicitly
+EXCLUDED repository continues with the descriptive semantic lifecycle without a
+governing projection.
+
+See [First investigation](onboarding-runbook.md) for the first setup/use flow and
+[Evidence, authority, and interpretation](authority-trust.md) for the proof
+model.
 
 ## Start from maintained knowledge
 
-A task begins with the exact part of the system the agent is about to understand
-or change: a file, symbol, service, or domain.
+A task begins with the exact file, symbol, service, or domain the agent is about
+to understand or change.
 
 Span can return maintained knowledge already associated with that surface. If no
-reusable knowledge exists, it returns an explicit gap rather than pretending the
-system is understood.
+reusable knowledge exists, it returns an explicit gap.
 
-The point is to make previous engineering work part of the next task's starting
-context, not to replace investigation when new work is still required.
+For ACTIVE repositories, the same ask also resolves the currently applicable
+governing projection.
 
 ## Capture what the work establishes
 
 The coding agent investigates with its normal tools and remains responsible for
-the engineering judgment.
+engineering judgment.
 
-When that work establishes understanding that could help future tasks, the
-conclusion can be captured with the evidence that supported it.
+When the work establishes understanding that can help future tasks, the
+conclusion can be captured with the evidence that supported it. Capture happens
+close to the work while evidence, reasoning, and scope are clear.
 
-Capture happens close to the work because that is when the evidence, reasoning,
-and scope are clearest. It prevents useful understanding from disappearing with
-the session.
-
-Captured knowledge is retained, but it is not automatically shared with every
-future agent.
+Captured knowledge is retained but is not automatically shared with every future
+agent.
 
 ## Review before shared reuse
 
-A task agent is optimizing for the task in front of it. That makes its
-conclusions useful candidates for shared knowledge, not automatic shared truth.
+A task-local conclusion is a candidate for durable shared knowledge.
 
-A separate reviewer therefore decides whether a captured revision is suitable
-for reuse. The reviewer may be another agent session, a dedicated workflow, or
-a human.
+A separate reviewer decides whether the captured revision is suitable for reuse.
+Wrong, incomplete, duplicated, disputed, or badly scoped meaning is repaired
+through the ordinary semantic lifecycle first.
 
-If the meaning is wrong, incomplete, duplicated, disputed, or badly scoped, it
-is repaired through the normal understanding lifecycle first. Once a stable
-revision is accepted for reuse, later agents can receive it as maintained
-working knowledge while its required support still holds.
+Once a stable revision is accepted for reuse, later agents can receive it while
+its required support still holds.
 
 **Working agents capture. Reviewers curate. Span maintains the lifecycle.**
 
 Review and support answer different questions:
 
-- review asks whether this exact piece of understanding is suitable for shared
-  reuse; and
-- support asks whether the things that understanding depends on still hold.
+- review asks whether this exact semantic revision is suitable for shared reuse;
+- support asks whether the things that revision depends on still hold.
 
-Neither is a claim that Span has independently proved the interpretation true.
+Neither is a claim that Span independently proved the interpretation true.
 
 ## Reuse in later work
 
@@ -84,77 +104,47 @@ A later session starts from the software surface, not from the previous
 conversation or a saved internal identifier.
 
 If reviewed knowledge is still usable, it becomes part of the new task's
-starting context. If it is still awaiting review, has lost required support, or
-does not exist for that surface, Span keeps that state explicit.
+starting context. For ACTIVE repositories, governing applicability is resolved
+again from current declarations.
 
-This is the compounding effect the lifecycle is designed to create:
-
-> **work done now can improve the starting point for work done later.**
+Pending review, lost support, and unassessed scope remain explicit.
 
 ## Change creates reassessment work
 
-Software knowledge cannot be treated as permanent memory because its
-dependencies change.
+Source and project governance can change independently.
 
-A source edit may affect what an explanation means. A project requirement,
-contract, or design decision may change even when the implementation does not.
+After relevant implementation or authority-source edits, `reconsider` identifies
+retained knowledge that may depend on the changed paths. The agent revisits the
+affected conclusions rather than re-investigating everything.
 
-After relevant change, Span identifies retained knowledge that may depend on
-what changed. The agent revisits the affected conclusions rather than
-re-investigating every piece of retained knowledge.
+If meaning still holds, it can be re-established against current support. If
+meaning changed, the corrected revision is captured and reviewed again before
+shared reuse.
 
-If the meaning still holds, it can be re-established against current support.
-If the meaning changed, the corrected revision is captured and reviewed again
-before shared reuse.
+A Functional Pyramid participation write already returns its own affected
+projection and re-establishment contexts; those obligations are disposed
+directly.
 
-[Support currency and reassessment](freshness.md) explains this part of the
-model in more detail.
-
-## Project guidance travels with the same task
-
-For repositories that participate in Span's governance model, the task context
-can include not only what the software is understood to do, but also the project
-guidance that applies to it.
-
-Span calls this governing structure the **Functional Pyramid**. It connects the
-software scope to explicitly declared goals, principles, contracts, functional
-design, and technical design.
-
-The knowledge lifecycle and the governing model remain distinct:
-
-- captured software understanding comes from engineering investigation;
-- governing meaning remains at the project's canonical authority sources; and
-- a change to either side can make dependent knowledge require reassessment.
-
-[Evidence, authority, and interpretation](authority-trust.md) explains why
-those two kinds of knowledge need different proof.
-
-Repository participation and governance administration are separate setup work.
-They are documented in the [MCP reference](mcp.md) rather than in this
-conceptual lifecycle.
+See [Support currency and reassessment](freshness.md).
 
 ## Gaps, disputes, and verification remain explicit
 
-The lifecycle does not force uncertainty into a clean answer.
+A gap means required understanding has not been established. A dispute means an
+interpretation is contested. A verification record says what an external test or
+review observed.
 
-A gap means the required understanding has not been established. A dispute means
-an interpretation is contested. A verification record says what an external
-test or review actually observed.
+Those facts remain separate. A passing test does not automatically settle a
+semantic dispute, and a current dependency check does not prove an explanation
+complete.
 
-Those facts can coexist with retained knowledge and are maintained separately.
-A passing test does not automatically settle a semantic dispute, and a current
-dependency check does not prove an explanation complete.
+See [Interpretation and recording](interpretation.md).
 
-See [Interpretation and recording](interpretation.md) for the deeper model.
+## Ordinary runtime in one sentence
 
-## The lifecycle in one sentence
-
-For ordinary work:
+After participation is intentionally resolved:
 
 > **Ask before deriving → investigate normally → capture what you establish →
 > review for shared reuse → reconsider after change.**
 
-The exact states, payloads, replay behavior, contexts, continuations, hooks, and
-storage transitions are reference concerns. Follow the [MCP reference](mcp.md),
-[Hooks](hooks.md), [Install and connect](install.md), and
-[Backup and recovery](recovery.md) when you need those details.
+Exact states and payloads are in the [MCP reference](mcp.md). Installation,
+host setup, and store transitions are in [Install and connect](install.md).

@@ -1,16 +1,20 @@
 # Span documentation
 
-You do not need to read the whole documentation set to use Span.
+## Start here
 
-Start with what you are trying to do. The deeper material is there when you
-need to understand the product model, inspect exact protocol behavior, contribute
-to Span, or verify the requirements behind it.
+1. [Install and connect](install.md).
+2. [First investigation](onboarding-runbook.md) — resolve Functional Pyramid
+   participation for governed use, then complete the first knowledge loop.
+3. [Using Span](usage.md) — continue with the ordinary engineering lifecycle.
 
-## What are you trying to do?
+The [project README](../README.md) gives the product overview and
+knowledge-factory problem framing.
+
+## Find what you need
 
 | I want to… | Start here |
 | --- | --- |
-| Try Span for the first time | [Install and connect](install.md) → [First investigation](onboarding-runbook.md) |
+| Try Span for the first time | [First investigation](onboarding-runbook.md) |
 | Use Span during normal coding work | [Using Span](usage.md) |
 | Understand the knowledge lifecycle | [Agent lifecycle](lifecycle.md) |
 | Understand how Span keeps knowledge aligned with change | [Support currency and reassessment](freshness.md) |
@@ -22,19 +26,7 @@ to Span, or verify the requirements behind it.
 | Verify a product requirement or design decision | [Binding authority](#binding-authority) |
 | Inspect what the current Beta candidate actually demonstrated | [Acceptance and evidence](acceptance.md) |
 
-If you are new to Span, the shortest useful path is:
-
-1. [Install and connect](install.md).
-2. Follow [First investigation](onboarding-runbook.md) on a real engineering task.
-3. Keep [Using Span](usage.md) as the day-to-day guide.
-
-The [project README](../README.md) explains the problem Span solves and why the
-knowledge-factory model matters.
-
 ## Concepts
-
-These pages explain the product model when you want to understand *why* Span
-behaves the way it does. You do not need them before your first use.
 
 - [Agent lifecycle](lifecycle.md) — how maintained knowledge moves from use,
   through capture and review, to reuse and reassessment after change.
@@ -81,9 +73,6 @@ These pages explain how Span is built and where implementation changes belong.
 
 ## Binding authority
 
-You only need this section when changing Span's requirements, behavior, or
-implementation design.
-
 Span uses a Functional Pyramid so product decisions have one canonical owner and
 lower-level design remains traceable to the outcome it serves:
 
@@ -129,18 +118,3 @@ Historical technical-design baseline analysis, superseded transition/release
 mechanisms, and dated delivery evidence are preserved in
 [Technical-design history](history/technical-design-pre-version1.md). They are
 provenance, not current Layer-4 authority.
-
-## Why the documentation is organized this way
-
-Public documentation follows
-[F14 in Foundations](foundations.md):
-start from the reader's problem and next useful action, then disclose deeper
-mechanics only when they are needed.
-
-The requirements-pyramid [no-restatement rule](requirements-pyramid.md#5-no-restatement)
-keeps binding product rules at one canonical owner. Guides explain what a rule
-means for the reader and link to the authority rather than recreating the
-contract.
-
-External industry sources can support context or credibility for a problem or
-practice. They do not become Span product authority.

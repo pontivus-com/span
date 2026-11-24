@@ -1,14 +1,18 @@
 # Install and connect
 
-If you want to use Span with a repository, the normal path is:
+For a new repository:
 
 1. install the package;
 2. run `span-install` for the repository;
 3. verify the installation;
-4. reconnect your coding agent; and
-5. start a real task with [First investigation](onboarding-runbook.md).
+4. reconnect your coding agent;
+5. resolve Functional Pyramid participation for governed use; and
+6. start a real task with [First investigation](onboarding-runbook.md).
 
-The sections after that path cover host-specific and advanced operator concerns.
+Functional Pyramid participation is separate from repository installation. A
+registered, ready repository starts UNCONFIGURED. Governed use proceeds after
+activation reaches ACTIVE + VALID; a repository intentionally outside project
+governance can be explicitly EXCLUDED.
 
 ## Requirements
 
@@ -96,8 +100,8 @@ current install receipt when those bindings are available.
 A successful verification means Span is operational for the repository. It does
 **not** mean Span already understands the repository.
 
-Continue with [First investigation](onboarding-runbook.md) or
-[Using Span](usage.md).
+Continue with [First investigation](onboarding-runbook.md). After the first
+end-to-end workflow, use [Using Span](usage.md) for ordinary work.
 
 ## Connect your coding agent
 
@@ -202,8 +206,10 @@ For plugin scope, path selection, relocation, and upgrade rules, see
 
 ## Optional project-authority configuration
 
-You only need this section when a repository already has explicit authority
-seeds or bindings that Span should provision.
+Use this installer input when a repository already has explicit authority seeds
+or bindings that Span should provision. It does not activate Functional Pyramid
+participation; a successfully installed repository remains UNCONFIGURED until
+the governance lifecycle explicitly activates or excludes it.
 
 Authority input is repository-qualified:
 
