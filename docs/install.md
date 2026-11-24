@@ -188,6 +188,9 @@ The supported manual entry is:
 
 `disabled` may be omitted or set to `false`.
 
+Only `mcp.servers.span` is the supported manual registration shape. The older
+flat `mcp.span` form is not supported.
+
 OpenCode exposes Span's `ask`, `record`, and `reconsider` tools directly.
 Its code-mode sandbox does not include MCP tools, so call the Span MCP tools
 directly rather than routing them through code-mode execution.

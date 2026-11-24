@@ -106,7 +106,8 @@ class OpencodeInstallGuidanceTest(unittest.TestCase):
             pathlib.Path(__file__).resolve().parents[2] / "docs" / "install.md"
         ).read_text(encoding="utf-8")
         start = readme.index("### OpenCode")
-        end = readme.index("## Verify the installation", start)
+        end = readme.find("\n## ", start + len("### OpenCode"))
+        self.assertGreater(end, start)
         block = readme[start:end]
         self.assertIn('"servers"', block)
         self.assertIn('"codemode": false', block)
