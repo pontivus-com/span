@@ -56,12 +56,11 @@ function run(bin, args, input) {
   }
 }
 
-//: One bounded pending notice per session. The edit-time notice is computed
-//: in `tool.execute.after`, but only the session `context` hook is proven to
-//: reach the model, so the notice waits for the next context call and is
-//: consumed once. Operations check answer support independently of notice
-//: delivery (FD-52); agent lifecycle actions remain required. FD-53 qualifies
-//: claims about actual host delivery.
+//: One bounded pending lifecycle state per session. Session-entry text and
+//: changed-scope obligations are retained independently so delivering one cannot
+//: discard the other. Only the session context hook is proven to reach the
+//: model; successful delivery hands off the corresponding notice. Operations
+//: check answer support independently of notice delivery (FD-52).
 const PENDING_LIMIT = 8;
 const NOTICE_LIMIT = 2000;
 
@@ -103,26 +102,42 @@ function relativePaths(paths, root) {
 function ensurePendingCapacity(pending, sessionID) {
   if (pending.size >= PENDING_LIMIT && !pending.has(sessionID)) {
     const oldest = pending.keys().next().value;
-    console.warn("span: an undelivered lifecycle notice expired at the session bound; consult Span before completing work.");
+    console.warn("span: undelivered lifecycle obligations expired at the session bound; consult Span before completing work.");
     pending.delete(oldest);
   }
 }
 
-function rememberChangedPaths(pending, sessionID, paths) {
+function pendingState(pending, sessionID) {
   ensurePendingCapacity(pending, sessionID);
   const current = pending.get(sessionID);
-  const merged = [...new Set([...(current ? current.paths : []), ...paths])];
-  pending.set(sessionID, {
-    text: current ? current.text : "",
-    paths: merged,
-  });
-  return merged;
+  if (current) return current;
+  const created = { entryText: "", changeText: "", paths: [] };
+  pending.set(sessionID, created);
+  return created;
 }
 
-function rememberNotice(pending, sessionID, notice, paths = []) {
+function rememberEntryNotice(pending, sessionID, notice) {
   if (!notice) return;
-  ensurePendingCapacity(pending, sessionID);
-  pending.set(sessionID, { text: notice.slice(0, NOTICE_LIMIT), paths });
+  const state = pendingState(pending, sessionID);
+  state.entryText = notice.slice(0, NOTICE_LIMIT);
+}
+
+function rememberChangedPaths(pending, sessionID, paths) {
+  const state = pendingState(pending, sessionID);
+  state.paths = [...new Set([...state.paths, ...paths])];
+  return state.paths;
+}
+
+function rememberChangeNotice(pending, sessionID, notice) {
+  if (!notice) return;
+  const state = pendingState(pending, sessionID);
+  state.changeText = notice.slice(0, NOTICE_LIMIT);
+}
+
+function removeEmptyPending(pending, sessionID, state) {
+  if (!state.entryText && !state.changeText && state.paths.length === 0) {
+    pending.delete(sessionID);
+  }
 }
 
 function filePathsFromEditEvent(event) {
@@ -138,12 +153,17 @@ function filePathsFromEditEvent(event) {
 function handleSessionEvent(event, pending, checked, locationRoot) {
   if (!event || typeof event.type !== "string") return;
   if (event.type === "session.created") {
+    const key = sessionKeyFromNativeEvent(event);
+    if (key === "*" || checked.has(key)) return;
     const notice = run(resolveBin(), [
       "--repo-root",
       locationRoot,
       "session-start",
     ]);
-    rememberNotice(pending, sessionKeyFromNativeEvent(event), notice);
+    if (notice) {
+      checked.add(key);
+      rememberEntryNotice(pending, key, notice);
+    }
   } else if (event.type === "session.idle") {
     const key = sessionKeyFromNativeEvent(event);
     const waiting = pending.get(key);
@@ -153,7 +173,7 @@ function handleSessionEvent(event, pending, checked, locationRoot) {
       locationRoot,
       "session-stop",
     ], JSON.stringify(waiting.paths.map((file_path) => ({ file_path }))));
-    if (notice) rememberNotice(pending, key, notice, waiting.paths);
+    rememberChangeNotice(pending, key, notice);
   } else if (event.type === "session.deleted") {
     pending.delete(sessionKeyFromNativeEvent(event));
     checked.delete(sessionKeyFromNativeEvent(event));
@@ -171,7 +191,7 @@ function handleSessionEvent(event, pending, checked, locationRoot) {
 // event (not v1 input/output pairs).
 //
 // The installed span-hooks runner supplies lifecycle and support notices.
-// Operational registered repositories receive the primer even when cold.
+// Operational registered repositories receive one composed entry notice.
 // Helper failure does not abort the session; missing session identity and
 // undelivered capacity expiry are diagnosed. Repo root is ctx.location.directory.
 export default {
@@ -227,12 +247,7 @@ export default {
               }) +
               " after editing; investigate and record supported dispositions before completing work."
             : "";
-          rememberNotice(
-            pending,
-            key,
-            notice + reminder,
-            completePaths,
-          );
+          rememberChangeNotice(pending, key, notice + reminder);
         } catch {
           // Never break the session on hook failure.
         }
@@ -270,25 +285,35 @@ export default {
       contextRegistration = await ctx.session.hook("context", (event) => {
         try {
           const sessionID = sessionKeyFromHook(event || {});
-          // The edit-time notice is delivered once, on the next context call.
-          // Session identity is required; notices never cross session boundaries.
-          const pendingNotice = pending.get(sessionID);
-          if (pendingNotice !== undefined && pendingNotice.text) {
-            if (event && Array.isArray(event.system)) {
-              event.system.push({ type: "text", text: pendingNotice.text });
-              pending.delete(sessionID);
-            }
+          if (sessionID === "*") return;
+
+          // session.created normally prepares this entry notice. If that native
+          // event was missed, the first context hook performs the same composed
+          // session-start check as the fallback. It never emits a second entry.
+          if (!checked.has(sessionID)) {
+            checked.add(sessionID);
+            const notice = run(resolveBin(), [
+              "--repo-root",
+              locationRoot,
+              "session-start",
+            ]);
+            rememberEntryNotice(pending, sessionID, notice);
           }
-          if (sessionID === "*" || checked.has(sessionID)) return;
-          checked.add(sessionID);
-          const notice = run(resolveBin(), [
-            "--repo-root",
-            locationRoot,
-            "adoption-primer",
-          ]);
-          if (!notice) return;
-          if (!event || !Array.isArray(event.system)) return;
-          event.system.push({ type: "text", text: notice });
+
+          const state = pending.get(sessionID);
+          if (!state || !event || !Array.isArray(event.system)) return;
+          const parts = [];
+          if (state.entryText) parts.push(state.entryText);
+          if (state.changeText) parts.push(state.changeText);
+          if (parts.length === 0) return;
+
+          // Only delivery of a change notice hands off the accumulated paths.
+          event.system.push({ type: "text", text: parts.join(" ") });
+          const handedOffChange = Boolean(state.changeText);
+          state.entryText = "";
+          state.changeText = "";
+          if (handedOffChange) state.paths = [];
+          removeEmptyPending(pending, sessionID, state);
         } catch {
           // A notice never breaks a model call.
         }

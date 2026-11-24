@@ -108,6 +108,84 @@ class LifecycleHooksTest(unittest.TestCase):
             self.assertIn("Functional Pyramid UNCONFIGURED", output)
             self.assertIn("span-functional-pyramid", output)
 
+    def test_session_entry_composes_four_participation_health_branches_once(self):
+        active_member = m.FunctionalPyramidMemberView(
+            repository_id=REPO,
+            declaration_refs=(
+                m.EvidenceRef(
+                    evidence_id=m.EvidenceId("fp-declaration"),
+                    repository_id=REPO,
+                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                    locator="docs/functional-pyramid.json",
+                ),
+            ),
+            functional_scope=m.FunctionalScope(
+                (
+                    m.FunctionalScopeSelector(
+                        m.FunctionalScopeSelectorKind.PREFIX,
+                        path="src",
+                    ),
+                )
+            ),
+            coverage=m.FunctionalPyramidCoverage.PARTIAL,
+        )
+        degraded_finding = m.FunctionalPyramidFinding(
+            reason=m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+            repository_id=REPO,
+            detail="repository unavailable",
+            recovery="restore repository availability",
+        )
+        cases = (
+            (
+                "unconfigured",
+                m.FunctionalPyramidStatus(
+                    state=m.FunctionalPyramidParticipationState.UNCONFIGURED
+                ),
+                ("UNCONFIGURED", "span-functional-pyramid", "descriptive-only"),
+            ),
+            (
+                "excluded",
+                m.FunctionalPyramidStatus(
+                    state=m.FunctionalPyramidParticipationState.EXCLUDED
+                ),
+                ("EXCLUDED", "no initialization obligation", "descriptive-only"),
+            ),
+            (
+                "active-valid",
+                m.FunctionalPyramidStatus(
+                    state=m.FunctionalPyramidParticipationState.ACTIVE,
+                    health=m.FunctionalPyramidHealth.VALID,
+                    pyramid_id=m.FunctionalPyramidId("fp-hooks"),
+                    version=m.FunctionalPyramidVersion(1),
+                    members=(active_member,),
+                ),
+                ("ACTIVE/VALID", "no separate Pyramid action", "governed semantic"),
+            ),
+            (
+                "active-degraded",
+                m.FunctionalPyramidStatus(
+                    state=m.FunctionalPyramidParticipationState.ACTIVE,
+                    health=m.FunctionalPyramidHealth.DEGRADED,
+                    pyramid_id=m.FunctionalPyramidId("fp-hooks"),
+                    version=m.FunctionalPyramidVersion(1),
+                    members=(active_member,),
+                    findings=(degraded_finding,),
+                ),
+                ("ACTIVE/DEGRADED", "governance needs attention", "semantic orientation"),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data = _recorded(tmp)
+            for name, status, expected in cases:
+                with self.subTest(name=name), mock.patch.object(
+                    hooks, "_functional_pyramid_status", return_value=status
+                ):
+                    output = _capture(hooks.cmd_session_start, data, str(root))
+                    self.assertEqual(len(output.splitlines()), 1)
+                    for value in expected:
+                        self.assertIn(value, output)
+                    self.assertIn("ask the relevant surface", output)
+
     def test_adoption_primer_when_understanding_exists(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = _recorded(tmp)

@@ -155,12 +155,33 @@ def _functional_pyramid_status(
         return service.status(m.FunctionalPyramidSelector(repository_id=repository_id))
 
 
+def _functional_pyramid_obligation(
+    repository_id: str,
+    status: m.FunctionalPyramidStatus,
+) -> str | None:
+    """Render only the FD-94 Functional Pyramid obligation for one status."""
+    if status.state is m.FunctionalPyramidParticipationState.EXCLUDED:
+        return None
+    if status.state is m.FunctionalPyramidParticipationState.UNCONFIGURED:
+        return (
+            "Functional Pyramid UNCONFIGURED; governed use requires the "
+            "span-functional-pyramid status/candidate lifecycle before activation"
+        )
+    if status.health is m.FunctionalPyramidHealth.DEGRADED:
+        return (
+            "Functional Pyramid ACTIVE/DEGRADED; governance needs attention "
+            "before governed completion via FunctionalPyramidSelector and the "
+            "span-functional-pyramid lifecycle"
+        )
+    return None
+
+
 def _functional_pyramid_notice(
     data_dir: str | pathlib.Path,
     mapping: dict[str, str],
     root: str,
 ) -> str | None:
-    """Render FD-94 from canonical status; never derive governance in the hook."""
+    """Render only the FD-94 governance obligation from canonical status."""
     repository_id = _repository_id(root)
     try:
         status = _functional_pyramid_status(data_dir, mapping, repository_id)
@@ -169,27 +190,58 @@ def _functional_pyramid_notice(
             f"span: {repository_id} Functional Pyramid state is unavailable; "
             "run installer verification before governance work."
         )
-
     if status is None:
         return (
             f"span: {repository_id} Functional Pyramid state is unavailable; "
             "run installer verification before governance work."
         )
+    obligation = _functional_pyramid_obligation(repository_id, status)
+    return f"span: {repository_id} {obligation}." if obligation else None
+
+
+def _session_entry_notice(
+    data_dir: str | pathlib.Path,
+    mapping: dict[str, str],
+    root: str,
+) -> str:
+    """Compose exactly one FD-58/FD-94 entry notice from canonical state."""
+    repository_id = _repository_id(root)
+    try:
+        status = _functional_pyramid_status(data_dir, mapping, repository_id)
+    except (OSError, ValueError):
+        status = None
+
+    semantic = (
+        "ask the relevant surface before source access used to derive "
+        "understanding, with no question or request identity"
+    )
+    if status is None:
+        return (
+            f"span: {repository_id} Functional Pyramid state is unavailable; "
+            "run installer verification before governance work. For descriptive "
+            f"semantic work, {semantic}."
+        )
+
+    obligation = _functional_pyramid_obligation(repository_id, status)
     if status.state is m.FunctionalPyramidParticipationState.EXCLUDED:
-        return None
+        return (
+            f"span: {repository_id} Functional Pyramid EXCLUDED; there is no "
+            f"initialization obligation. For descriptive-only work, {semantic}."
+        )
     if status.state is m.FunctionalPyramidParticipationState.UNCONFIGURED:
         return (
-            f"span: {repository_id} Functional Pyramid UNCONFIGURED; use the "
-            "span-functional-pyramid skill and ask its status/candidate path "
-            "before activation."
+            f"span: {repository_id} {obligation}. Descriptive-only work remains "
+            f"available; {semantic}."
         )
     if status.health is m.FunctionalPyramidHealth.DEGRADED:
         return (
-            f"span: {repository_id} Functional Pyramid ACTIVE/DEGRADED; "
-            "governance needs attention. Ask FunctionalPyramidSelector and "
-            "follow the span-functional-pyramid lifecycle before completion."
+            f"span: {repository_id} {obligation}. For semantic orientation, "
+            f"{semantic}."
         )
-    return None
+    return (
+        f"span: {repository_id} Functional Pyramid ACTIVE/VALID; no separate "
+        f"Pyramid action is required. For governed semantic work, {semantic}."
+    )
 
 
 def _affected_for_root(data_dir, root, rel_paths):
@@ -282,6 +334,7 @@ def cmd_adoption_primer(data_dir, repo_root=None):
 
 
 def cmd_session_start(data_dir, repo_root=None):
+    """Print one composed lifecycle-entry notice for the active repository."""
     mapping = repo_map(data_dir)
     if not mapping:
         print("span: no repositories registered (run span-install).")
@@ -292,9 +345,7 @@ def cmd_session_start(data_dir, repo_root=None):
         if line:
             print(line)
             continue
-        functional_pyramid = _functional_pyramid_notice(data_dir, mapping, root)
-        if functional_pyramid:
-            print(functional_pyramid)
+        print(_session_entry_notice(data_dir, mapping, root))
 
 
 def _stdin_paths():

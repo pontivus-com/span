@@ -118,7 +118,7 @@ test("multiple edits are accumulated before lifecycle handoff", async () => {
 case "$*" in
   *source-changed*) printf '%s\\n' "$@" > "${received}"; echo "changed" ;;
 esac
-\`, { mode: 0o755 });
+`, { mode: 0o755 });
   const previous = process.env.SPAN_HOOKS_BIN;
   process.env.SPAN_HOOKS_BIN = bin;
   const { ctx, registered } = fakeContext(root);
@@ -177,6 +177,7 @@ test("Functional Pyramid session-start notice reaches event.system once", async 
       "#!/bin/sh",
       'case "$*" in',
       '  *session-start*) echo "span: repo Functional Pyramid UNCONFIGURED; use the span-functional-pyramid skill." ;;',
+      '  *adoption-primer*) echo "DUPLICATE ENTRY" ;;',
       "esac",
       "",
     ].join("\n"),
@@ -203,6 +204,7 @@ test("Functional Pyramid session-start notice reaches event.system once", async 
     assert.equal(first.system.length, 1);
     assert.match(first.system[0].text, /Functional Pyramid UNCONFIGURED/);
     assert.match(first.system[0].text, /span-functional-pyramid/);
+    assert.doesNotMatch(first.system[0].text, /DUPLICATE ENTRY/);
 
     const second = { sessionID: "session-fp", system: [] };
     registered["session:context"](second);
@@ -280,6 +282,68 @@ esac
     const resumed = {sessionID:"session-1",system:[]};
     registered["session:context"](resumed);
     assert.equal(resumed.system.length,0);
+  } finally {
+    dispose();
+    if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN=previous;
+    fs.rmSync(root,{recursive:true,force:true});
+  }
+});
+
+test("session entry delivery preserves changed scope until completion handoff", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-entry-change-"));
+  const bin = path.join(root, "fake-span-hooks");
+  const received = path.join(root, "received.json");
+  fs.writeFileSync(bin, `#!/bin/sh
+case "$*" in
+  *session-start*) echo "entry" ;;
+  *source-changed*) exit 0 ;;
+  *session-stop*) cat > "${received}"; echo "close changed scope" ;;
+esac
+`, { mode: 0o755 });
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  let releaseCreated;
+  const createdReady = new Promise((resolve) => { releaseCreated = resolve; });
+  let createdDelivered;
+  const createdDone = new Promise((resolve) => { createdDelivered = resolve; });
+  let releaseIdle;
+  const idleReady = new Promise((resolve) => { releaseIdle = resolve; });
+  let idleDelivered;
+  const idleDone = new Promise((resolve) => { idleDelivered = resolve; });
+  const { ctx, registered } = fakeContext(root);
+  ctx.event.subscribe = async function* () {
+    await createdReady;
+    yield { type: "session.created", data: { sessionID: "session-1" } };
+    createdDelivered();
+    await idleReady;
+    yield { type: "session.idle", data: { sessionID: "session-1" } };
+    idleDelivered();
+  };
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    releaseCreated();
+    await createdDone;
+    const changedPath = path.join(root, "src/a.js");
+    registered["tool:execute.after"]({
+      sessionID:"session-1",
+      tool:"edit",
+      input:{path:changedPath},
+    });
+    const entry = {sessionID:"session-1", system:[]};
+    registered["session:context"](entry);
+    assert.equal(entry.system.length, 1);
+    assert.equal(entry.system[0].text, "entry");
+    releaseIdle();
+    await idleDone;
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(received, "utf8")),
+      [{file_path:changedPath}],
+    );
+    const completion = {sessionID:"session-1", system:[]};
+    registered["session:context"](completion);
+    assert.equal(completion.system.length, 1);
+    assert.match(completion.system[0].text, /close changed scope/);
   } finally {
     dispose();
     if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
