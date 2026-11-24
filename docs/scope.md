@@ -89,7 +89,7 @@ service-wide run applies to the files it covers.
 
 ## Local storage and operational effects
 
-Beta 2 repository runtime state uses schema 15 in the external data directory.
+Beta 3 repository runtime state uses schema 15 in the external data directory.
 Installation-level Functional Pyramid participation and receipts remain in the
 separate installation database under `<DATA_DIR>/installation/` at installation
 schema 1. Recoverable contexts and observation admission are operational state;
@@ -106,7 +106,7 @@ the target repository. Installation may write a managed `AGENTS.md` block and
 host configuration as described in [install](install.md).
 
 Existing schema-7–14 repository stores use the separately invoked offline
-inspect/apply/verify/rollback protocol into schema 15. The Beta-2 schema-14→15
+inspect/apply/verify/rollback protocol into schema 15. The Beta-3 schema-14→15
 mapping preserves durable semantic/audit/governance state and the existing route
 lookup projection while creating zero curation dispositions. Earlier schemas
 retain their documented preservation/mapping boundaries before the final
@@ -115,12 +115,13 @@ schema-15 transition. See the
 
 ## Beta delivery boundary
 
-Generic Beta-2 behavior is verified through the full FA-01–FA-64 functional
+Generic Beta-3 behavior is verified through the full FA-01–FA-64 functional
 acceptance matrix and installed stdio MCP lane. Codex, OpenCode and Claude Code
 remain managed integration targets, but live model delivery for the current
-Beta-2 candidate is **UNVERIFIED**. Registration, configured hooks and observed
-model behavior remain separate facts. Private first-adopter cold-install
-revalidation is also not claimed as passed while its adopter-controlled
-configuration blocker remains open.
+Beta-3 candidate is **UNVERIFIED**. Registration, configured hooks and observed
+model behavior remain separate facts. Private first-adopter cold-install/governance/capture-curation revalidation
+has passed against committed adopter inputs. Beta 3 remains unpublished until
+its corrective exact-head gates pass and the release owner separately
+authorizes publication.
 
 See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).

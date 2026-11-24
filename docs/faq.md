@@ -139,14 +139,16 @@ prove the original commit failed.
 
 ## Which clients are verified for this beta?
 
-The Beta-2 product is verified through source CI, the non-editable installed
+The Beta-3 product is verified through source CI, the non-editable installed
 stdio MCP lane, and the FA-01–FA-64 functional acceptance matrix, including the
 combined installer + Functional Pyramid + capture/curation topology. Managed
 registration/integration exists for Codex, OpenCode and Claude Code, but live
-model-host delivery for the current Beta-2 candidate remains **UNVERIFIED** and
+model-host delivery for the current Beta-3 candidate remains **UNVERIFIED** and
 is not inferred from registration health, configured hooks, or historical
-captures. Private first-adopter cold-install revalidation is also not claimed as
-passed while its repository-controlled configuration blocker remains open.
+captures. Private first-adopter cold-install/governance/capture-curation revalidation
+has passed against committed adopter inputs. Beta 3 remains unpublished until
+its corrective exact-head gates pass and the release owner separately
+authorizes publication.
 
 ## Does Span save time or tokens?
 
@@ -156,7 +158,7 @@ The beta does not claim a universal saving or a completed comparative ACCEPT.
 
 ## Where is state stored, and how do upgrades work?
 
-Beta 2 repository semantic/audit state uses schema 15 in the external data
+Beta 3 repository semantic/audit state uses schema 15 in the external data
 directory. Functional Pyramid participation, versions, exclusions and
 installation-scoped receipts remain in the separate installation database at
 `<DATA_DIR>/installation/functional-pyramid.db` with installation schema 1.
@@ -164,7 +166,7 @@ installation-scoped receipts remain in the separate installation database at
 The runtime never migrates a store at open. Existing schema-14 repositories use
 the explicit offline transition to schema 15; that transition preserves
 Beta-1 semantic/audit/governance state and creates zero curation approvals.
-Migrated semantic revisions therefore begin CAPTURED under the Beta-2 reuse
+Migrated semantic revisions therefore begin CAPTURED under the Beta-3 reuse
 contract. Registered repositories remain `UNCONFIGURED` until Functional
 Pyramid participation is explicitly recorded.
 

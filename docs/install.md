@@ -393,7 +393,7 @@ data is unused.
 
 ## Upgrade an existing store
 
-Beta 2 uses repository schema 15. The runtime never migrates at open; a
+Beta 3 uses repository schema 15. The runtime never migrates at open; a
 supported older repository store fails closed with the explicit transition
 action. The separate installation Functional Pyramid store remains at
 installation schema 1; installer/setup creates or verifies it, and repository
@@ -422,7 +422,7 @@ through activation, archives a WAL-consistent copy, writes the lossless export
 and report, stages schema 15, verifies it, and atomically activates it.
 Supported source repository schemas are 7 through 14.
 
-For schema 14, the Beta-2 transition copies every retained semantic, audit and
+For schema 14, the Beta-3 transition copies every retained semantic, audit and
 governance table without reinterpretation, including the existing
 `functional_route_dependency_index`, and initializes
 `conclusion_curations` with zero dispositions. A migrated revision that is
