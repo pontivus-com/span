@@ -86,9 +86,9 @@ better informed.**
 A knowledge factory works when doing the work continuously improves the
 knowledge available for future work.
 
-For governed repositories, Span first resolves the Functional Pyramid so the
-agent knows which canonical project guidance applies. The repeating software
-knowledge loop then becomes:
+For governed repositories, first initialize/adopt the Functional Pyramid.
+Span can then resolve which canonical project guidance applies to the software
+scope being worked on. The repeating software knowledge loop becomes:
 
 1. **Start with maintained knowledge.** The agent asks about the file, symbol,
    service, or domain it is working on and gets what is already known.
