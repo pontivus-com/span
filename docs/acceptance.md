@@ -87,11 +87,27 @@ documentation remediation that followed it.
 
 ### Documentation-remediation verification
 
-The F14 documentation/authority remediation was completed on the last
-content-changing remediation head
-`f3ca2065a7bbee1af02ef9bd61006f210f0952c9`.
+The first F14 documentation/authority restructuring was verified at
+`f3ca2065a7bbee1af02ef9bd61006f210f0952c9` by GitHub Actions CI run
+`45329316520`.
 
-GitHub Actions CI run `45329316520` passed on that tree:
+A second F14 refinement then audited the public corpus against the actual
+product dependency order. That refinement identified two remaining
+documentation defects:
+
+- public pages still contained non-operational commentary about their own
+  organization/disclosure strategy; and
+- the first-use/usage path did not consistently present Functional Pyramid
+  initialization/adoption before ordinary **governed** runtime use, even though
+  lifecycle §7 already owns that ordering.
+
+F14 was amended at Layer 1 to require dependency-ordered information and to
+forbid unnecessary self-commentary without restating Layer-2 participation
+states or transitions.
+
+The refined content head is
+`ef0ff8f4bc0352c4f52cf2254163d7f1da8ac27a`.
+GitHub Actions CI run `45333961735` passed on that exact tree:
 
 - build/distribution passed;
 - Ruff and Black passed;
@@ -101,31 +117,33 @@ GitHub Actions CI run `45329316520` passed on that tree:
 - plugin notice delivery passed; and
 - the coverage artifact uploaded successfully.
 
-The remediation also completed the repository-relative documentation link audit:
-all current Markdown surfaces resolve their repository file targets after the
-history split, and the primary/authority/verification navigation anchors checked
-during the pass resolve to their owning sections.
+The refinement changed documentation and managed agent guidance only; no
+`src/` or `tests/` file changed.
 
-This acceptance file and the Beta-3 programme record are the closure receipts
-for that verified content tree. They add no runtime/product mechanism. The
-authoritative exact-head closure proof is therefore the required GitHub CI check
-attached to the current commit. Its run identifier is intentionally not embedded
-here, because embedding the run identifier would itself create a new commit and
-invalidate the exact-head claim.
+The resulting public order is:
 
-The documentation remediation corrected, among other things:
+1. install and verify Span;
+2. for governed use, initialize/adopt the Functional Pyramid and establish
+   governance readiness;
+3. complete the first investigation and capture/review/reuse loop;
+4. use the repeating semantic lifecycle during normal engineering work; and
+5. consult concepts/reference only when deeper detail is needed.
 
-- problem/outcome-first public narrative and dependency-ordered guidance under F14;
-- user guides separated from exact MCP/operator reference;
-- current verification separated from historical acceptance evidence;
-- current Layer-4 authority separated from historical technical-design
-  archaeology;
-- repository schema references reconciled to schema **15** and offline
-  transition sources **7–14**;
-- the manual-only release authorization boundary;
-- stale transition docstrings/comments; and
-- documentation tests that incorrectly encoded presentation order rather than
-  the OpenCode registration contract they were intended to protect.
+The ordinary descriptive semantic lifecycle remains available without ACTIVE
+Functional Pyramid participation. UNCONFIGURED is therefore not misrepresented
+as a runtime failure, while it is also no longer presented as completed
+governance setup.
+
+README, documentation index, install, first investigation, usage, lifecycle,
+FAQ, managed AGENTS guidance and packaged router/before-read guidance now share
+that ordering. The active primary navigation was rechecked on the refined tree:
+repository-relative file links and referenced section anchors resolve.
+
+This acceptance file and the Beta-3 programme record are closure receipts for
+that verified content tree. They add no runtime/product mechanism. The
+authoritative exact-head closure proof is the required GitHub CI check attached
+to the current commit; embedding that future run identifier here would itself
+create another head.
 
 ## Release identity and authorization
 
