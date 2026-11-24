@@ -13,9 +13,10 @@ through FA-64 are present exactly once and that every named test still exists.
 FA-28 was strengthened during the reopened Beta-3 T14 lifecycle-hook review.
 The branch now carries the hook-specific executable evidence for composed
 session entry, complete changed-scope evaluation, multi-edit accumulation,
-canonical read-only preview parity, managed data-directory identity and a real
-deployed OpenCode -> installed span-hooks -> temporary-store path. Exact-head
-release closure remains owned by T14-H7.
+canonical read-only preview parity, managed data-directory identity, Codex
+native `apply_patch` PostToolUse translation, OpenCode native patch/incomplete-
+scope handling and a wheel-bundled OpenCode -> installed span-hooks ->
+temporary-store path. Exact-head release closure remains owned by T14-H7.
 
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
@@ -46,7 +47,7 @@ release closure remains owned by T14-H7.
 | FA-25 | Canonical-source singularity | `test_functional_pyramid_carries_references_not_governing_prose` |
 | FA-26 | Runtime lifecycle preservation | `test_three_tool_journey_and_restart`; `test_reconsider_record_succeeds_without_an_intervening_ask`; `test_challenge_raised_by_reconsider_is_settled_by_record` |
 | FA-27 | Governance-source edit lifecycle | `test_authority_source_change_is_considered_not_forced_stale`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_normative_confirm_reestablishes_changed_server_route_support` |
-| FA-28 | Lifecycle-compliance hooks | `test_session_entry_composes_four_participation_health_branches_once`; `test_changed_scope_projection_receives_complete_input_before_render_bound`; `test_changed_scope_preview_reuses_projection_without_context_issuance`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_codex_merge_adds_entries_and_dedupes`; `test_packaged_opencode_plugin_reaches_real_installed_hook_store`; `test_hook_source_uses_canonical_changed_scope_projection`; `test_hook_source_has_no_semantic_writer_or_builder`; `tests/plugin/test_span_hooks_notice.mjs` (multi-edit union, singular delivery and completion handoff) |
+| FA-28 | Lifecycle-compliance hooks | `test_session_entry_composes_four_participation_health_branches_once`; `test_changed_scope_projection_receives_complete_input_before_render_bound`; `test_changed_scope_preview_reuses_projection_without_context_issuance`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_codex_merge_adds_entries_and_dedupes`; `test_codex_apply_patch_parser_uses_only_documented_patch_markers`; `test_codex_post_tool_emits_structured_context_for_complete_native_scope`; `test_codex_post_tool_reports_incomplete_native_scope_without_guessing`; `test_packaged_opencode_plugin_reaches_real_installed_hook_store`; `test_packaged_assets_are_generated_from_canonical_sources`; `test_hook_source_uses_canonical_changed_scope_projection`; `test_hook_source_has_no_semantic_writer_or_builder`; `tests/plugin/test_span_hooks_notice.mjs` (multi-edit union, native multi-file patch, explicit incomplete input, no session eviction, singular delivery and completion handoff) |
 | FA-29 | Initialization handoff | `test_activation_handoff_status_matches_committed_result`; `test_record_revise_only_reports_actual_participation_changes`; `test_installed_lifecycle_over_stdio` |
 | FA-30 | One active instance per repository | `test_candidate_reports_duplicate_unregistered_and_other_active_members`; `test_concurrent_overlapping_activation_serializes_to_one_active_instance` |
 | FA-31 | Three-tool host surface | `test_only_the_three_core_tools_are_registered`; `test_installed_lifecycle_over_stdio` |
