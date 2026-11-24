@@ -409,6 +409,34 @@ CAPTURED revision and cannot be served as shared Answer content until separately
 curated; a support-only confirmation of unchanged curated meaning can become
 servable again without manufacturing another semantic review.
 
+### F14 — Public documentation starts from the user's problem and discloses detail progressively
+
+Public documentation is part of the delivered product. Each public document has
+one reader job and begins at the level of abstraction required for that job.
+Front-door documentation starts from the user's problem, the outcome Span
+provides, and credible evidence or context for why the problem matters. It
+introduces Span mechanisms only to the degree needed for the reader to
+understand, trust, or act on that outcome.
+
+Detail is disclosed progressively. User guidance explains the task and next
+action; concept documentation explains the product model; reference
+documentation owns exact operational mechanics; contributor documentation
+explains implementation ownership; and the Functional Pyramid remains the
+single owner of binding product authority. A public guide may explain the
+consequence of a canonical rule for its reader, but it links to that rule rather
+than reproducing the normative contract.
+
+External sources may establish industry context, evidence, or credibility for a
+problem or practice. They do not become Span product authority and do not import
+another product's architecture or requirements into Span.
+
+*Demonstration:* a new reader can understand the problem Span solves, the
+outcome it offers, and the next useful action without reading the requirements
+corpus; a user can follow the operating workflow without learning implementation
+internals; exact mechanics and authority remain reachable at the next appropriate
+documentation depth; and the public corpus contains no competing copy of a
+normative rule.
+
 ## 4. Lifecycle responsibilities
 
 The agent's required actions and task-completion boundary are owned by

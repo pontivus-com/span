@@ -128,18 +128,27 @@ excluded from the normal reading path. See the
 [implementation-plan index](implementation-plans/README.md) when historical
 campaign detail is specifically needed.
 
-## Documentation ownership rules
+## Documentation discipline
 
-To prevent the corpus from growing back into one undifferentiated body:
+Public documentation is governed by [F14](foundations.md#f14--public-documentation-starts-from-the-users-problem-and-discloses-detail-progressively)
+and the requirements-pyramid [no-restatement rule](requirements-pyramid.md#5-no-restatement).
+The role taxonomy above applies that authority to this documentation set:
 
-- user guides explain the product and workflow; they do not restate the binding
-  contract in full;
+- the README establishes the user problem, outcome, credible industry context,
+  and next useful action;
+- user guides explain task workflows and link downward when more detail is
+  needed;
+- concept pages explain the product model without becoming another requirements
+  layer;
 - the MCP reference and generated schemas own exact public wire grammar;
-- binding requirements/design are stated once at their owning pyramid layer;
-- contributor docs describe implementation ownership without creating new
+- contributor material explains implementation ownership without creating new
   product requirements;
-- acceptance documents record evidence, not authority;
-- implementation plans record campaigns and release gates, not permanent user
-  guidance;
-- historical material stays out of the primary navigation unless it is needed
-  to explain a current behavior.
+- binding requirements/design remain single-source at their Functional Pyramid
+  owners;
+- acceptance material records evidence rather than authority; and
+- implementation plans record campaigns and release gates rather than permanent
+  user guidance.
+
+External industry sources may support context or credibility, but they do not
+become Span authority. Historical material stays out of the primary reading path
+unless it is needed to understand current behavior.
