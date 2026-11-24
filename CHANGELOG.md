@@ -29,10 +29,10 @@
 
 ### Installer, governance and external-integration correction
 
-- Fix B2-D01 at the owning setup seam: `span-install` now accepts
+- Fix B3-D01 at the owning setup seam: `span-install` now accepts
   repository-qualified authority seed/binding files and invokes the existing
   canonical repository-initialization owner once per selected repository.
-- Fix B2-D02 at the acceptance seam: installed cold-start coverage now proves
+- Fix B3-D02 at the acceptance seam: installed cold-start coverage now proves
   repository initialization instead of manufacturing lifecycle/binding state
   behind the installer.
 - Keep Functional Pyramid participation separate from repository
