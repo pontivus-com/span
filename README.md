@@ -303,7 +303,7 @@ recorded conclusions retain the agent's interpretation and declared support.
 The intended benefit is maintained software knowledge that can become complete
 working context for the exact software surface: what is already understood about
 the implementation, the canonical project guidance that applies to it, and a
-focused view of what needs another look after either side changes. Beta product value is validated through real-world adopter
+focused view of what needs another look after either side changes. Beta product value is validated through real-world integration
 use rather than a synthetic pre-release score. This release therefore makes no
 universal time/token-saving claim; follow-up Beta patches will address defects
 and friction found in normal use. See [acceptance](docs/acceptance.md).

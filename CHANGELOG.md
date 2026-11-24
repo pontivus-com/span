@@ -28,10 +28,10 @@
 - Keep Functional Pyramid participation separate from repository
   initialization. Curation cannot create or alter governance participation,
   authority, applicability, routes or health.
-- Revalidate the private first adopter from committed root-correct authority
+- Revalidate the private external integration from committed root-correct authority
   inputs: cold installation, Functional Pyramid activation/projection,
   CAPTURED/pending behavior, explicit curation and fresh-process shared reuse
-  all passed. Raw adopter evidence remains private.
+  all passed. Raw integration evidence remains private.
 
 ### Storage, migration and product boundary
 
@@ -109,7 +109,7 @@
   (`919 passed, 1 skipped, 144 subtests`), installed non-editable MCP and the
   FA-01–FA-44 matrix.
 - T11 external integration acceptance passed on 2026-11-22 using integration-owned
-  gitignored evidence. Raw adopter topology and captures remain outside Span
+  gitignored evidence. Raw integration topology and captures remain outside Span
   Git; only the sanitized pass result is published.
 - The assembled `1.0.0b1` candidate passed the repository-verifiable T13
   closure gates: non-editable package install, schema-14/installation-schema-1
@@ -120,8 +120,7 @@
   **UNVERIFIED** and is not advertised as verified Beta-1 delivery. Historical
   host captures and registration health are not promoted into Version-1 proof.
 - Beta 1 does not require a synthetic G5/F8 comparative score before
-  publication. Product-value validation continues through real-world use in the
-  legal project, with follow-up Beta patch releases used to correct defects and
+  publication. Product-value validation continues through real-world integration use, with follow-up Beta patch releases used to correct defects and
   workflow friction found in practice. Universal time/token-saving claims remain
   out of scope without separate evidence.
 

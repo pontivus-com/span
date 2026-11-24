@@ -49,7 +49,7 @@ verified the Part-C mechanisms and generic functional acceptance on the
 reconciled release branch. T11 external integration acceptance passed and is
 closed. T13 owns assembled-`1.0.0b1` release verification, candidate-specific
 managed-host qualification where claimed, and the Part-C derivation audit.
-G5/F8 product-value validation continues after release through real adopter use;
+G5/F8 product-value validation continues after release through real integration use;
 it is not a publication gate.
 
 ## 1. Baseline decision
@@ -1173,7 +1173,7 @@ wait the first tool list had no Span and the rate was 2/5. Evidence:
 `.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
 
 Retain comparative measurements as optional product research, not as a
-Version-1 release gate. G5/F8 are demonstrated for Beta through real adopter use
+Version-1 release gate. G5/F8 are demonstrated for Beta through real integration use
 on ordinary engineering work. The pre-release candidate must still pass the
 deterministic contract, packaging, migration, recovery, public-boundary, and
 functional-acceptance gates; Beta publication does not wait for an artificial
@@ -1211,7 +1211,7 @@ second declaration of those requirements.
 | FD-54–FD-57 | §13, §15 | `test_answer_service.py`; result fitting, explicit omission, minimum-result refusal | O-3 measured per host and applied as the delivered-wire budget |
 | FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; cold/warm lifecycle notice, plugin deploy/remove, skill vocabulary | canonical native/shell guidance, hooks, skills and plugin notice-delivery lane are verified; 0.11 candidate-specific managed-host native/search/shell captures remain T10 external acceptance |
 | F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 resolved for source-observation ingestion; external execution authenticity remains a separate, not-yet-designed workstream |
-| F8, G5 | §15 | real adopter use across the ordinary lifecycle; optional scoped comparative research | prior measurements remain historical evidence only for their named candidates. Version 1 validates practical value through post-release Beta use; no synthetic comparative score is required for publication |
+| F8, G5 | §15 | real integration use across the ordinary lifecycle; optional scoped comparative research | prior measurements remain historical evidence only for their named candidates. Version 1 validates practical value through post-release Beta use; no synthetic comparative score is required for publication |
 | FD-61–FD-74, FD-86–FD-91 | Part C §17–§18, §20.1 | Functional Pyramid core/service tests plus installed MCP; FunctionalScope algebra, outside/covered/uncovered/mixed projection, overlapping/inherited/cross-repository graph resolution, deterministic provenance, health iff structural findings | implemented; T10 generic acceptance verified on exact-head CI, T13 re-verifies the assembled candidate |
 | FD-75–FD-81 | Part C §18, §20.2–§20.3 | support/record/reconsider tests; FunctionalRouteSupport derivation/evaluation, authority separation, pre-existing normative activation effects, deliberate participation removal vs operational unavailability | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
 | FD-82–FD-85, FD-93 | Part C §19–§20.4 | lifecycle store/service/schema tests; installation-level receipts, activation/revision/deactivation atomicity, participation effects, dependent effects, replay with fresh contexts, pyramid CAS and one-ACTIVE-instance uniqueness | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
