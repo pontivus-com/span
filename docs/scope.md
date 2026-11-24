@@ -119,9 +119,7 @@ Generic Beta-3 behavior is verified through the full FA-01–FA-64 functional
 acceptance matrix and installed stdio MCP lane. Codex, OpenCode and Claude Code
 remain managed integration targets, but live model delivery for the current
 Beta-3 candidate is **UNVERIFIED**. Registration, configured hooks and observed
-model behavior remain separate facts. Private first-adopter cold-install/governance/capture-curation revalidation
-has passed against committed adopter inputs. Beta 3 remains unpublished until
-its corrective exact-head gates pass and the release owner separately
-authorizes publication.
+model behavior remain separate facts. Beta 3 remains unpublished until the
+release owner separately authorizes publication.
 
 See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).
