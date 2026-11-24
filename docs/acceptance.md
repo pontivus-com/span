@@ -4,21 +4,23 @@ The current lifecycle is evaluated at three distinct boundaries: deterministic
 contracts, delivered host behavior, and useful real-task reuse. Passing a
 local suite proves neither host conversion nor comparative product value.
 
-## Version 1 Beta 2 candidate acceptance
+## Version 1 Beta 3 candidate acceptance
 
-Beta 2 extends the generic Version-1 functional-acceptance authority through
+Beta 3 extends the generic Version-1 functional-acceptance authority through
 FA-64 in
 [Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance),
 mapped case-by-case in [the FA-01–FA-64 matrix](functional-acceptance.md).
 The architecture guard requires each acceptance row exactly once and keeps
 curation on the existing lifecycle writer/support/Answer paths.
 
-The completed Beta-2 implementation head
-`b80fd8a154d8f7785e37fbbc6e74deb017ba6e60` passed exact-head GitHub
-Actions CI run `45177585406`: build/distribution, Ruff/Black, the zero-error
-typing ratchet, `977 passed, 1 skipped, 148 subtests`, 85% aggregate coverage,
-standalone plugin-notice delivery and the installed production-topology
-acceptance surface.
+The Beta-3 semantic/runtime baseline was already exercised at
+`b80fd8a154d8f7785e37fbbc6e74deb017ba6e60` by GitHub Actions CI run
+`45177585406`: build/distribution, Ruff/Black, the zero-error typing ratchet,
+`977 passed, 1 skipped, 148 subtests`, 85% aggregate coverage, standalone
+plugin-notice delivery and the installed production-topology acceptance surface.
+Beta 3 adds the strict canonical-ingress and explicit release-control corrections
+on top of that baseline. Those corrections require their own exact-head CI before
+the candidate can be called release-ready.
 
 Private first-adopter revalidation passed on 2026-11-24 against the committed
 Legal product revision
@@ -41,17 +43,19 @@ also caught incorrect initial adopter content fingerprints before the passing
 run; the configuration was corrected rather than weakening support/currentness
 evaluation.
 
-The assembled Beta-2 release identity is package `1.0.0b2`, registry
-`1.0.0-beta.2`, repository lifecycle schema 15, and installation Functional
+The assembled Beta-3 release identity is package `1.0.0b3`, registry
+`1.0.0-beta.3`, repository lifecycle schema 15, and installation Functional
 Pyramid schema 1. Schema-14 migration does not fabricate curation for retained
 Beta-1 conclusions. Span has no built-in curator model and does not treat
 curation as semantic truth or Functional Pyramid authority.
 
 Live authenticated model delivery through supported managed hosts remains
 **UNVERIFIED**. Registration, installer and hook support are not promoted into
-a model-delivery claim. Final exact-head T14 CI and publication receipts are
-recorded on the Beta-2 execution PR/release surfaces so recording them does not
-mutate the candidate after its gate.
+a model-delivery claim. Beta 3 is **not authorized for publication**. Its release
+workflow is manual-only, requires an exact-version confirmation, and must not be
+dispatched until the release owner explicitly authorizes publication. Final
+exact-head verification may establish release readiness; it does not authorize
+tagging, PyPI publication, GitHub Release creation or MCP Registry publication.
 
 ## Historical Version 1 Beta 1 candidate acceptance
 

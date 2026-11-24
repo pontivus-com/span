@@ -11,7 +11,7 @@ model that covers both maintained empirical understanding and maintained
 governing understanding. Beta describes delivery maturity, not an incomplete
 product boundary.
 
-**Beta 2 product amendment, 23 November 2026.** Investigation-time capture and
+**Beta 3 product amendment, 23 November 2026.** Investigation-time capture and
 shared reuse are distinct outcomes. Understanding established during engineering
 work is retained immediately, but a fresh agent receives it as ordinary shared
 knowledge only after that exact semantic revision has been explicitly curated.

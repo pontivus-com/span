@@ -272,18 +272,18 @@ span-install --verify-only
 Setup creates no understanding. Begin with the relevant surface from your actual task;
 see [using Span](docs/usage.md).
 
-## Beta 2 host status
+## Beta 3 host status
 
-The Beta-2 execution candidate is verified through source CI, the built
-distribution, non-editable installed stdio MCP coverage, the FA-01–FA-64
-functional acceptance surface, and the combined installer + Functional Pyramid
-+ capture/curation production-topology lane. Live model-host delivery for this
-candidate is still **UNVERIFIED** and is not inferred from registration,
-configured hooks, or historical captures. The private first-adopter cold-install
-gate is separately blocked by adopter-controlled configuration and is not
-presented as a successful delivery capture.
+The Beta-3 execution candidate carries the verified Version-1 semantic/runtime,
+non-editable installed stdio MCP, FA-01–FA-64, installer, Functional Pyramid and
+capture/curation production-topology baseline. The private first-adopter
+cold-install/governance/capture-curation gate has also passed against committed
+adopter inputs. Beta 3 additionally closes strict canonical authority ingress and
+the release-authorization boundary. Live model-host delivery remains
+**UNVERIFIED** and is not inferred from registration, configured hooks, or
+historical captures.
 
-| Host | Beta-2 candidate status |
+| Host | Beta-3 candidate status |
 | --- | --- |
 | Codex | Managed integration target retained; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
 | OpenCode | Managed integration and packaged notice delivery verified; Version-1 live model-delivery **UNVERIFIED** and not claimed as verified. |
@@ -312,20 +312,20 @@ and friction found in normal use. See [acceptance](docs/acceptance.md).
 
 ## Status and documentation
 
-This checkout is the **Version 1 Beta-2 execution line**. The implemented
+This checkout is the **Version 1 Beta-3 execution line**. The implemented
 repository storage contract is schema 15 plus the separate installation
 Functional Pyramid store at installation schema 1. Existing schema-7–14
 repositories use the explicit offline transition; registration alone leaves
 them `UNCONFIGURED` until participation is declared. The public operations
 remain exactly `ask`, `record`, and `reconsider`.
 
-Beta-2 repository, installer, Functional Pyramid, capture/curation and installed
-production-topology acceptance are green. Private first-adopter revalidation is
-not currently claimed as passed: repository-controlled adopter configuration
-still blocks the required cold-install + governing-projection lane. The release
-therefore is **not release-ready** until that adopter-owned blocker is cleared
-and the final T14 candidate gates pass. See
-[the Beta-2 implementation plan](docs/implementation-plans/1.0.0-beta2.md),
+Beta-3 repository, installer, Functional Pyramid, capture/curation, installed
+production-topology and private first-adopter acceptance are green at their
+recorded gates. The strict-ingress/release-control correction still requires
+Beta-3 exact-head verification. Publication is a separate owner decision:
+merging or pushing does not publish, and no release workflow may be dispatched
+without explicit release authorization. See
+[the Beta-3 implementation plan](docs/implementation-plans/1.0.0-beta3.md),
 [acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 
 - [Install and connect](docs/install.md)

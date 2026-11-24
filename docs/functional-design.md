@@ -1065,7 +1065,7 @@ After commitment, compose current status for the understanding's canonical owner
 Operational status failure preserves acceptance and reports explicit status
 unavailability. Status is never persisted in the receipt. *(F9, L4)*
 
-### Beta 2 capture and curation
+### Beta 3 capture and curation
 
 **FD-95 — Answer eligibility composes support and curation.**
 For every current semantic revision,

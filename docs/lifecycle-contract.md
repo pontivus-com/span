@@ -398,7 +398,7 @@ parallel setup DTOs.
   DEACTIVATE/EXCLUDE it is empty. The effects tuple records every repository
   whose durable participation changed.
 
-**Beta-2 curation carriers.** The public curation grammar is exact:
+**Beta-3 curation carriers.** The public curation grammar is exact:
 
 - `CurationState = CAPTURED | CURATED` is a derived reuse-maturity projection;
   it is never a substitute for `SupportState`.

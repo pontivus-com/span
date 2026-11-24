@@ -1757,18 +1757,18 @@ not fabricate a partially composed `ServiceContext`. Provisioning ownership
 remains in the installer/context setup path; MCP startup registration does not
 restore a public or implicit provisioning path.
 
-**Beta-2 administrative initialization correction (B2-D01/B2-D02).** Beta-1
+**Beta-3 administrative initialization correction (B3-D01/B3-D02).** Beta-1
 first-adopter use exposed a composition defect, not a missing Functional Pyramid
 product rule. The released `span-install` never invokes the already-owned
 `provision_repository_runtime(InitializeRepositoryRequest)` path, and its
 installed production-topology fixture manufactures repository/binding state
-directly. Beta 2 therefore repairs the shell/setup seam and the acceptance seam
+directly. Beta 3 therefore repairs the shell/setup seam and the acceptance seam
 without introducing another authority model, setup DTO, semantic writer, MCP
 operation or Functional Pyramid lifecycle.
 
 The initialization correction is schema-neutral in itself. In Beta 1 the
-omission affected schema 14. In the complete Beta-2 release the same canonical
-provisioning path creates/opens the **current Beta-2 repository schema 15**
+omission affected schema 14. In the complete Beta-3 release the same canonical
+provisioning path creates/opens the **current Beta-3 repository schema 15**
 defined by Part D; installation Functional Pyramid schema 1 remains unchanged.
 
 The exact mechanism is:
@@ -2136,9 +2136,9 @@ the governing Layer-0–3 behavior.
 Part C is complete only when the mechanisms above are implemented and the
 functional acceptance matrix passes without adding a product rule below Layer 3.
 
-## Part D — Beta 2 capture/curation mechanisms
+## Part D — Beta 3 capture/curation mechanisms
 
-Part D realizes the Beta-2 capture/curation contract in F13, L17 and
+Part D realizes the Beta-3 capture/curation contract in F13, L17 and
 FD-95–FD-102. It does not change Functional Pyramid authority, the three-tool
 surface, or semantic authorship. Part C remains the mechanism authority for the
 Functional Pyramid except where Part D composes curation into ordinary semantic
@@ -2338,11 +2338,11 @@ only CURRENT + CURATED is ordinary Answer content.
 **Authority:** A1–A3; F2–F4, F13; L4, L17; FD-42–FD-48,
 FD-95–FD-102.
 
-Beta 2 is a persisted-contract change and therefore advances the repository
+Beta 3 is a persisted-contract change and therefore advances the repository
 lifecycle store:
 
 - Beta-1 repository schema: 14;
-- Beta-2 repository schema: **15**;
+- Beta-3 repository schema: **15**;
 - installation Functional Pyramid schema remains **1**.
 
 The canonical transition owner remains `src/span/shell/store_transition.py`.
@@ -2360,7 +2360,7 @@ ordinary receipts, and `functional_route_dependency_index`. The new
 `conclusion_curations` table remains empty.
 
 Consequently every migrated Beta-1 semantic revision begins CAPTURED under the
-Beta-2 reuse contract. A migrated revision enters the pending queue only when it
+Beta-3 reuse contract. A migrated revision enters the pending queue only when it
 is current membership and its existing support evaluates CURRENT; non-current
 captures remain stale until re-established. No migration step may invent an
 independent review that never occurred.
@@ -2379,13 +2379,13 @@ The transition smoke lane then curates one migrated CURRENT capture in the
 staged schema-15 store and proves it becomes reusable without rewriting the
 migrated conclusion revision.
 
-Beta-2 release identity is:
+Beta-3 release identity is:
 
-- Python/PyPI/changelog: `1.0.0b2`;
-- Git tag: `v1.0.0b2`;
-- GitHub Release: `Span 1.0.0 Beta 2`;
-- MCP Registry server: `1.0.0-beta.2`;
-- MCP Registry PyPI package: `1.0.0b2`.
+- Python/PyPI/changelog: `1.0.0b3`;
+- Git tag: `v1.0.0b3`;
+- GitHub Release: `Span 1.0.0 Beta 3`;
+- MCP Registry server: `1.0.0-beta.3`;
+- MCP Registry PyPI package: `1.0.0b3`.
 
 ### 26. Host guidance and generated public schema
 
@@ -2410,7 +2410,7 @@ Span schedules no background model and imposes no model provider. A team may run
 the reviewer at task completion, PR review, before first cross-session reuse or
 asynchronously.
 
-### 27. Beta-2 verification
+### 27. Beta-3 verification
 
 Extend functional acceptance and installed-MCP coverage through cases 45–64.
 Verification must prove at least:
@@ -2430,7 +2430,7 @@ Verification must prove at least:
 - a non-editable installed journey covers capture → curate → fresh-session reuse
   → change → reconsider → confirm/reuse and semantic-change → re-curation.
 
-The Beta-2 installed-candidate acceptance composes this Part-D lifecycle proof
+The Beta-3 installed-candidate acceptance composes this Part-D lifecycle proof
 with Part-C §20's corrected production-topology setup proof in the **same
 candidate**: repositories plus an empty data directory are initialized through
 the installed `span-install`; the resulting governed runtime then exercises
@@ -2444,4 +2444,4 @@ curation-specific Functional Pyramid path and no fallback that treats absence of
 curation data as approval.
 
 Part D is implementation-complete only when these mechanisms and the extended
-functional acceptance surface pass on the exact Beta-2 candidate.
+functional acceptance surface pass on the exact Beta-3 candidate.
