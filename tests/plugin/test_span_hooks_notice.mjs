@@ -399,7 +399,7 @@ esac
     const recovered = { sessionID: "session-1", system: [] };
     registered["session:context"](recovered);
     assert.equal(recovered.system.length, 1);
-    assert.match(recovered.system[0].text, /3 changed path\\(s\\)/);
+    assert.match(recovered.system[0].text, /3 changed path\(s\)/);
   } finally {
     dispose();
     if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
