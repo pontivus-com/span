@@ -93,8 +93,8 @@ test("the edit-time notice reaches event.system once", async () => {
       registered["session:context"](first);
       assert.equal(first.system.length, 1);
       assert.match(first.system[0].text, /1 recorded understanding/);
-      assert.match(first.system[0].text, /"repository_id":/);
-      assert.match(first.system[0].text, /"changed_paths":\["src\/a\.js"\]/);
+      assert.match(first.system[0].text, /reconsider after editing/);
+      assert.doesNotMatch(first.system[0].text, /"changed_paths":/);
 
       const second = { sessionID: "session-1", system: [] };
       registered["session:context"](second);
@@ -135,7 +135,7 @@ esac
     const event = {sessionID:"session-1", system:[]};
     registered["session:context"](event);
     assert.equal(event.system.length, 1);
-    assert.match(event.system[0].text, /"changed_paths":\["src\/a\.js","src\/b\.js"\]/);
+    assert.equal(event.system[0].text, "changed");
   } finally {
     dispose();
     if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
@@ -144,6 +144,112 @@ esac
   }
 });
 
+
+test("native patch payload contributes every changed file to one union", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-patch-"));
+  const bin = path.join(root, "fake-span-hooks");
+  const received = path.join(root, "received.txt");
+  fs.writeFileSync(bin, \`#!/bin/sh
+case "$*" in
+  *source-changed*) printf '%s\\n' "$@" > "${received}"; echo "changed" ;;
+esac
+\`, { mode: 0o755 });
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  const { ctx, registered } = fakeContext(root);
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    registered["tool:execute.after"]({
+      sessionID: "session-1",
+      tool: "patch",
+      input: {
+        patchText: [
+          "*** Begin Patch",
+          "*** Update File: src/a.js",
+          "*** Move to: src/moved.js",
+          "*** Add File: src/new.js",
+          "*** Delete File: src/old.js",
+          "*** End Patch",
+        ].join("\n"),
+      },
+    });
+    const args = fs.readFileSync(received, "utf8").trim().split("\n");
+    assert.deepEqual(args, [
+      "source-changed",
+      path.join(root, "src/a.js"),
+      path.join(root, "src/moved.js"),
+      path.join(root, "src/new.js"),
+      path.join(root, "src/old.js"),
+    ]);
+    const event = { sessionID: "session-1", system: [] };
+    registered["session:context"](event);
+    assert.equal(event.system[0].text, "changed");
+  } finally {
+    dispose();
+    if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("malformed native patch is explicit incomplete input and never guessed", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-patch-incomplete-"));
+  const bin = path.join(root, "fake-span-hooks");
+  const touched = path.join(root, "called");
+  fs.writeFileSync(bin, \`#!/bin/sh
+touch "${touched}"
+\`, { mode: 0o755 });
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  const { ctx, registered } = fakeContext(root);
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    registered["tool:execute.after"]({
+      sessionID: "session-1",
+      tool: "patch",
+      input: { patchText: "*** Begin Patch\n*** End Patch" },
+    });
+    assert.equal(fs.existsSync(touched), false);
+    const event = { sessionID: "session-1", system: [] };
+    registered["session:context"](event);
+    assert.equal(event.system.length, 1);
+    assert.match(
+      event.system[0].text,
+      /could not normalize its complete changed scope/,
+    );
+  } finally {
+    dispose();
+    if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("undelivered session obligations are never evicted by another session", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-no-evict-"));
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = makeFixture(root);
+  const { ctx, registered } = fakeContext(root);
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    for (let index = 0; index < 9; index += 1) {
+      registered["tool:execute.after"]({
+        sessionID: \`session-\${index}\`,
+        tool: "edit",
+        input: { path: path.join(root, \`src/\${index}.js\`) },
+      });
+    }
+    const oldest = { sessionID: "session-0", system: [] };
+    registered["session:context"](oldest);
+    assert.equal(oldest.system.length, 1);
+    assert.match(oldest.system[0].text, /1 recorded understanding/);
+  } finally {
+    dispose();
+    if (previous === undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("adjacent legacy edit payload shapes are not guessed into changed scope", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-native-shape-"));
@@ -297,7 +403,7 @@ test("session entry delivery preserves changed scope until completion handoff", 
   fs.writeFileSync(bin, `#!/bin/sh
 case "$*" in
   *session-start*) echo "entry" ;;
-  *source-changed*) exit 0 ;;
+  *source-changed*) exit 1 ;;
   *session-stop*) cat > "${received}"; echo "close changed scope" ;;
 esac
 `, { mode: 0o755 });
