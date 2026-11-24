@@ -133,7 +133,7 @@ provenance, not current Layer-4 authority.
 ## Why the documentation is organized this way
 
 Public documentation follows
-[F14](foundations.md#f14--public-documentation-starts-from-the-users-problem-and-discloses-detail-progressively):
+[F14 in Foundations](foundations.md):
 start from the reader's problem and next useful action, then disclose deeper
 mechanics only when they are needed.
 
