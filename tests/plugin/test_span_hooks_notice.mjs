@@ -393,7 +393,7 @@ esac
       tool: "edit",
       input: { path: third },
     });
-    const args = fs.readFileSync(received, "utf8").trim().split("\\n");
+    const args = fs.readFileSync(received, "utf8").trim().split("\n");
     assert.deepEqual(args, ["source-changed", first, second, third]);
 
     const recovered = { sessionID: "session-1", system: [] };
