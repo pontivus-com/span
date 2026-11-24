@@ -250,13 +250,15 @@ class InstalledMcpDriverTest(_unittest.TestCase):
 
         real_hook = _pathlib.Path(self.exe).with_name("span-hooks")
         self.assertTrue(real_hook.is_file())
-        repo_root = _pathlib.Path(__file__).resolve().parents[2]
-        plugin_source = repo_root / "integrations/hosts/opencode/span-hooks.js"
         plugin_dir = root / "opencode-plugin"
         config_path = root / "config/opencode.json"
+        not_a_checkout = root / "distribution-mode"
+        not_a_checkout.mkdir()
         deploy_code = (
             "from span.shell.install.hosts import deploy_opencode_plugin\n"
-            f"deploy_opencode_plugin({str(plugin_source)!r}, {str(plugin_dir)!r}, "
+            "from span.shell.install.paths import opencode_plugin_path\n"
+            f"source = opencode_plugin_path({str(not_a_checkout)!r})\n"
+            f"deploy_opencode_plugin(str(source), {str(plugin_dir)!r}, "
             f"{str(config_path)!r}, {str(real_hook)!r}, {str(data_dir)!r}, "
             f"dry_run=False, span_root={str(root)!r})\n"
         )
