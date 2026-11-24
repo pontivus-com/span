@@ -1454,6 +1454,11 @@ class PlanningTest(unittest.TestCase):
             self.assertEqual(
                 snippet.read_bytes(), (generated / "agents-snippet.md").read_bytes()
             )
+            plugin = repo_root / "integrations/hosts/opencode/span-hooks.js"
+            self.assertEqual(
+                plugin.read_bytes(),
+                (generated / "opencode-plugin" / "index.js").read_bytes(),
+            )
 
     def test_main_returns_success_for_console_entrypoint(self):
         import tempfile
@@ -1995,12 +2000,20 @@ class HookWiringTest(unittest.TestCase):
                     for hook in block["hooks"]
                     if "span-hooks" in hook["command"]
                 ]
-                self.assertEqual(len(span_commands), 3)
+                self.assertEqual(len(span_commands), 2)
                 self.assertTrue(
                     all(
                         "--data-dir /isolated/data" in command
                         for command in span_commands
                     )
+                )
+                self.assertTrue(
+                    any("codex-post-tool" in command for command in span_commands)
+                )
+                self.assertNotIn("Stop", first["hooks"])
+                self.assertEqual(
+                    first["hooks"]["PostToolUse"][0]["matcher"],
+                    "^apply_patch$",
                 )
                 install.wire_codex_hooks(
                     "/bin/span-hooks", "/isolated/data", dry_run=False
@@ -2080,7 +2093,7 @@ class HookWiringTest(unittest.TestCase):
                 "/new/bin/span-hooks session-start --data-dir /isolated/data", commands
             )
             self.assertIn("/bin/foreign-hook", commands)
-            self.assertEqual(sum("span-hooks" in command for command in commands), 3)
+            self.assertEqual(sum("span-hooks" in command for command in commands), 2)
 
     def test_claude_merge_preserves_foreign_hooks_and_converges(self):
         import os
