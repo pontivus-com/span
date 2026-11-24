@@ -1,174 +1,205 @@
 # Frequently asked questions
 
-## What does an agent actually do with Span?
+These answers are intentionally short. Follow the linked guide or reference when
+you need the full workflow or exact mechanics.
 
-Ask for the file, symbol, service, or domain the agent is working on. Span
-returns current curated shared knowledge for that surface, explicit pending or
-stale status, and, for an ACTIVE Functional Pyramid repository, the project
-guidance that applies to the same scope from first principles down to functional
-and technical design.
+## What problem does Span solve?
 
-The working agent investigates gaps and captures supported conclusions when
-established. A separate reviewer curates stable exact revisions for shared reuse.
-A later session can ask the same surface without the old conversation or a saved
-internal ID. After code or guidance changes, `reconsider` identifies the
-understanding that actually needs another look.
-See [usage](usage.md).
+Coding agents often have to rediscover understanding that previous engineering
+work already established. Span turns useful task-time understanding into
+maintained software knowledge that later agents can reuse, while keeping that
+knowledge connected to the things it depends on.
+
+See the [project README](../README.md) for the product overview.
 
 ## Is Span a knowledge factory?
 
-A software knowledge factory is the broader loop in which engineering work
-produces candidate understanding, shared knowledge is curated for future reuse,
-and changes feed back into maintenance. Span is the evidence-backed knowledge
-layer in that loop: it retains agent-established software understanding with its
-declared support, records which exact revisions have been curated for shared
-reuse, resolves applicable governing guidance, and identifies what needs
-reassessment after change.
+Span is the **software-engineering knowledge layer** of a knowledge-factory
+workflow.
 
-The working coding agent or engineer remains the semantic author at capture
-time. Curation is a separate reviewer role that may be another agent session, a
-dedicated curator agent, a human reviewer, or a team workflow. Span records and
-enforces that lifecycle but does not run a background curator model or
-autonomously decide semantic quality.
+The broader knowledge-factory idea is that real work should produce reusable
+knowledge that is curated and maintained for future agents. LangChain describes
+that industry pattern in
+[How to build a knowledge factory](https://www.langchain.com/blog/knowledge-factory).
 
-This is deliberately narrower than the organizational topology described in
-LangChain's [knowledge-factory article](https://www.langchain.com/blog/knowledge-factory).
-That article separates task agents from a curator agent that can run in the
-background over broader raw sources and traces. Span separates evidence-near
-capture from explicit review for software understanding, while deterministic
-support/currentness and declared governance stay inside the Span server. Span
-does not claim that curation certifies truth, that curation must be autonomous,
-or that a separate curator/reviewer role is unnecessary.
+Span specializes it for software: engineering work can produce retained
+understanding, review qualifies stable knowledge for shared reuse, and changes
+to code or project guidance can trigger focused reassessment.
+
+Span does not require or include a background curator model. Review can be
+performed by another agent session, a dedicated workflow, or a human.
 
 ## How is Span different from a context engine or agent memory?
 
-A context engine primarily helps an agent retrieve the source and organizational
-material relevant to the task in front of it. Agent memory can preserve facts,
-interactions, preferences, or other information across tasks.
+A context engine helps assemble material relevant to the current task. General
+agent memory may preserve facts or interactions across tasks.
 
-Span focuses on the interpretation layer produced by software work: what an
-agent established about an exact software surface, what supported that
-conclusion, which governing guidance applied, whether those dependencies still
-hold, and what must be reconsidered after change. These capabilities can be
-complementary rather than mutually exclusive.
+Span focuses on **maintained software understanding**: what was established
+about a software surface, what supports it, which project guidance applies, and
+whether change means it needs another look.
 
-## Does installation explain the whole repository?
+These capabilities can complement each other.
 
-Installation establishes operational readiness. Understanding comes from
-explicit investigations and recording. A ready store, populated database, or
-successful call does not prove repository completeness.
+## What does an agent actually do with Span?
 
-## What is the Functional Pyramid?
+For ordinary work:
 
-The Functional Pyramid is how Span knows which project guidance applies to the
-exact part of the software an agent is working on. It links that scope to the
-relevant goals and first principles, then through the applicable rules and
-contracts to functional and technical design.
+> **Ask before deriving → investigate normally → capture what you establish →
+> review for shared reuse → reconsider after change.**
 
-Those documents remain in their canonical locations, including other
-repositories. Span keeps their relationships, applicability, and order
-explicit. It does not guess from filenames, search relevance, or document type,
-and it does not copy the governing documents into Span.
+See [Using Span](usage.md) for the normal workflow and
+[First investigation](onboarding-runbook.md) for a first end-to-end example.
 
-## Do I have to activate a repository before using Span?
+## Does installation explain my repository automatically?
 
-No. A registered repository begins `UNCONFIGURED`; it can still use the
-ordinary descriptive lifecycle. `EXCLUDED` is an explicit opt-out. An `ACTIVE`
-repository receives Functional Pyramid orientation, and NORMATIVE recording
-derives its applicable route and authority support automatically.
+No.
 
-## What happens when governance changes in another repository?
+Installation makes Span operational for the repository. Understanding is
+created through actual engineering investigation and retained from that work.
 
-Span follows the declared guidance chain across repositories. If a goal,
-contract, design, or its applicability changes in one repository, `reconsider`
-can identify understanding in another repository that depended on it and now
-needs another look.
+A successful install is readiness, not proof that the repository has been
+understood.
 
 ## Must every file be documented first?
 
-No. An understanding is a coherent explanation and can span several files.
-The agent chooses the scope for the real task. Retain the supported conclusions established in that scope.
+No.
 
-## Can I record work that began without Span?
+Span follows the scope of real engineering work. A useful conclusion can be
+about a file, symbol, service, or domain and may depend on several sources.
 
-Yes. `record` issues its own context from the supplied scope and cited
-evidence, then creates understanding with an explicit question and scope, or
-records an independent verification run. This direct-create capability preserves imported work; agents consult Span
-before deriving understanding under [the required lifecycle](lifecycle-contract.md#required-agent-completion).
+You do not need to create a parallel documentation project before Span becomes
+useful.
 
-## Do CURRENT or CURATED mean the explanation is true?
+## What is the Functional Pyramid?
 
-No. `CURRENT` means the revision's required support still passes its owning
-checks. `CURATED` means an explicit reviewer accepted that exact semantic
-revision for shared reuse. Neither is a truth certificate: the interpretation
-may still be incomplete or wrong, and semantic judgment remains with the
-investigator/reviewer.
+It is Span's mechanism for answering:
+
+> **What project guidance is supposed to govern this code?**
+
+For participating repositories, Span can connect the software scope being worked
+on to explicitly declared goals, principles, contracts, functional design, and
+technical design.
+
+The original documents remain canonical. Span maintains their declared
+relationships and applicability rather than guessing authority from filenames or
+search relevance.
+
+See [Evidence, authority, and interpretation](authority-trust.md).
+
+## Do I have to configure the Functional Pyramid before using Span?
+
+No.
+
+The ordinary descriptive knowledge lifecycle works without Functional Pyramid
+participation. Governance participation adds the applicable project-guidance
+side of the task context.
+
+If you are responsible for configuring it, use the exact Functional Pyramid
+reference in [MCP reference](mcp.md).
+
+## What happens when project guidance changes in another repository?
+
+If the repositories are connected through declared governance, a change to a
+goal, contract, design, or its applicability can make dependent knowledge in
+another repository require reassessment.
+
+Span follows the declared relationship rather than assuming repository
+boundaries are knowledge boundaries.
+
+## Do CURRENT or CURATED mean an explanation is true?
+
+No.
+
+**CURRENT** means the required recorded support still passes its checks.
+
+**CURATED** means a reviewer accepted that exact revision for shared reuse.
+
+Neither is a truth certificate. Semantic judgment remains with the investigator
+and reviewer.
+
+See [Support currency and reassessment](freshness.md) and
+[Agent lifecycle](lifecycle.md).
 
 ## What happens when code changes?
 
-Dependent support can become `REASSESSMENT_REQUIRED` or `UNVERIFIABLE`.
-`reconsider` names the affected surfaces and each conclusion's current
-qualification. The agent investigates and records a
-confirm/correct/replace/withdraw update; history remains intact.
-Changes outside a declared dependency boundary leave other support alone.
+Call `reconsider` with the changed paths.
 
-## What if sources match but I disagree?
+Span identifies retained knowledge that may depend on the change. Reassess what
+actually lost support; unrelated maintained knowledge can remain reusable.
 
-Record an explicit challenge. Resolve it or carry it forward through named
-challenge dispositions in `record`. A new version or passing test does
-not silently settle it.
+See [Using Span — After code or project guidance changes](usage.md#after-code-or-project-guidance-changes).
 
-## Does Span run the agent, change code, or execute tests?
+## What if I disagree with retained knowledge even though the sources have not changed?
 
-The coding agent uses its own model and tools for reasoning, edits, and tests.
-Span stores and qualifies what is recorded. It has no model provider or
-provider credentials and does not autonomously reinterpret source.
+Keep the disagreement explicit as a challenge and resolve it through the
+understanding lifecycle.
+
+A matching source fingerprint, a later version, or a passing test does not
+silently settle a semantic disagreement.
+
+See [Interpretation and recording](interpretation.md).
+
+## Can I retain useful work that began outside Span?
+
+Yes.
+
+Span can record supported understanding from work that already has a clear
+scope and evidence. That does not change the normal operating rule that agents
+should consult Span before re-deriving understanding when working with Span.
+
+Exact recording forms are in the [MCP reference](mcp.md#record).
+
+## Does Span run my coding agent, edit code, or execute tests?
+
+No.
+
+Your coding agent keeps its own model, tools, editor, search, and test runner.
+Span maintains the reusable software knowledge produced around that work.
 
 ## Do I need hooks?
 
-Hooks deliver lifecycle reminders. Retrieval and recording check support without
-them. A configured hook, a quiet event, and an observed delivery are different
-facts. See [hooks](hooks.md).
+No.
 
-## What happens after a lost response?
+Hooks provide lifecycle reminders at useful moments. The lifecycle itself does
+not depend on a hook being delivered.
 
-Retry exactly the same recording identity and content. A retained receipt
-recovers acceptance, even if its context expired or the sources later changed.
-Inspect history when retention has expired; missing replay state does not
-prove the original commit failed.
+See [Lifecycle hooks](hooks.md).
 
-## Which clients are verified for this beta?
+## What happens if a recording response is lost?
 
-The Beta-3 product is verified through source CI, the non-editable installed
-stdio MCP lane, and the FA-01–FA-64 functional acceptance matrix, including the
-combined installer + Functional Pyramid + capture/curation topology. Managed
-registration/integration exists for Codex, OpenCode and Claude Code, but live
-model-host delivery for the current Beta-3 candidate remains **UNVERIFIED** and
-is not inferred from registration health, configured hooks, or historical
-captures. Beta 3 remains unpublished until the release owner separately
-authorizes publication.
+Retry with the same recording identity and the same content. Span's replay
+contract is designed so a retained acceptance can be recovered safely.
+
+Do not guess that a missing response means the write failed.
+
+See [MCP reference — Replay, identity, and retention](mcp.md#replay-identity-and-retention).
 
 ## Does Span save time or tokens?
 
-It is designed to preserve useful investigations and focus reassessment. The
-amount saved depends on workload, reuse, recording overhead, and host delivery.
-The beta does not claim a universal saving or a completed comparative ACCEPT.
+That is the intended effect of reusing valuable investigations and focusing
+reassessment, but the amount depends on the workload, how often knowledge is
+reused, and the lifecycle overhead.
 
-## Where is state stored, and how do upgrades work?
+Span does not make a universal time- or token-saving claim without evidence for
+that specific claim.
 
-Beta 3 repository semantic/audit state uses schema 15 in the external data
-directory. Functional Pyramid participation, versions, exclusions and
-installation-scoped receipts remain in the separate installation database at
-`<DATA_DIR>/installation/functional-pyramid.db` with installation schema 1.
+## Which coding-agent hosts are supported?
 
-The runtime never migrates a store at open. Existing schema-14 repositories use
-the explicit offline transition to schema 15; that transition preserves
-Beta-1 semantic/audit/governance state and creates zero curation approvals.
-Migrated semantic revisions therefore begin CAPTURED under the Beta-3 reuse
-contract. Registered repositories remain `UNCONFIGURED` until Functional
-Pyramid participation is explicitly recorded.
+Managed integration exists for Codex, OpenCode, and Claude Code. Other MCP hosts
+can use the stdio server manually.
 
-A bare package upgrade does not migrate host configuration. Rerun
-`span-install`, complete any required offline transition, verify the
-installation, and reconnect the host. See [install](install.md) and
-[recovery](recovery.md).
+For the current Beta candidate, registration/integration support and verified
+live model delivery are different claims. See
+[Acceptance and evidence](acceptance.md) and
+[host integration](../integrations/hosts/triggers.md) for the current verified
+status rather than relying on this FAQ as a release-status record.
+
+## Where is Span state stored, and how do upgrades work?
+
+Span keeps its runtime state outside the target source tree, with repository
+backup support where explicitly configured.
+
+Storage schemas, offline transitions, host upgrades, and recovery procedures are
+operator concerns and change over releases. Follow
+[Install and connect](install.md) and [Backup and recovery](recovery.md) for the
+current procedure.
