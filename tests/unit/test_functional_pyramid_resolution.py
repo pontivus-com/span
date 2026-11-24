@@ -1231,11 +1231,14 @@ class FunctionalPyramidContractSublayerTest(unittest.TestCase):
             ["rule-p0", "rule-p1", "rule-p2s", "rule-p2w"],
         )
 
-    def _edge_findings(
+    def _edge_health_and_findings(
         self,
         child_layer: m.FunctionalPyramidLayer,
         parent_layer: m.FunctionalPyramidLayer,
-    ) -> tuple[m.FunctionalPyramidFinding, ...]:
+    ) -> tuple[
+        m.FunctionalPyramidHealth,
+        tuple[m.FunctionalPyramidFinding, ...],
+    ]:
         member = _member("repo-a")
         declaration = m.FunctionalPyramidDeclaration(
             version=1,
@@ -1266,15 +1269,25 @@ class FunctionalPyramidContractSublayerTest(unittest.TestCase):
                 ),
             ),
         )
-        _, findings = fp.evaluate_functional_pyramid_health(
+        return fp.evaluate_functional_pyramid_health(
             (member,),
             (("repo-a", declaration),),
             frozenset({"repo-a"}),
         )
-        return findings
+
+    def test_invalid_p2_edge_degrades_active_structural_health(self):
+        health, findings = self._edge_health_and_findings(
+            m.FunctionalPyramidLayer.P2S,
+            m.FunctionalPyramidLayer.P2W,
+        )
+        self.assertEqual(health, m.FunctionalPyramidHealth.DEGRADED)
+        self.assertIn(
+            m.FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+            {item.reason for item in findings},
+        )
 
     def test_reverse_p2s_to_p2w_governing_edge_is_invalid(self):
-        findings = self._edge_findings(
+        _, findings = self._edge_health_and_findings(
             m.FunctionalPyramidLayer.P2S,
             m.FunctionalPyramidLayer.P2W,
         )
@@ -1284,7 +1297,7 @@ class FunctionalPyramidContractSublayerTest(unittest.TestCase):
         )
 
     def test_same_p2s_governing_edge_is_invalid(self):
-        findings = self._edge_findings(
+        _, findings = self._edge_health_and_findings(
             m.FunctionalPyramidLayer.P2S,
             m.FunctionalPyramidLayer.P2S,
         )
@@ -1294,7 +1307,7 @@ class FunctionalPyramidContractSublayerTest(unittest.TestCase):
         )
 
     def test_same_p2w_governing_edge_is_invalid(self):
-        findings = self._edge_findings(
+        _, findings = self._edge_health_and_findings(
             m.FunctionalPyramidLayer.P2W,
             m.FunctionalPyramidLayer.P2W,
         )
