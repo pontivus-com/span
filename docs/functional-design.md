@@ -561,16 +561,30 @@ re-establishment contexts through FD-84/FD-85/FD-89. The write never creates a
 second semantic writer, route carrier or dependency-effect representation.
 *(G3, G8, F6, F7, F12, L4, L8, L14–L15)*
 
-**FD-94 — Lifecycle notices reflect participation without becoming governance.**
-For a registered UNCONFIGURED repository, the session notice directs the agent to
-the Functional Pyramid initialization skill/status path; EXCLUDED is quiet about
-initialization unless explicitly requested. ACTIVE/VALID uses ordinary
-governed-work guidance. ACTIVE/DEGRADED reports governance attention and the next
-public lifecycle action. ACTIVE/DEGRADED means ACTIVE participation with DEGRADED live health, not a
-fourth participation state. Change notices use the canonical affected projection
-from either reconsideration or an accepted Functional Pyramid write.
+**FD-94 — Lifecycle notices compose Functional Pyramid obligations without
+becoming governance.**
+At session start/resume/compact, canonical participation and live health select
+only the Functional Pyramid obligation: UNCONFIGURED directs governed use to the
+initialization/status path; EXCLUDED has no initialization obligation and
+ordinary descriptive semantic work remains available; ACTIVE/VALID adds no
+separate Pyramid action beyond ordinary governed orientation; ACTIVE/DEGRADED
+reports governance attention and the next existing lifecycle action.
+ACTIVE/DEGRADED means ACTIVE participation with DEGRADED live health, not a
+fourth participation state.
+
+For an external edit/write, the same canonical changed-scope projection decides
+semantic, authority, route, premise, containment and cross-repository effects;
+the hook does not first classify the edit as semantic versus governance work.
+The resulting obligation may therefore be semantic-only, Functional-Pyramid-
+related only, both, or neither while still routing through the existing public
+lifecycle. An accepted Functional Pyramid activate/revise/deactivate write is
+different: its `FunctionalPyramidRecorded` result already owns the canonical
+dependent effects and re-establishment contexts, so a hook does not recompute
+those effects or require a second `reconsider` for that write.
+
 Hooks never activate/revise a pyramid, author rule meaning, copy rule content,
-or make support current. *(G8, A4, F5, F10, F12, L13–L16)*
+create authority, or make support current. *(G8, A4, A9, F5–F6, F10, F12,
+L13–L16)*
 
 ## 5. Support evaluation
 
@@ -1014,16 +1028,38 @@ The Version-1 host contract still exposes exactly `ask`, `record` and
 result schemas; no host is accepted on evidence from a separate authority tool
 because no such public operation exists. *(F6, L8, L12)*
 
-**FD-58 — Lifecycle notices reach the agent at the moment of use.**
-The delivered host notice names only the next public lifecycle action computed
-from canonical lifecycle state; it does not duplicate or independently classify
-participation, health, support, or affected understanding. Functional Pyramid
-notice selection is the deterministic case owned by FD-94. A
-source/governance-change notice may report that affected understanding crosses
-member repositories but never computes another affected set. Notices never
-activate/revise governance, author semantic conclusions or certify meaning.
-Measure delivered notice cost under F8 and delivery under FD-53. *(F5, F10, G2,
-F12, L13–L16)*
+**FD-58 — Lifecycle notices interrupt omission at host-observable moments.**
+A lifecycle notice exists only where host-observable activity can create a
+required Span action outside the result of an MCP operation: session
+start/resume/compact, a reliable pre-investigation source-access event when the
+host exposes one, an external edit/write, or idle/stop/completion with a known
+outstanding lifecycle obligation. At each such moment notice selection evaluates
+the semantic-understanding obligation and the Functional Pyramid obligation
+independently from canonical Span state; either, both, or neither may require
+action. That distinction is a deterministic selection rule, not a new public
+state, carrier, operation, or hook-owned lifecycle.
+
+The delivered notice names the smallest existing public lifecycle action or
+actions that satisfy those obligations. A transition already exposed by an
+`ask`, `record`, or `reconsider` result remains owned by that result and is
+not rediscovered by a hook. Pre-investigation reminders are permitted only when
+the host identifies the source-access moment without semantic guessing; arbitrary
+command/string heuristics never manufacture a semantic surface or lifecycle
+state.
+
+For external changes, the complete normalized changed scope available from the
+host is evaluated through the canonical changed-scope effect projection before
+notice presentation is bounded. Multiple observed edits that have not yet been
+handed off preserve their union. A host that cannot supply a complete changed
+scope must make that incompleteness explicit; a subset is never treated as a
+smaller complete change. The resulting notice may report cross-repository
+effects but never computes another affected set.
+
+Notices never activate/revise governance, author or curate semantic conclusions,
+issue re-establishment contexts, make support current, or certify meaning.
+Answer safety remains independent of notice delivery under FD-52. Measure
+delivered notice cost under F8 and delivery under FD-53. *(A4, A8–A9, F5–F6,
+F10, F12, L8, L12–L16)*
 
 ## 13. Bounds and truncation
 
@@ -1253,9 +1289,18 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     the current downstream graph is obtainable; after the edit, reconsider
     reports cross-repository authority/route effects and record closes the
     affected dispositions.
-28. **Participation-aware hooks.** UNCONFIGURED, EXCLUDED, ACTIVE/VALID and
-    ACTIVE/DEGRADED produce the FD-94 notice behavior without any hook mutating
-    participation, governance or support.
+28. **Lifecycle-compliance hooks.** Session start/resume/compact exercises
+    the FD-94 participation cases; a reliable host pre-investigation event, where
+    supported, directs the agent to ordinary `ask`; edit/write evaluates the
+    complete changed scope through the same canonical effect projection as
+    `reconsider`, including source, discovery, authority, route, containment,
+    premise and cross-repository effects; multiple edits before handoff preserve
+    their union; only notice presentation is bounded; and idle/stop/completion
+    reports only known outstanding lifecycle obligations. Where logically
+    possible, no-action, semantic-only, Functional-Pyramid-only and combined
+    obligations are exercised. Explicit MCP-result transitions are not
+    rediscovered, and no hook mutates semantics, curation, participation,
+    governance or support or issues re-establishment contexts.
 29. **Initialization handoff.** After accepted activation/revision, lifecycle
     verification succeeds only when `FunctionalPyramidSelector` returns the
     exact committed pyramid identity/version/member view with live health VALID;
