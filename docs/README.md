@@ -125,6 +125,11 @@ The active Beta-3 programme record is:
 Completed campaigns are listed in the
 [implementation-plan index](implementation-plans/README.md).
 
+Historical technical-design baseline analysis, superseded transition/release
+mechanisms, and dated delivery evidence are preserved in
+[Technical-design history](history/technical-design-pre-version1.md). They are
+provenance, not current Layer-4 authority.
+
 ## Why the documentation is organized this way
 
 Public documentation follows
