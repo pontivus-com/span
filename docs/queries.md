@@ -1,102 +1,164 @@
 # Questions, retrieval, and bounds
 
-Ask for the exact software surface you are working on. A pure `ask` names
-either an exact `surface={kind, locator}` or an unambiguous `reference`, with
-no question, request identity, context, or evidence. It returns the current
-retained understanding for that surface and, for an ACTIVE Functional Pyramid
-repository, the applicable project guidance for the same scope. A genuinely
-unassessed surface returns a Gap with source pointers; the agent investigates
-and records what it establishes.
+Span is designed to help an agent start from the **software surface it is
+working on**, not from a saved internal ID or a remembered query.
 
-When the exact recorded question is already known, use
-`RecordedQuestionSelector`. It is exact surface-scoped equality, not semantic
-search. When source bytes are needed, use explicit evidence admission:
-surface/reference plus non-empty `evidence` and a caller-owned `request_id`.
+That keeps retrieval aligned with the engineering task:
 
-## Functional Pyramid retrieval
+> **What do we currently know about this file, symbol, service, or domain?**
 
-The Functional Pyramid is how Span connects a software surface to the canonical
-goals, rules, contracts, and design documents that guide it. The same `ask`
-tool also carries three exact Functional Pyramid selector branches. Status reads
-current repository/pyramid participation, candidate selection performs
-deterministic ACTIVATE/REVISE validation without writes, and receipt selection
-retrieves one exact installation-scoped participation receipt.
+If reusable knowledge exists, Span returns it. If the surface has not been
+assessed or its knowledge cannot currently be reused, Span keeps that limitation
+explicit.
 
-Ordinary Answer/Gap composition includes the repository's Functional Pyramid
-orientation. For an ACTIVE member it is resolved from the same effective
-semantic scope as the semantic result; UNCONFIGURED/EXCLUDED state does not
-pretend there is an empty ACTIVE route. A route may be structurally unresolved
-without converting the semantic answer into operational unavailability.
+## Start from the software surface
 
-## Result paths
+For normal work, ask Span about the exact surface you are about to understand or
+change.
 
-- `Answer`: current supported content, grouped by recorded question for the
-  document view, with statement, nature, scope, support/evidence references,
-  surface status (including `stale_refs`), recorded gaps, applicable
-  verification, and explicit truncation state. `admission` is present only
-  when explicit evidence admission ran.
-- `Gap`: exactly one reason — `invalidated`, `unverifiable`, or
-  `unassessed` — with historical non-current content where applicable,
-  missing items, concrete `source_pointers`, status and recovery. It does not
-  imply evidence possession. Explicit evidence admission may add the same
-  `admission` projection and continuation. A non-matching
-  `RecordedQuestionSelector` is `unassessed`; a truncated historical gap's
-  recovery names the snapshot selector.
-- `AmbiguousSurface`: more than one granularity matches a reference; candidates
-  are exact identities. Copy one into `surface`; Span never guesses.
-- `RetrievedUnderstanding` / `RetrievedReceipt`: exact-reference history.
-  They are never merged into `Answer` and never satisfy current-answer reuse.
-- `EvidencePage`: the next exact selected-evidence deliveries, with an optional
-  further continuation.
-- `FunctionalPyramidStatus` / `FunctionalPyramidCandidate` /
-  `RetrievedFunctionalPyramidReceipt`: exact participation, read-only proposal
-  validation, or immutable participation acceptance respectively.
-- `Rejected`: caller-correctable invalid selector/reference/binding state,
-  including an unusable continuation.
-- `Unavailable`: genuine operational failure or a response budget too small to
-  carry the minimum result.
+A surface can be a file, symbol, service, or domain.
 
-Surface-first document view is the normal reuse path. Read it and select the
-current conclusion that answers the task. Use exact recorded-question selection
-only when that metadata is already known; Span does not rank, embed, paraphrase,
-or similarity-match questions.
+You can also use an unambiguous reference when Span can resolve it to one exact
+surface. If the reference could mean several surfaces, Span returns the
+candidates rather than guessing.
 
-## Retrieve exact detail
+Surface-first retrieval is the normal reuse path because it does not require the
+new session to know anything about the previous session's internal identities.
 
-Use `ask` with an `UnderstandingSnapshotSelector` for a current or exact
-snapshot, or a `ReceiptRetrievalSelector` for a retained receipt. A receipt can
-survive its context; missing context detail does not revoke committed
-acceptance. Snapshot retrieval evaluates support and returns challenges
-alongside the recorded content.
+Exact request forms are in [MCP reference — ask](mcp.md#ask).
 
-`ask` also returns applicable verification runs and their live qualification.
-A run applies to the surfaces within its declared scope; a single-file run is
-not widened to a broader service. There is no separate qualification call.
-Neither retrieval nor qualification performs semantic reinterpretation or
-external test execution.
+## Use an exact recorded question only when you already know it
 
-## Bounds and truncation
+Span can retrieve knowledge by an exact previously recorded question, but that
+is a targeted lookup rather than semantic search.
 
-The agent does not manage response size. Layer 4 owns the per-host budget and
-applies it at the composition boundary. A truncated result names what was
-omitted; truncation never promotes historical content into the answer. If the
-budget cannot carry the result kind, the surface identity, and the fact of
-truncation, the operation returns `Unavailable` rather than a misleading
-fragment.
+It does not:
 
-## Continuations
+- paraphrase the question;
+- similarity-rank alternative questions;
+- embed the query and choose the nearest answer; or
+- guess that two differently worded questions mean the same thing.
 
-A continuation is an opaque, stateless token bound to a repository, live
-context, original request identity/digest, and the next evidence position.
-Pass only the continuation to `ask`; it carries its own namespace. The same
-token against the same live context returns the same page. Malformed,
-wrong-binding, missing/non-live/expired, exhausted, or out-of-position
-continuations are typed `Rejected`; genuine operational failure is
-`Unavailable`.
+If you already know the exact recorded question, use that selector. Otherwise,
+start from the software surface and inspect the maintained knowledge associated
+with it.
 
-Every page advances by at least one evidence unit or exact line range. An
-oversized unit is split at line boundaries; a unit that cannot fit even one line
-is refused rather than returned as an empty page. Continuations are not
-structural listing cursors and cannot be interchanged with them.
+This avoids presenting a semantically similar but wrong answer as if it were the
+same question.
 
-See [freshness](freshness.md) for what current support means.
+## A gap is useful information
+
+A gap does not mean “Span knows nothing about this repository.”
+
+It means the requested knowledge is not currently available for the selected
+scope in the requested form.
+
+Depending on the situation, the agent may need to:
+
+- investigate the surface for the first time;
+- revisit knowledge whose support changed;
+- resolve unavailable evidence or project authority; or
+- choose an exact surface when a reference was ambiguous.
+
+The important point is that Span reports the limitation instead of filling it
+with plausible text.
+
+## Source retrieval is separate from semantic knowledge
+
+Sometimes the maintained answer is not enough and the investigator needs exact
+source content.
+
+That is a different operation from asking what Span already knows.
+
+Explicit evidence admission lets the agent request selected source material for
+the investigation while keeping that evidence separate from the semantic answer.
+
+When selected evidence does not fit in one response, Span can return a
+continuation so the agent can retrieve the remaining selected content without
+changing the original selection.
+
+The exact evidence and continuation contract is in
+[MCP reference — ask](mcp.md#ask).
+
+## Historical detail is not current knowledge
+
+Span preserves history for audit and recovery.
+
+An investigator can retrieve an exact historical understanding revision or a
+recording receipt when that detail is needed.
+
+Historical retrieval does not make old content current again and is not merged
+into the normal shared answer.
+
+That distinction prevents “we once believed this” from silently becoming “this
+is what the agent should use now.”
+
+## Project guidance follows the same task scope
+
+For a repository participating in the Functional Pyramid, ordinary task-time
+retrieval can also include the project guidance that applies to the same
+software scope.
+
+Administrative queries can inspect participation, validate proposed governance
+changes, and retrieve exact governance receipts.
+
+Those are exact lifecycle operations, not semantic discovery. Span does not
+infer governance from the text of the user's question.
+
+See [Evidence, authority, and interpretation](authority-trust.md) for the
+concept and the [MCP reference](mcp.md) for exact selectors.
+
+## Bounded results stay honest
+
+Large or incomplete results must not look complete merely because a response
+ended.
+
+Span therefore keeps bounds and omissions explicit.
+
+If a result is truncated, it identifies that truncation. If a response cannot
+carry the minimum information needed to represent the result honestly, Span
+reports operational inability rather than returning a misleading fragment.
+
+Likewise, an incomplete source inventory is not proof that something does not
+exist outside the inspected boundary.
+
+This is part of a broader rule: **bounded investigation must not become an
+unbounded claim.**
+
+## Continuations continue one selected investigation
+
+A continuation is used to retrieve the next part of evidence already selected
+for an investigation.
+
+It is not a general repository cursor and it is not interchangeable with other
+references.
+
+Treat continuation tokens as opaque. Pass them back to Span as returned rather
+than constructing or editing them.
+
+Expired, invalid, or mismatched continuations remain explicit instead of being
+silently redirected to different evidence.
+
+## Verification retrieval does not rerun verification
+
+Span can return retained verification records that apply to a software scope and
+show whether their recorded support still holds.
+
+Retrieval does not rerun the command or reinterpret the outcome.
+
+A historical `PASS`, `FAIL`, or `INCONCLUSIVE` remains the outcome that
+was actually observed.
+
+See [Interpretation and recording](interpretation.md) for why verification and
+semantic understanding are kept separate.
+
+## The retrieval rule to remember
+
+For ordinary work:
+
+> **Start from the software surface. Use exact identities for exact history.
+> Request source evidence explicitly when you need it. Treat bounds and gaps as
+> information, not as permission to guess.**
+
+For exact result types, selectors, continuations, and error behavior, use the
+[MCP reference](mcp.md).
