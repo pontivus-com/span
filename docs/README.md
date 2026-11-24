@@ -106,9 +106,9 @@ required to do**.
 Implementation plans track release campaigns. They are useful for programme
 history and audit, but they are not product documentation.
 
-The active Beta-3 programme record is:
+The active Beta-4 programme record is:
 
-- [Span 1.0.0 Beta 3 implementation plan](implementation-plans/1.0.0-beta3.md)
+- [Span 1.0.0 Beta 4 implementation plan](implementation-plans/1.0.0-beta4.md)
 
 Completed campaigns are listed in the
 [implementation-plan index](implementation-plans/README.md).
