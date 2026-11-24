@@ -340,6 +340,73 @@ class LifecycleHooksTest(unittest.TestCase):
         self.assertEqual(len(paths), len(payload))
         self.assertEqual(paths[-1], payload[-1]["file_path"])
 
+    def test_codex_apply_patch_parser_uses_only_documented_patch_markers(self):
+        command = """*** Begin Patch
+*** Update File: src/a.py
+*** Move to: src/moved.py
+*** Add File: src/new.py
+*** Delete File: src/old.py
+*** End Patch
+"""
+        self.assertEqual(
+            hooks._codex_apply_patch_paths(command),
+            ("src/a.py", "src/moved.py", "src/new.py", "src/old.py"),
+        )
+        self.assertIsNone(
+            hooks._codex_apply_patch_paths("*** Begin Patch\n*** End Patch")
+        )
+
+    def test_codex_post_tool_emits_structured_context_for_complete_native_scope(self):
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {
+                "command": (
+                    "*** Begin Patch\n"
+                    "*** Update File: src/a.py\n"
+                    "*** Add File: src/b.py\n"
+                    "*** End Patch\n"
+                )
+            },
+        }
+        observed = []
+
+        def project(_data_dir, paths):
+            observed.append(tuple(paths))
+            return ("span: repo needs attention; call reconsider after editing.",)
+
+        with (
+            mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
+            mock.patch.object(hooks, "_source_change_notices", side_effect=project),
+        ):
+            output = _capture(hooks.cmd_codex_post_tool, "/data", "/repo")
+
+        result = json.loads(output)
+        self.assertEqual(observed, [("/repo/src/a.py", "/repo/src/b.py")])
+        self.assertEqual(
+            result["hookSpecificOutput"]["hookEventName"],
+            "PostToolUse",
+        )
+        self.assertIn(
+            "call reconsider after editing",
+            result["hookSpecificOutput"]["additionalContext"],
+        )
+
+    def test_codex_post_tool_reports_incomplete_native_scope_without_guessing(self):
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {"command": "not an apply_patch document"},
+        }
+        with mock.patch("sys.stdin", io.StringIO(json.dumps(payload))):
+            output = _capture(hooks.cmd_codex_post_tool, "/data", "/repo")
+
+        result = json.loads(output)
+        self.assertIn(
+            "could not normalize the complete changed scope",
+            result["hookSpecificOutput"]["additionalContext"],
+        )
+
     def test_source_change_reports_bounded_dependents(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = _recorded(tmp)
