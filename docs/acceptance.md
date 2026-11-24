@@ -12,11 +12,13 @@ Historical Beta-1 and 0.11 campaign evidence has moved to
 ## Current Beta-3 verification state
 
 The current functional acceptance authority is
-[Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance),
-with executable traceability through
-[FA-01–FA-64](functional-acceptance.md). The
-[Invariant audit matrix](invariants.md) covers cross-layer architecture
-boundaries.
+[Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance).
+FA-01–FA-64 remain the numbered acceptance set, but the corrected FA-28
+lifecycle-hook case is not yet fully evidenced by the existing
+[functional-acceptance matrix](functional-acceptance.md); Beta-3 task T14-H6
+owns that executable closure. The [Invariant audit matrix](invariants.md)
+continues to cover cross-layer architecture boundaries and must be reconciled
+with the new hook tests when they exist.
 
 ### Semantic/runtime baseline
 
@@ -163,10 +165,19 @@ workstream:
   `test_lines` ratchet from **32,443 to 32,486**. No production/source-quality
   ceiling or product gate was weakened.
 
-The earlier F14 run remains evidence for its exact documentation tree, not the
-assembled post-review candidate. The authoritative Beta-3 closure proof is the
-required GitHub CI check attached to the current exact commit; its run identifier
-is intentionally not embedded because doing so would create another head.
+The earlier F14 run remains evidence for its exact documentation tree. The
+subsequent skill/hook exact-head run likewise remains evidence for the tree it
+tested, but a deeper lifecycle review has reopened T14. That review corrected
+FD-58/FD-94 and Technical Design §22 and identified remaining implementation
+work around complete changed-scope input, session edit accumulation, managed
+host installation identity, session-entry composition and executable hook
+acceptance. No prior green run is therefore the Beta-3 closure proof for the
+current design.
+
+The authoritative Beta-3 closure proof will be the required GitHub CI check
+attached to the exact commit that completes T14-H2 through T14-H7. Its run
+identifier is intentionally not embedded in the candidate tree because doing so
+would create another head.
 
 ## Release identity and authorization
 
@@ -218,7 +229,8 @@ host-specific evidence.
 Do not use this page as a second requirements catalog.
 
 - [Functional acceptance](functional-acceptance.md) maps FA-01–FA-64 to live
-  boundary tests.
+  boundary tests; the expanded FA-28 hook contract remains explicitly incomplete
+  until T14-H6 adds and records its missing live evidence.
 - [Invariant audit matrix](invariants.md) maps architecture invariants to tests
   or explicit review enforcement.
 - [Method grounding](method-grounding.md) explains external industry/method
