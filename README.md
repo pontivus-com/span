@@ -276,10 +276,9 @@ see [using Span](docs/usage.md).
 
 The Beta-3 execution candidate carries the verified Version-1 semantic/runtime,
 non-editable installed stdio MCP, FA-01–FA-64, installer, Functional Pyramid and
-capture/curation production-topology baseline. The private first-adopter
-cold-install/governance/capture-curation gate has also passed against committed
-adopter inputs. Beta 3 additionally closes strict canonical authority ingress and
-the release-authorization boundary. Live model-host delivery remains
+capture/curation production-topology baseline. Beta 3 additionally closes
+strict canonical authority ingress and the release-authorization boundary.
+Live model-host delivery remains
 **UNVERIFIED** and is not inferred from registration, configured hooks, or
 historical captures.
 
@@ -319,12 +318,10 @@ repositories use the explicit offline transition; registration alone leaves
 them `UNCONFIGURED` until participation is declared. The public operations
 remain exactly `ask`, `record`, and `reconsider`.
 
-Beta-3 repository, installer, Functional Pyramid, capture/curation, installed
-production-topology and private first-adopter acceptance are green at their
-recorded gates. The strict-ingress/release-control correction still requires
-Beta-3 exact-head verification. Publication is a separate owner decision:
-merging or pushing does not publish, and no release workflow may be dispatched
-without explicit release authorization. See
+Beta-3 repository, installer, Functional Pyramid, capture/curation and installed
+production-topology acceptance are green at their recorded gates. Publication is
+a separate owner decision: merging or pushing does not publish, and no release
+workflow may be dispatched without explicit release authorization. See
 [the Beta-3 implementation plan](docs/implementation-plans/1.0.0-beta3.md),
 [acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
 
