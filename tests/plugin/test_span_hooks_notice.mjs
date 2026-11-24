@@ -265,7 +265,12 @@ test("adjacent legacy edit payload shapes are not guessed into changed scope", a
     });
     const event = { sessionID: "session-1", system: [] };
     registered["session:context"](event);
-    assert.equal(event.system.length, 0);
+    assert.equal(event.system.length, 1);
+    assert.match(
+      event.system[0].text,
+      /could not normalize its complete changed scope/,
+    );
+    assert.doesNotMatch(event.system[0].text, /1 recorded understanding/);
   } finally {
     dispose();
     if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
