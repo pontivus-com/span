@@ -18,7 +18,7 @@ class build_py(_build_py):
     """Map canonical assets directly into the wheel package-data build."""
 
     def get_data_files(self):
-        files = list(super().get_data_files())
+        files = list(super().get_data_files() or ())
         asset_root = pathlib.Path(self.build_lib) / "span" / "_assets"
         for source, relative in asset_manifest():
             files.append(
