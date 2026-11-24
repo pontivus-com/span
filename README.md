@@ -140,7 +140,7 @@ context that answers:
 
 The underlying lifecycle is deliberately conservative: captured understanding
 does not automatically become shared truth, and Span does not invent project
-authority. The detailed model is documented separately for readers who need it.
+authority.
 
 ## Quick start
 
