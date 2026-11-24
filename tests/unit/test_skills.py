@@ -244,6 +244,7 @@ class SkillLifecycleConsistencyTest(unittest.TestCase):
             "expected_version",
             "conclusion_id",
             "scope_paths",
+            "next_after",
         }
         for path in SKILLS:
             text = _text(path)
