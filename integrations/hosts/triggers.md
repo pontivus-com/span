@@ -5,6 +5,13 @@ Hooks deliver lifecycle reminders. The agent follows [the required lifecycle](..
 for investigation, retention and reassessment. Lifecycle operations check
 declared support independently of hook delivery.
 
+Beta-3 lifecycle-hook closure is currently reopened under programme tasks
+T14-H2–T14-H7. The tables below describe the managed wiring that exists today;
+they are not a claim that the corrected FD-58/FD-94 lifecycle-compliance
+contract is fully implemented. In particular, final closure still requires
+complete changed-scope handling, session edit accumulation, installation-identity
+parity, singular session-entry composition and expanded executable acceptance.
+
 ## Managed integration
 
 | Host | Implemented integration | Version-1 delivery qualification |
