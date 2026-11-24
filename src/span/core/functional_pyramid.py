@@ -410,11 +410,48 @@ def _layer_rank(layer: FunctionalPyramidLayer) -> int:
         return 0
     if layer is FunctionalPyramidLayer.P1:
         return 1
-    if layer in (FunctionalPyramidLayer.P2S, FunctionalPyramidLayer.P2W):
+    if layer is FunctionalPyramidLayer.P2S:
         return 2
-    if layer is FunctionalPyramidLayer.P3:
+    if layer is FunctionalPyramidLayer.P2W:
         return 3
-    return 4
+    if layer is FunctionalPyramidLayer.P3:
+        return 4
+    return 5
+
+
+def _governing_edge_is_valid(
+    child_layer: FunctionalPyramidLayer,
+    parent_layer: FunctionalPyramidLayer,
+) -> bool:
+    if child_layer is FunctionalPyramidLayer.P1:
+        return parent_layer is FunctionalPyramidLayer.P0
+    if child_layer is FunctionalPyramidLayer.P2S:
+        return parent_layer in (
+            FunctionalPyramidLayer.P0,
+            FunctionalPyramidLayer.P1,
+        )
+    if child_layer is FunctionalPyramidLayer.P2W:
+        return parent_layer in (
+            FunctionalPyramidLayer.P0,
+            FunctionalPyramidLayer.P1,
+            FunctionalPyramidLayer.P2S,
+        )
+    if child_layer is FunctionalPyramidLayer.P3:
+        return parent_layer in (
+            FunctionalPyramidLayer.P0,
+            FunctionalPyramidLayer.P1,
+            FunctionalPyramidLayer.P2S,
+            FunctionalPyramidLayer.P2W,
+        )
+    if child_layer is FunctionalPyramidLayer.P4:
+        return parent_layer in (
+            FunctionalPyramidLayer.P0,
+            FunctionalPyramidLayer.P1,
+            FunctionalPyramidLayer.P2S,
+            FunctionalPyramidLayer.P2W,
+            FunctionalPyramidLayer.P3,
+        )
+    return False
 
 
 def _finding_sort_key(
@@ -827,11 +864,11 @@ def _rule_edge_findings(
             findings.append(found)
             continue
         target = rules[(parent.repository_id, parent.identity)]
-        if _layer_rank(target.layer) >= _layer_rank(rule.layer):
+        if not _governing_edge_is_valid(rule.layer, target.layer):
             findings.append(
                 _finding(
                     FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                    "governing edge does not point to a higher pyramid layer",
+                    "governing edge violates the Functional Pyramid layer relation",
                     "point the edge to a valid higher governing rule",
                     repository_id=repository_id,
                     rule_id=rule_id,
@@ -1175,11 +1212,11 @@ def _resolve_rule_refs(
                 findings.append(parent_finding)
                 continue
             target = rules[(parent.repository_id, parent.identity)]
-            if _layer_rank(target.layer) >= _layer_rank(rule.layer):
+            if not _governing_edge_is_valid(rule.layer, target.layer):
                 findings.append(
                     _finding(
                         FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                        "governing edge does not point to a higher pyramid layer",
+                        "governing edge violates the Functional Pyramid layer relation",
                         "point the edge to a valid higher governing rule",
                         repository_id=ref.repository_id,
                         rule_id=ref.identity,

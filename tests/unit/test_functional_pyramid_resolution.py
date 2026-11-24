@@ -1230,3 +1230,143 @@ class FunctionalPyramidContractSublayerTest(unittest.TestCase):
             [item.rule_id for item in view.rules],
             ["rule-p0", "rule-p1", "rule-p2s", "rule-p2w"],
         )
+
+    def _edge_findings(
+        self,
+        child_layer: m.FunctionalPyramidLayer,
+        parent_layer: m.FunctionalPyramidLayer,
+    ) -> tuple[m.FunctionalPyramidFinding, ...]:
+        member = _member("repo-a")
+        declaration = m.FunctionalPyramidDeclaration(
+            version=1,
+            rules=(
+                _rule(
+                    "repo-a",
+                    "rule-p0",
+                    m.FunctionalPyramidLayer.P0,
+                    ("ROOT",),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-p1",
+                    m.FunctionalPyramidLayer.P1,
+                    (_graph_ref("repo-a", "rule-p0"),),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-parent",
+                    parent_layer,
+                    (_graph_ref("repo-a", "rule-p1"),),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-child",
+                    child_layer,
+                    (_graph_ref("repo-a", "rule-parent"),),
+                ),
+            ),
+        )
+        _, findings = fp.evaluate_functional_pyramid_health(
+            (member,),
+            (("repo-a", declaration),),
+            frozenset({"repo-a"}),
+        )
+        return findings
+
+    def test_reverse_p2s_to_p2w_governing_edge_is_invalid(self):
+        findings = self._edge_findings(
+            m.FunctionalPyramidLayer.P2S,
+            m.FunctionalPyramidLayer.P2W,
+        )
+        self.assertIn(
+            m.FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+            {item.reason for item in findings},
+        )
+
+    def test_same_p2s_governing_edge_is_invalid(self):
+        findings = self._edge_findings(
+            m.FunctionalPyramidLayer.P2S,
+            m.FunctionalPyramidLayer.P2S,
+        )
+        self.assertIn(
+            m.FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+            {item.reason for item in findings},
+        )
+
+    def test_same_p2w_governing_edge_is_invalid(self):
+        findings = self._edge_findings(
+            m.FunctionalPyramidLayer.P2W,
+            m.FunctionalPyramidLayer.P2W,
+        )
+        self.assertIn(
+            m.FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+            {item.reason for item in findings},
+        )
+
+    def test_joint_p2_applicability_does_not_create_governing_edge(self):
+        member = _member("repo-a")
+        declaration = m.FunctionalPyramidDeclaration(
+            version=1,
+            contexts=(
+                m.FunctionalContextDeclaration(
+                    context_id="ctx-contracts",
+                    coverage=_scope(
+                        _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py")
+                    ),
+                    rules=(
+                        _graph_ref("repo-a", "rule-p2s"),
+                        _graph_ref("repo-a", "rule-p2w"),
+                    ),
+                ),
+            ),
+            rules=(
+                _rule(
+                    "repo-a",
+                    "rule-p0",
+                    m.FunctionalPyramidLayer.P0,
+                    ("ROOT",),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-p1",
+                    m.FunctionalPyramidLayer.P1,
+                    (_graph_ref("repo-a", "rule-p0"),),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-p2s",
+                    m.FunctionalPyramidLayer.P2S,
+                    (_graph_ref("repo-a", "rule-p1"),),
+                ),
+                _rule(
+                    "repo-a",
+                    "rule-p2w",
+                    m.FunctionalPyramidLayer.P2W,
+                    (_graph_ref("repo-a", "rule-p1"),),
+                ),
+            ),
+        )
+        authorities = {
+            ("repo-a", f"rules/{rule_id}.md"): _authority(
+                "repo-a", f"rules/{rule_id}.md"
+            )
+            for rule_id in ("rule-p0", "rule-p1", "rule-p2s", "rule-p2w")
+        }
+
+        view, _ = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("fp-joint-applicability"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(member,),
+            surface=m.SurfaceKey("repo-a", m.SurfaceKind.FILE, "src/a.py"),
+            semantic_scope=m.EvidenceScope(paths=("src/a.py",)),
+            declarations=(("repo-a", declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings=authorities,
+        )
+
+        p2s = next(item for item in view.rules if item.rule_id == "rule-p2s")
+        p2w = next(item for item in view.rules if item.rule_id == "rule-p2w")
+        self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
+        self.assertNotIn("rule-p2w", p2s.downstream_rule_ids)
+        self.assertEqual(p2w.governing_rule_ids, ("rule-p1",))
+

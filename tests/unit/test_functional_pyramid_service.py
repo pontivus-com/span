@@ -615,6 +615,71 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(self.state.versions, {})
         self.assertEqual(self.state.receipts, {})
 
+    def test_candidate_accepts_explicit_p2w_to_p2s_edge(self):
+        request = m.EvidenceRequest("decl.json")
+        self.declarations.results[("repo-a", "decl.json")] = (
+            _ref("repo-a", "decl.json"),
+            m.FunctionalPyramidDeclaration(
+                version=1,
+                contexts=(
+                    m.FunctionalContextDeclaration(
+                        context_id="ctx",
+                        coverage=_scope(),
+                        rules=(m.FunctionalGraphRef("repo-a", "rule-p2w"),),
+                    ),
+                ),
+                rules=(
+                    m.FunctionalRuleDeclaration(
+                        rule_id="rule-p0",
+                        layer=m.FunctionalPyramidLayer.P0,
+                        owner=m.FunctionalRuleOwner("repo-a", "rules/p0.md"),
+                        governing_rule_ids=("ROOT",),
+                    ),
+                    m.FunctionalRuleDeclaration(
+                        rule_id="rule-p1",
+                        layer=m.FunctionalPyramidLayer.P1,
+                        owner=m.FunctionalRuleOwner("repo-a", "rules/p1.md"),
+                        governing_rule_ids=(
+                            m.FunctionalGraphRef("repo-a", "rule-p0"),
+                        ),
+                    ),
+                    m.FunctionalRuleDeclaration(
+                        rule_id="rule-p2s",
+                        layer=m.FunctionalPyramidLayer.P2S,
+                        owner=m.FunctionalRuleOwner("repo-a", "rules/p2s.md"),
+                        governing_rule_ids=(
+                            m.FunctionalGraphRef("repo-a", "rule-p1"),
+                        ),
+                    ),
+                    m.FunctionalRuleDeclaration(
+                        rule_id="rule-p2w",
+                        layer=m.FunctionalPyramidLayer.P2W,
+                        owner=m.FunctionalRuleOwner("repo-a", "rules/p2w.md"),
+                        governing_rule_ids=(
+                            m.FunctionalGraphRef("repo-a", "rule-p2s"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        intent = m.FunctionalPyramidMemberIntent(
+            repository_id="repo-a",
+            declaration_sources=(request,),
+            functional_scope=_scope(),
+            coverage=m.FunctionalPyramidCoverage.PARTIAL,
+        )
+
+        candidate = self.admin_service.candidate(
+            m.FunctionalPyramidCandidateSelector(
+                action=m.FunctionalPyramidAction.ACTIVATE,
+                members=(intent,),
+            )
+        )
+
+        self.assertTrue(candidate.activation_ready)
+        self.assertEqual(candidate.validation_findings, ())
+        self.assertEqual(candidate.graph_findings, ())
+
     def _intent(self, repository_id: str) -> m.FunctionalPyramidMemberIntent:
         request = m.EvidenceRequest("decl.json")
         self.declarations.results[(repository_id, "decl.json")] = (

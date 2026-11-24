@@ -216,6 +216,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                         "selectors": [
                             {"kind": "PATH", "path": "rules/p0-v1.md"},
                             {"kind": "PATH", "path": "rules/p0-v2.md"},
+                            {"kind": "PATH", "path": "rules/p1.md"},
+                            {"kind": "PATH", "path": "rules/p2s.md"},
+                            {"kind": "PATH", "path": "rules/p2w.md"},
                         ]
                     },
                     "coverage": "PARTIAL",
@@ -339,7 +342,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "ask",
                 {
                     "repository_id": repo_b_id,
-                    "reference": "rules/p0-v1.md",
+                    "reference": "rules/p2s.md",
                 },
             )
 
@@ -590,6 +593,13 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
             fp_a = ask_a.get("functional_pyramid", {})
             owner_fp = owner_ask.get("functional_pyramid", {})
             owner_rules = owner_fp.get("rules", [])
+            downstream_rules = sorted(
+                {
+                    rule_id
+                    for rule in owner_rules
+                    for rule_id in rule.get("downstream_rule_ids", [])
+                }
+            )
             downstream_contexts = sorted(
                 {
                     context_id
@@ -643,10 +653,12 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 ),
                 "ask_a_error": ask_a_error,
                 "ask_a_route_status": fp_a.get("status"),
+                "ask_a_rule_ids": [rule.get("rule_id") for rule in fp_a.get("rules", [])],
                 "ask_a_rule_authority_ids": _authority_ids(fp_a, repo_b_id),
                 "owner_ask_error": owner_ask_error,
                 "owner_scope_relation": owner_fp.get("scope_relation"),
                 "owner_route_status": owner_fp.get("status"),
+                "owner_downstream_rules": downstream_rules,
                 "owner_downstream_contexts": downstream_contexts,
                 "created_error": created_error,
                 "created_qualification": created.get("qualification", {}).get("state"),
