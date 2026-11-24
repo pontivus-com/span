@@ -398,9 +398,7 @@ class LifecycleHooksTest(unittest.TestCase):
             "tool_name": "apply_patch",
             "tool_input": {
                 "command": (
-                    "*** Begin Patch\n"
-                    "*** Update File: src/a.py\n"
-                    "*** End Patch\n"
+                    "*** Begin Patch\n" "*** Update File: src/a.py\n" "*** End Patch\n"
                 )
             },
         }
