@@ -651,7 +651,9 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
                         rule_id="rule-p2w",
                         layer=m.FunctionalPyramidLayer.P2W,
                         owner=m.FunctionalRuleOwner("repo-a", "rules/p2w.md"),
-                        governing_rule_ids=(m.FunctionalGraphRef("repo-a", "rule-p2s"),),
+                        governing_rule_ids=(
+                            m.FunctionalGraphRef("repo-a", "rule-p2s"),
+                        ),
                     ),
                 ),
             ),
