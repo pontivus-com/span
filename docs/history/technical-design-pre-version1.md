@@ -450,3 +450,321 @@ the withdrawn beta ledger and the 2026-10-31 G-0 capture. Those private captures
 are not public repository links. A fixture README's `UNVERIFIED` label does not
 erase those captures, and those captures do not establish delivery of a
 different grammar.
+
+
+## Historical Part-B material removed from active Layer 4
+
+The following sections were retained during the F14 technical-design cleanup
+because they contain dated candidate evidence, superseded transition targets, or
+verification-state material rather than current mechanism authority.
+
+### 9.1 Delivered public surface (2026-11-02; historical)
+
+This dated subsection records that delivered candidate. The current target
+operation contract is lifecycle §4.1–§4.3 and its implementation choices are §9.2.
+Do not use the old shapes below to generate new schemas or guidance.
+
+
+The three-tool surface is implemented in the working tree. `ask`, `record`, and
+`reconsider` are the only registered operations. Any other operation name is
+unknown. There are no aliases, removed-name compatibility mappings, or dual
+grammars.
+
+`ask` accepts exactly one of an exact `surface={kind, locator}`, a `reference`,
+a snapshot/receipt selector, or a continuation. With no question, it returns the
+surface document view; that is the normal reuse path. An exact question is a
+targeted query and matches by exact identity; a paraphrase returns `no_match`
+with a recovery that points back to the view. A reference that resolves to
+more than one granularity returns `AmbiguousSurface` with exact candidate
+identities; the agent copies one candidate back rather than re-resolving the
+path. A gap whose evidence was omitted carries a stateless continuation over
+the investigation context. The token binds repository, context, request
+identity/digest, and the next evidence position; it is valid only while the
+context is `LIVE`. Replay and restart work because the context and admitted
+evidence are persisted, and every page advances by at least one evidence unit
+or exact line range. Historical retrieval is a separate path (FD-38).
+
+`record` is one request selected by `kind` (`understanding`, `verification`, or
+`surface`). For understanding, a create carries one `conclusion` with exactly
+one evidence mode — `locator`, admitted `observation_id`, or non-empty `support`;
+scope is supplied or derived independently. Updates use `actions` with `add`,
+`confirm`, `correct`, `replace`, or `withdraw`, and multiple keys apply
+atomically. The service derives context, observation identity, submission
+identity, current revision, and new lineage identity. A create may cite the
+context returned by `ask`; its bound question and scope are used, and the caller
+does not re-author them. It preserves the full support union, gaps, provenance, and named
+challenge dispositions. `record(kind="surface")` creates or updates a declared
+service/domain boundary with an optional parent and compare-and-set
+`expected_boundary_version`; cycles, unknown parents, and stale versions are
+rejected.
+
+`reconsider` is an after-edit operation. `Changed` carries per-conclusion
+support state, so a considered conclusion may still be `CURRENT`; only
+`REASSESSMENT_REQUIRED` and `UNVERIFIABLE` mean actual loss. The change walk
+includes containment, direct source dependents, direct discovery dependents
+whose scope membership changed, and indirect premise dependents to a fixed
+point. Challenges are raised by `reconsider` and settled through `record` with
+named `challenge_dispositions`.
+
+The conformance gate is `tests/unit/test_surface_conformance.py`. It fails if a
+registered name is outside `ask`/`record`/`reconsider` or a host-justified
+optional tool, if a per-action or internal-preflight tool is registered, if a
+removed name remains, if declared and packaged schemas disagree, if a common
+path requires an internal identity the agent must fetch, or if a tool cannot
+name the lifecycle verb and agent moment it serves. The G-S2b scenarios live in
+`tests/unit/test_lifecycle_service.py`, `tests/unit/test_reconsider.py`,
+`tests/unit/test_answer_service.py`, and
+`tests/integration/test_lifecycle_mcp.py`.
+
+The friction-remediation mechanisms that refine this surface are in §9.2.
+
+### 9.3 Release and consumer compatibility disposition — 0.10.3
+
+The release identifier remains the user's selected **0.10.3**. This is a bugfix
+release with intentionally breaking request grammar; it is not described as a
+backward-compatible protocol patch. Repository release mechanics are owned by
+contributing.md §Releases. No unrecorded version-number compatibility guarantee
+is inferred, and no version metadata is changed by this documentation amendment.
+
+| Consumer | Required delivery before release |
+| --- | --- |
+| MCP tool clients (Codex/OpenCode/Claude where support is claimed) | Refresh tools/list against the same candidate; replace retired input grammar; capture actual branch delivery and results |
+| Managed skills, snippet and lifecycle notices | Ship the same surface-only obtain, direct-capture and bound-context grammar through existing packaging/install owners |
+| Existing configured/running MCP processes | Resolve pending accepted outcomes before upgrade; restart/reconnect and refresh cached schemas; do not silently run old and new grammar as peers |
+| Direct/custom clients | Explicit protocol upgrade required; reject retired fields through the canonical decoder with actionable new-schema guidance, not aliases |
+| Retained receipts, revisions and contexts | Preserve store identity/history and promised retention; use existing exact audit selectors for old acceptance, bound references for still-live contexts; no re-execution or store migration inferred |
+
+The supported delivery boundary is one identified package candidate plus its
+managed projections and a refreshed host session. Source declarations or prior
+host captures alone do not certify it. Existing packaging/install owners deliver
+the managed assets; candidate-specific captures verify each claimed host. Unverified host versions are reported
+as unverified; no new compatibility parser, pinned old semantic writer or shape
+adapter may compensate. Failure to deliver this boundary blocks publication,
+not the structural contract correction.
+
+Preserve replay meaning through original repository/request keys and full
+immutable receipts. Before a grammar switch, resolve accepted old operations
+through their retained receipt selectors. Do not re-encode a historical write
+as a new one or assume a new wire digest equals the old request. New direct
+writes still use stable caller-owned identities. Registration refresh and
+publication require separate authorization; this disposition performs neither.
+
+## 14. Offline schema transition
+
+**Authority:** F3, F7, L4; FD-1, FD-6, FD-35–FD-36, FD-42–FD-45.
+
+Extend `shell/store_transition.py` and the existing installer transition command.
+For 0.11.0 the target is schema 13 and `SUPPORTED_SOURCE_SCHEMAS` contains
+7–12. The runtime never migrates at open. Historical schemas 7–9 retain their
+export-only treatment; schema 10 and 11 keep their documented semantic mappings
+into the current target; schema 12 has the dedicated mapping below. Retain
+historical old-format exports without a second active decoder or semantic writer
+in the MCP runtime.
+
+**Schema-12 to schema-13 mapping (0.11.0).** Schema 13 changes the meaning and
+name of the context digest from whole-request `request_digest` to the canonical
+`binding_digest` defined in §9.2. A schema-12 context cannot be mechanically
+rebound because the persisted row does not retain every original source
+selection. Therefore the transition is an offline drain, not a context rewrite.
+
+Before staging, inspect every schema-12 `investigation_contexts` row. Refuse
+while any context is `LIVE` and either has no expiry or has an expiry at or
+after the transition clock. Expired or non-live contexts do not block the
+transition and are not copied. The staged schema-13 store copies every repository
+and durable semantic/audit table for the selected repository, including source
+and discovery observations, surfaces and boundary history, understandings,
+versions, conclusions, support dependencies and membership, challenges,
+verification runs and verification-observation membership, and retained
+`record_receipts`. It deliberately copies no `investigation_contexts`,
+`context_evidence`, or `context_discovery_evidence` rows. Receipt
+`RecordingIdentity.context_id` values remain immutable historical coordinates;
+they do not require the operational context row to survive (FD-42).
+
+The mapping artifact classifies those three context tables as
+`drained_not_copied` and every other target table as `preserved`, recording
+source/target counts. Verification requires zero staged operational contexts,
+exact preserved counts, SQLite integrity, support/dependency reconciliation,
+verification-observation references, and every receipt's accepted understanding,
+challenge and verification references. A refused drain leaves schema 12
+untouched. Rollback before schema-13 writes restores schema 12 through the
+existing owner; after schema-13 writes the existing rollback preservation rule
+keeps the new-format store rather than discarding accepted writes.
+
+**Schema-10 mapping rule (O-4).** Each schema-10 understanding maps to the path
+surface named by its recorded `EvidenceScope` when that scope names exactly one
+path that is a file. A scope naming several paths, none, or a directory is
+classified `unresolved` with reason `scope does not identify one file surface`,
+and preserved in the archive; no service or domain surface is inferred from an
+evidence scope, and no conclusion is split across surfaces (FD-6). A receipt
+identity maps through its context's recorded request identity; a receipt whose
+context is gone is preserved as unresolved with its recorded digest and effects.
+The persisted `$type: Gap` tag maps to `RecordedQuestionGap` during staging; no
+runtime alias or second decoder is retained.
+
+The transition specification must enumerate each schema-10 table and classify its
+rows as preserved canonically, mechanically transformed with verified references,
+or unresolved with a named reason. Record source IDs, target IDs, counts, hashes,
+and the provenance of each mapping. Surface assignments and old receipt keys are
+O-4: this document does not choose a fabricated service, domain, or request ID.
+An incomplete mapping cannot activate the new runtime or silently downgrade
+accepted understanding to an empty active store. Any proposed different
+preservation policy requires the owning authority decision first.
+
+**Implementation state (2026-11-01).** Schema 10 is accepted by the existing
+transition path. `shell/store_transition_schema10.py` performs the raw per-table
+mapping, records `mapping.json` with source/target identities, counts, hashes,
+and provenance, and verifies counts and every source/discovery/premise
+reference before activation. Schemas 7–9 keep their export-only treatment. A
+disposable-store fixture covers understandings, versions, conclusions, gaps,
+challenges, verification runs, and mapped receipts. No live user store was
+transitioned and the per-table mapping still needs its owner review.
+
+Reuse inspect/archive/export/stage/verify/activate/rollback and the manifest
+owner. Add schema-10 fixtures for nonempty understanding history, cross-surface
+premises after assigned mapping, outstanding challenges, verification runs,
+retained/expired receipts, and restart after interrupted staging/activation.
+Verify archive integrity, reference reconciliation, new-format writes on rollback,
+and active-writer refusal. Prior journal/platform observations remain limited to
+the platforms tested. Ordinary store open still only checks format; transition
+execution against any user store is outside this documentation change.
+
+## 15. Host delivery, assets, and measured fitness
+
+**Authority:** FD-38–FD-41, FD-49–FD-58; F7, F8, L8.
+
+Keep stdio transport and the existing host adapters. Select registered variant
+splits only from captures of the generated §9 candidate, including required error
+and post-commit-result branches. Capture exact source/build/schema digests,
+host/model/version, delivered declarations, calls/replies, request-identity
+preservation, retry/restart, and truncation. A callable tool with opaque required
+fields is not complete declaration evidence. O-6 remains open until the actual
+identity owner and delivery boundary are observed.
+
+Record the supported host set before evaluation. Historical Codex/OpenCode runs
+retain their original scope; no broader support claim follows from this
+document. Measure result-size limits
+and supported suspension bounds for O-2/O-3. An unbounded or unobservable host
+resume horizon needs an explicit supported-recovery decision, not an invented
+finite measurement.
+
+Update `skills/`, `docs/agents-snippet.md`, affected public guides, registration
+descriptions, and installer-owned assets with the new binary/schema cutover.
+Generate packaged copies from their canonical sources; preserve foreign host
+configuration. Test installation/reconnect using isolated profiles and disposable
+stores. Updating source does not claim deployed host-local copies changed.
+
+**Adoption notice (FD-58, 2026-11-03).** Two mechanisms are required, and the
+first is the actual cause of the first-move failure: OpenCode dispatches the
+first model request before a local MCP server has connected (the first request
+carried 66 tools with no Span; the second carried 69 with all three). The plugin
+therefore registers `session.hook("prompt")`, which waits a bounded three seconds
+until a Span `_ask` tool appears in the tool list, then proceeds whether or not
+it did. Without that wait the agent cannot ask before reading even when it
+intends to. The notice itself is delivered through `session.hook("context")`:
+the plugin calls `span-hooks adoption-primer --repo-root <root>`, which prints
+the lifecycle notice for every registered operational repository, including
+a cold repository.
+The plugin pushes the text into `event.system` once per session and stays silent
+on any failure. The text names the required lifecycle actions and direct tools, and makes no
+claim that retained understanding exists or is current. The installer deploys the plugin under Span's
+own data root and registers it once in the host's global `opencode.json`; it
+never writes the plugin into a target. Codex continues to use the managed
+`AGENTS.md` block. The notice's bytes are counted in the F8 class measurement.
+FD-53 applies: the notice is not claimed delivered until captured. An edit-time
+notice is computed on a tool edit, held once per session, and delivered by the
+next `context` hook; it names the changed paths and the exact
+`reconsider(changed_paths=[...])` call. It asserts support state only and is
+silent on failure.
+
+**0.10.2 pending notice lifecycle.** Extend the existing pending notice with the
+paths of its producing edit event; do not create a session edit ledger. Native
+lifecycle events use `data.sessionID`. Idle refresh forwards unconsumed paths as
+`[{"file_path": path}]` to the stop runner's JSON stdin. Successful context
+injection consumes the notice; failed injection/reporting retains it. Deletion
+and plugin disposal clear notice state. The existing bounded notice cache reaps
+abandoned entries with an explicit diagnostic at capacity. A missing session ID
+is diagnosed; no shared cross-session fallback is used. Previously delivered
+notices are not replayed at idle. Answer support remains checked by operations.
+
+**OpenCode plugin scope (0.9.4).** The lifecycle plugin is managed under an
+explicit `--opencode-plugin-scope global|local|none`; the installer never infers
+the scope from disk. `global` deploys the canonical plugin and reports a
+conflict when an explicitly inspected target contains another Span plugin; it
+does not move or delete that target-owned artifact. `local` and `none` remove
+Span's global registration and leave target plugins to the user, reporting each
+copy. Receipt targets not selected with `--repo` are inspected read-only and
+yield `conflict`, never `wired`. A fresh install defaults to `global`; an
+upgrade uses the current receipt's scope and a receipt with no unambiguous scope
+stops and names the flag. The authoritative full scope matrix is in
+[install](install.md#opencode).
+Foundations §1 binds the MCP **server**, which still makes no target edits; host
+integration and the upgrade migration are installer behaviour. Under the global
+scope, the installer uses that same fixed global configuration for the MCP
+registration unless an explicit, prior-receipt, or local MCP path takes
+precedence. Selected paths are absolute receipt identities; an explicit
+relocation removes the prior Span registration after the new registration
+succeeds. The receipt retains the MCP and plugin configuration paths independently; doctor reuses the
+recorded MCP path and uninstall removes each owned artifact from its recorded
+configuration. See
+[install](install.md#upgrading-from-09091).
+
+**Measured 2026-11-03 (OpenCode):** with the readiness wait and the notice,
+**5/5** clean runs put the first `ask` before the first source read; without the
+wait the first tool list had no Span and the rate was 2/5. Evidence:
+`.context/evidence/fitness/2026-11-02-three-tool/natural-use/F10-2026-11-03.md`.
+
+Retain comparative measurements as optional product research, not as a
+Version-1 release gate. G5/F8 are demonstrated for Beta through real integration use
+on ordinary engineering work. The pre-release candidate must still pass the
+deterministic contract, packaging, migration, recovery, public-boundary, and
+functional-acceptance gates; Beta publication does not wait for an artificial
+equivalent-task score.
+
+Post-release evaluation should capture the product behavior that matters in
+practice: cold investigation, fresh-session reuse, implementation and governance
+changes, re-establishment, recovery, and failure. Findings from that use are
+inputs to follow-up Beta patches. No telemetry service or numeric acceptance
+threshold is introduced.
+
+Historical comparative captures from 2026-11-02/03 remain calibration material
+only. They do not certify Version 1 and they are not required to publish it.
+Any future public time/token/cost claim must be supported by evidence scoped to
+that claim.
+
+## 16. Verification ownership and completion
+
+The forward plan owns execution dependencies and receipts. This matrix maps
+FD coverage to mechanisms and the existing test owners to extend; it is not a
+second declaration of those requirements.
+
+| Authority | Mechanism section | Test owner / required scenario family | Present status |
+| --- | --- | --- | --- |
+| FD-1, FD-5–FD-8 | §10–§11 | `test_lifecycle_store.py`, `test_answer_service.py`; identity, boundaries, ownership, overlap, partial inventory, computed `unexamined`, descendant status | computed status tested; boundary enumeration is store-known members with the limit reported |
+| FD-2–FD-4 | §9–§12 | `test_lifecycle_service.py`, `test_lifecycle_store.py`, `test_record_wire.py`, `test_store_transition.py`; canonical request binding, restart/expiry and schema transition | 0.11 canonical `ContextBinding`, caller request identity, replay/restart, schema-12 live/no-expiry refusal and exact post-cutover receipt/run retrieval verified |
+| FD-9–FD-16 | §9, §11 | `test_support_service.py`; dependency findings, mixed states, withdrawal, cycles | adapt; O-5 AMBIGUOUS |
+| FD-17–FD-22 | §11 | `test_reconsider.py` plus the installed MCP lane; cross-boundary closure, bounded traversal, challenge raise and re-establishment | bounded walk, fresh changed-support context, exact evidence membership, ordinary re-establishment and packaged challenge resolution verified; T08 comparative measurement remains separate |
+| FD-23–FD-29 | §11 | `test_answer_service.py`; mixed-support answers, gap variants, ambiguity, document view | candidate tests added |
+| FD-30–FD-37 | §10, §12 | `test_lifecycle_service.py`, `test_lifecycle_store.py`; duplicate create, confirm no-op, dependent effects, disputes | dependent effects named on the receipt; tested |
+| FD-38–FD-41 | §9, §12 | `test_record_wire.py`, `test_lifecycle_surface.py`, `tests/integration/test_lifecycle_mcp.py`; closed unions, rejection identity/action/version, post-commit failure | packaged MCP exercises all declared result families including `Unavailable`; structural faults are typed `Rejected`, unknown tools remain transport errors, and malformed ingress is separately contained |
+| FD-42–FD-45 | §13–§14 | `test_lifecycle_store.py`, `test_store_transition.py`; expiry boundaries, restart recovery, context drain and preserved references | expiry/replay verified; schema-12 live and no-expiry contexts refuse cutover without mutation; drained activation preserves exact retained receipt and verification history; interruption/rollback paths are verified |
+| FD-46–FD-48 | §10, §12 | `test_lifecycle_store.py`, `test_lifecycle_service.py`; concurrent first write, duplicate create, CAS and replay | same-identity replay/conflict, receipt-first concurrent acceptance, and distinct request identities racing one expected version are verified |
+| FD-49–FD-53 | §15 | `test_host_contract.py`, installed stdio lifecycle coverage, raw live-host capture | 0.11 packaged stdio exact selectors, public grammar, structural rejection and result families are verified. Candidate-specific managed-host schema/argument/server-receipt capture and session handoff remain T09 external acceptance; older host captures do not substitute for it |
+| FD-54–FD-57 | §13, §15 | `test_answer_service.py`; result fitting, explicit omission, minimum-result refusal | O-3 measured per host and applied as the delivered-wire budget |
+| FD-58 | §15 | `test_lifecycle_hooks.py`, `test_install.py`, `test_skills.py`; cold/warm lifecycle notice, plugin deploy/remove, skill vocabulary | canonical native/shell guidance, hooks, skills and plugin notice-delivery lane are verified; 0.11 candidate-specific managed-host native/search/shell captures remain T10 external acceptance |
+| F1, F7; verification variant in layer 2 §4.2 | §9, §12 | independent run before source mutation, then ingestion/reuse with original observation identity | O-7 resolved for source-observation ingestion; external execution authenticity remains a separate, not-yet-designed workstream |
+| F8, G5 | §15 | real integration use across the ordinary lifecycle; optional scoped comparative research | prior measurements remain historical evidence only for their named candidates. Version 1 validates practical value through post-release Beta use; no synthetic comparative score is required for publication |
+| FD-61–FD-74, FD-86–FD-91 | Part C §17–§18, §20.1 | Functional Pyramid core/service tests plus installed MCP; FunctionalScope algebra, outside/covered/uncovered/mixed projection, overlapping/inherited/cross-repository graph resolution, deterministic provenance, health iff structural findings | implemented; T10 generic acceptance verified on exact-head CI, T13 re-verifies the assembled candidate |
+| FD-75–FD-81 | Part C §18, §20.2–§20.3 | support/record/reconsider tests; FunctionalRouteSupport derivation/evaluation, authority separation, pre-existing normative activation effects, deliberate participation removal vs operational unavailability | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
+| FD-82–FD-85, FD-93 | Part C §19–§20.4 | lifecycle store/service/schema tests; installation-level receipts, activation/revision/deactivation atomicity, participation effects, dependent effects, replay with fresh contexts, pyramid CAS and one-ACTIVE-instance uniqueness | implemented; covered by T10 generic acceptance, T13 re-verifies the assembled candidate |
+| FD-92, FD-94; L8, L13–L16 | Part C §20–§22 | generated schema, MCP integration, hooks/skills and host capture; exact three tools, candidate/status/receipt selectors, FunctionalPyramidRecorded affected projection, result-driven initialization through DECLARE→reconsider/disposition→VALIDATE→ACTIVATE/REVISE→VERIFY→effect disposition and matching runtime qualification gates | implementation and generic installed-MCP evidence complete; candidate-specific managed-host delivery remains T13 |
+| Functional design §15 cases 32–44 | Part C §18–§22 | generic acceptance plus installed MCP; outside scope, MIXED scope, structural health equivalence, activation of pre-existing normative understanding, participation-write propagation, deactivation/removal route state, replay/context recovery, concurrency, initialization re-alignment, conformance-as-NORMATIVE, accepted-non-current runtime gating and participation-write effect completion | T10 generic acceptance complete; T11 private acceptance passed; T13 reruns the assembled candidate |
+
+The matrix covers both the established Part-B baseline and the Part-C
+Version-1 target. Part-B historical/current mechanism claims remain governed by
+their existing evidence and open measurements. Part C is design-complete because
+its derivation map has no unmapped FD owner or unowned mechanism, and its
+implementation is complete through the T10 generic acceptance evidence recorded
+above. Candidate-specific managed-host delivery remains unverified unless separately
+claimed, and final Part-C derivation re-verification remains release-verification
+work. G5/F8 product-value validation is post-release Beta work and does not
+reopen the implemented mechanism or block publication.
