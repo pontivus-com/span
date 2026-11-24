@@ -604,10 +604,9 @@ def wire_claude_hooks(hook_bin, data_dir, dry_run=False) -> dict[str, object]:
         ),
         (
             "PostToolUse",
-            "Write|Edit|MultiEdit",
-            [hook_bin, "source-changed", "--data-dir", str(data_dir)],
+            "Write|Edit",
+            [hook_bin, "claude-post-tool", "--data-dir", str(data_dir)],
         ),
-        ("Stop", "", [hook_bin, "session-stop", "--data-dir", str(data_dir)]),
     ]
     hooks = {} if hooks is None else hooks
     added = 0

@@ -435,6 +435,53 @@ class LifecycleHooksTest(unittest.TestCase):
             result["hookSpecificOutput"]["additionalContext"],
         )
 
+    def test_claude_post_tool_uses_documented_absolute_path_and_structured_context(self):
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/repo/src/a.py", "content": "x"},
+        }
+        observed = []
+
+        def project(_data_dir, paths):
+            observed.append(tuple(paths))
+            return ()
+
+        with (
+            mock.patch("sys.stdin", io.StringIO(json.dumps(payload))),
+            mock.patch.object(hooks, "_source_change_notices", side_effect=project),
+        ):
+            output = _capture(hooks.cmd_claude_post_tool, "/data", "/repo")
+
+        result = json.loads(output)
+        self.assertEqual(observed, [("/repo/src/a.py",)])
+        self.assertEqual(
+            result["hookSpecificOutput"]["hookEventName"],
+            "PostToolUse",
+        )
+        self.assertIn(
+            "call reconsider with the complete changed scope",
+            result["hookSpecificOutput"]["additionalContext"],
+        )
+
+    def test_claude_post_tool_reports_incomplete_native_scope_without_guessing(self):
+        for file_path in (None, "src/a.py"):
+            with self.subTest(file_path=file_path):
+                tool_input = {} if file_path is None else {"file_path": file_path}
+                payload = {
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Edit",
+                    "tool_input": tool_input,
+                }
+                with mock.patch("sys.stdin", io.StringIO(json.dumps(payload))):
+                    output = _capture(hooks.cmd_claude_post_tool, "/data", "/repo")
+
+                result = json.loads(output)
+                self.assertIn(
+                    "documented absolute tool_input.file_path is unavailable",
+                    result["hookSpecificOutput"]["additionalContext"],
+                )
+
     def test_source_change_reports_bounded_dependents(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = _recorded(tmp)

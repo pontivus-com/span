@@ -2147,10 +2147,10 @@ class HookWiringTest(unittest.TestCase):
                 for hook in block["hooks"]
             ]
             self.assertEqual(first["status"], "wired")
-            self.assertEqual(second["replaced"], 3)
+            self.assertEqual(second["replaced"], 2)
             self.assertIn("/foreign-hook", commands)
             self.assertEqual(
-                sum("/new/span-hooks" in command for command in commands), 3
+                sum("/new/span-hooks" in command for command in commands), 2
             )
             self.assertTrue(
                 all(
@@ -2158,6 +2158,14 @@ class HookWiringTest(unittest.TestCase):
                     for command in commands
                     if "/new/span-hooks" in command
                 )
+            )
+            self.assertNotIn("Stop", config["hooks"])
+            self.assertEqual(
+                config["hooks"]["PostToolUse"][0]["matcher"],
+                "Write|Edit",
+            )
+            self.assertTrue(
+                any("claude-post-tool" in command for command in commands)
             )
             self.assertTrue((settings_path.with_suffix(".json.bak-span")).is_file())
 

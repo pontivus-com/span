@@ -14,6 +14,7 @@ Commands:
   source-changed     report dependent recorded conclusions for changed paths
   session-stop       same bounded notice for the session's changed paths
   codex-post-tool    translate Codex apply_patch PostToolUse into JSON context
+  claude-post-tool   translate Claude Write/Edit PostToolUse into JSON context
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from span.shell.readiness import probe_store
 __all__ = [
     "ADOPTION_PRIMER",
     "cmd_adoption_primer",
+    "cmd_claude_post_tool",
     "cmd_codex_post_tool",
     "cmd_session_start",
     "cmd_source_changed",
@@ -516,6 +518,60 @@ def cmd_codex_post_tool(data_dir, repo_root=None):
     )
 
 
+
+def _claude_post_tool_notice(data_dir, payload) -> str | None:
+    """Translate only Claude Code's documented PostToolUse file-tool shape."""
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("hook_event_name") != "PostToolUse":
+        return None
+    tool_name = payload.get("tool_name")
+    if tool_name not in ("Write", "Edit"):
+        return None
+    tool_input = payload.get("tool_input")
+    file_path = tool_input.get("file_path") if isinstance(tool_input, dict) else None
+    if not isinstance(file_path, str) or not file_path or not os.path.isabs(file_path):
+        return (
+            f"span: Claude Code observed {tool_name} but its documented absolute "
+            "tool_input.file_path is unavailable; reconsider the complete edited "
+            "scope before completing work."
+        )
+    notices = _source_change_notices(data_dir, (file_path,))
+    reminder = (
+        f"span: Claude Code observed {tool_name} on 1 changed file; call reconsider "
+        "with the complete changed scope from this edit before completing work."
+    )
+    return " ".join((*notices, reminder))
+
+
+def cmd_claude_post_tool(data_dir, repo_root=None):
+    """Emit Claude Code's documented structured PostToolUse additional context."""
+    del repo_root
+    try:
+        raw = sys.stdin.read()
+    except OSError:
+        return
+    if not raw.strip():
+        return
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        return
+    notice = _claude_post_tool_notice(data_dir, payload)
+    if notice is None:
+        return
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": notice,
+                }
+            },
+            separators=(",", ":"),
+        )
+    )
+
 def cmd_session_stop(data_dir, repo_root=None):
     mapping = repo_map(data_dir)
     if not mapping:
@@ -556,6 +612,7 @@ def parse_args(argv=None):
             "source-changed",
             "session-stop",
             "codex-post-tool",
+            "claude-post-tool",
         ),
     )
     parser.add_argument("paths", nargs="*")
@@ -588,6 +645,8 @@ def main(argv=None):
             cmd_session_stop(data_dir, repo_root)
         elif args.command == "codex-post-tool":
             cmd_codex_post_tool(data_dir, repo_root)
+        elif args.command == "claude-post-tool":
+            cmd_claude_post_tool(data_dir, repo_root)
     except BrokenPipeError:
         raise SystemExit(0)
     except Exception as exc:  # noqa: BLE001 - hooks never break sessions
