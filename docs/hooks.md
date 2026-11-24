@@ -1,105 +1,129 @@
 # Lifecycle hooks
 
-Agent work follows [the required Span lifecycle](lifecycle-contract.md#required-agent-completion).
+Hooks are optional reminders that help Span's lifecycle appear at the moment an
+agent is likely to need it.
 
-Hooks provide bounded lifecycle notices about readiness or recorded support
-that may need attention. Ordinary retrieval and recording perform support
-checks themselves, so a missed or disabled hook cannot establish currentness.
+They are useful for things such as:
 
-## Runtime behavior
+- reminding an agent to consult Span when a session starts;
+- noticing that edited paths may affect retained knowledge; and
+- prompting the agent to run the appropriate lifecycle action after change.
 
-`src/span/shell/hooks.py` owns the `span-hooks` commands:
+Hooks do **not** make the lifecycle correct by themselves.
 
-| Command | Scope and effect |
+Span's normal `ask`, `record`, and `reconsider` operations still enforce
+the relevant support and reuse rules when hooks are absent, disabled, delayed,
+or missed.
+
+## What hooks can report
+
+Span ships hook commands for a small set of lifecycle moments:
+
+| Hook command | Purpose |
 | --- | --- |
-| `session-start` | Probe store readiness for the registered repository containing the working directory. |
-| `adoption-primer` | Print the FD-58 required-lifecycle notice for a registered operational repository, including a cold store. |
-| `source-changed` | Look up recorded dependents for bounded changed paths and evaluate exact conclusion revisions. |
-| `session-stop` | Report bounded affected support for supplied session paths. |
+| `session-start` | Check whether Span is operational for the registered repository containing the working directory. |
+| `adoption-primer` | Remind the agent of the required Span lifecycle when a registered repository is ready. |
+| `source-changed` | Inspect bounded changed paths for retained knowledge that may need attention. |
+| `session-stop` | Report bounded support effects associated with supplied session paths. |
 
-The runner reuses the canonical readiness and support boundaries; it does not
-call a retired status tool or maintain its own freshness policy. It never
-creates/migrates a store, records semantic state, reinterprets, invokes a model,
-runs tests, or rebuilds a structural index.
+These notices reuse Span's normal readiness and support logic. Hooks do not
+maintain a second freshness policy.
 
-Routine current state is quiet. Silence is not a repository-wide all-current
-or complete-understanding statement. Events outside registered roots are
-ignored; unavailable setup or affected support is reported within the
-available event scope. Operational availability and semantic uncertainty are
-kept separate.
+## Hooks are advisory, not semantic actors
 
-## Functional Pyramid notices
+A hook never decides what code means.
 
-Hook semantics use the same installation composition as MCP requests; hooks do
-not construct a repository-local governance evaluator. Participation-aware
-notices distinguish UNCONFIGURED, EXCLUDED, ACTIVE/VALID and
-ACTIVE/DEGRADED. They remain advisory and read-only: an adoption primer may
-route an agent toward Functional Pyramid guidance, but it cannot activate,
-revise, exclude, de-activate, record support, or repair governance.
+Hooks do not:
 
-A changed-path hook may report affected support through the shared
-repository-qualified effect path. It does not replace the required
-`reconsider` lifecycle call, and silence does not establish that cross-
-repository governance is unaffected.
+- create or migrate Span stores;
+- record semantic understanding;
+- curate captured knowledge;
+- reinterpret source;
+- activate or revise Functional Pyramid participation;
+- run tests;
+- invoke a model; or
+- rebuild the structural index.
 
-## Host wiring and evidence
+When a hook reports that something may need attention, the agent follows the
+normal lifecycle to investigate and record the result.
 
-The installer can append Codex hooks to an existing `~/.codex/hooks.json`,
-preserving foreign entries and avoiding duplicate Span hooks. On upgrade it
-replaces Span entries whose binary path or matcher changed, so exactly one
-installed invocation remains. Missing files or CLIs are reported as skipped.
+For example, an edit notice can tell the agent to call `reconsider` with the
+changed paths. The hook itself does not perform the reassessment or disposition.
 
-For Claude Code, the installer converges `SessionStart`, edit-tool
-`PostToolUse`, and `Stop` entries in an existing `~/.claude/settings.json`.
-Commands use the installation's exact data directory. Foreign settings and
-hooks remain untouched; missing settings are an explicit skipped result, and
-malformed settings fail without a rewrite.
+## Silence does not mean everything is current
 
-For OpenCode, the installer manages the server plugin under an explicit
-`--opencode-plugin-scope global|local|none`. Under `global` it deploys the
-plugin under Span's own data root and registers it once in the host's global
-`opencode.json` (`plugins`); it writes nothing into a target repository. A
-Span plugin found in an explicitly inspected target is reported as a conflict
-and left untouched. Under `local` and `none`, the target plugin is user-managed:
-Span removes its own global registration and reports the local copy without
-modifying it. Only targets passed with `--repo` are mutable; receipt targets not
-selected are inspected read-only and yield `conflict` if a Span-owned copy
-remains.
+Routine current state can be quiet.
 
-| Scope | Selected target (`--repo`) | Receipt-only target | Global registration |
-| --- | --- | --- | --- |
-| `global` | report `conflict`; leave copy in place | read-only; `conflict` if present | update |
-| `local` | report only | read-only; report only | remove Span-owned |
-| `none` | report only | read-only; report only | remove Span-owned |
+A silent hook does **not** establish that:
 
-A fresh install defaults to `global`; an upgrade uses the receipt scope and
-stops if it is absent or ambiguous. The authoritative full matrix is in
-[install](install.md#opencode).
+- the whole repository is understood;
+- every retained conclusion is current;
+- no cross-repository governance effect exists; or
+- a configured hook was actually delivered to the model.
 
-The plugin waits a bounded three seconds at prompt admission for the local MCP
-connection, then injects the FD-58 adoption notice once per session through the
-`context` hook. An edit-time notice is stored when a tool edit runs and is
-delivered once on the next `context` hook, naming the changed paths and the exact
-`reconsider(changed_paths=[...])` call. Lifecycle actions remain required when a notice is missed; support checks remain
-server-owned. A five-run OpenCode historical capture recorded the first
-`ask` before the first source read in 5/5 runs. The sanitized result is retained
-in [acceptance](acceptance.md); the raw capture remains private working evidence
-rather than a public repository link.
+That is why correctness lives in the lifecycle operations rather than in
+notification delivery.
 
-Pending edit notices retain their event paths until delivery. If an idle event
-arrives first, the plugin passes those paths through JSON stdin to `session-stop`
-and refreshes that notice. It does not accumulate a session-wide edit history.
-Delivery consumes the notice; session deletion and plugin disposal clear it.
-Capacity expiry reports an undelivered notice explicitly. Missing session IDs
-are diagnosed rather than delivering a notice to another session. Failed stop
-reporting preserves the pending edit notice for the next context call.
+If an event occurs outside a registered repository, the hook can ignore it.
+Operational inability and semantic uncertainty remain separate.
 
-Implemented wiring, configured entries, actual invocation, affected scope,
-and delivered notice are separate facts. Codex beta conformance was run with
-hooks explicitly disabled. That proves ordinary operation without hooks; it
-does not prove live hook arrival.
+## Project-governance notices
 
-See [host trigger support](../integrations/hosts/triggers.md). Automated
-coverage is in `tests/unit/test_lifecycle_hooks.py`, installer tests, and
-administrative readiness tests. The shipped runtime implementation is the
-reference for behavior; older integration transcripts remain historical.
+For repositories using the Functional Pyramid, hook notices can reflect the
+repository's participation and present governance health.
+
+Those notices remain read-only and advisory.
+
+A hook can direct an agent toward governance setup or indicate that change may
+have affected governed knowledge. It cannot create participation, change
+governing relationships, repair authority, or make a normative conclusion
+current.
+
+Cross-repository governance effects are resolved through the same Span
+lifecycle used by ordinary MCP requests. A hook is not a substitute for the
+required `reconsider` step.
+
+## Host delivery
+
+Span can wire lifecycle reminders for its supported managed hosts.
+
+The exact installation behavior differs by host:
+
+- **Codex** — hook configuration can be managed alongside the MCP setup;
+- **Claude Code** — supported session/edit/stop hook entries can be added to an
+  existing user settings file while preserving unrelated configuration; and
+- **OpenCode** — the Span lifecycle plugin supplies the host-side reminder
+  path under the configured plugin scope.
+
+Host configuration, plugin scope, ownership, upgrade behavior, and removal are
+installation concerns. See [Install and connect](install.md) for the current
+operator procedure and [host trigger support](../integrations/hosts/triggers.md)
+for the current delivery status.
+
+Configured wiring, observed invocation, and model-delivered behavior are
+different facts. Do not infer one from another.
+
+## When hooks are disabled
+
+Span is designed to work without hooks.
+
+The agent still follows the same operating lifecycle:
+
+> **Ask before deriving → investigate normally → capture what you establish →
+> review for shared reuse → reconsider after change.**
+
+Support checks happen through Span itself, not through the reminder mechanism.
+
+This makes hooks a usability aid rather than a hidden correctness dependency.
+
+## Exact behavior and evidence
+
+Use:
+
+- [MCP reference](mcp.md) for exact lifecycle operations;
+- [Using Span](usage.md) for the normal workflow;
+- [Install and connect](install.md) for hook/plugin configuration; and
+- [Acceptance and evidence](acceptance.md) for verified host-delivery evidence.
+
+The shipped runtime remains the implementation source for exact hook behavior;
+this guide explains their user-facing role and boundaries.
