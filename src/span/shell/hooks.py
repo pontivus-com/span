@@ -199,7 +199,7 @@ def _affected_for_root(data_dir, root, rel_paths):
     mapping = repo_map(data_dir)
     roots, repository_locator = _installation_inputs(mapping)
     repository_id = _repository_id(root)
-    changed_paths = tuple(dict.fromkeys(rel_paths))[:HOOK_DIAGNOSTIC_LIMIT]
+    changed_paths = tuple(dict.fromkeys(rel_paths))
     with open_installation_runtime(
         data_dir,
         repository_locator=repository_locator,
@@ -311,7 +311,7 @@ def _stdin_paths():
     found = []
 
     def walk(node, depth=0):
-        if depth > 6 or len(found) > 32:
+        if depth > 6:
             return
         if isinstance(node, dict):
             for key, value in node.items():

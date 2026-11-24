@@ -109,6 +109,41 @@ test("the edit-time notice reaches event.system once", async () => {
   }
 });
 
+
+test("multiple edits are accumulated before lifecycle handoff", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-union-"));
+  const bin = path.join(root, "fake-span-hooks");
+  const received = path.join(root, "received.txt");
+  fs.writeFileSync(bin, \`#!/bin/sh
+case "$*" in
+  *source-changed*) printf '%s\\n' "$@" > "\${received}"; echo "changed" ;;
+esac
+\`, { mode: 0o755 });
+  const previous = process.env.SPAN_HOOKS_BIN;
+  process.env.SPAN_HOOKS_BIN = bin;
+  const { ctx, registered } = fakeContext(root);
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  try {
+    const firstPath = path.join(root, "src/a.js");
+    const secondPath = path.join(root, "src/b.js");
+    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", filePath:firstPath});
+    registered["tool:execute.after"]({sessionID:"session-1", tool:"edit", filePath:secondPath});
+
+    const args = fs.readFileSync(received, "utf8").trim().split("\\n");
+    assert.deepEqual(args, ["source-changed", firstPath, secondPath]);
+
+    const event = {sessionID:"session-1", system:[]};
+    registered["session:context"](event);
+    assert.equal(event.system.length, 1);
+    assert.match(event.system[0].text, /"changed_paths":\["src\/a\.js","src\/b\.js"\]/);
+  } finally {
+    dispose();
+    if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
+    else process.env.SPAN_HOOKS_BIN=previous;
+    fs.rmSync(root,{recursive:true,force:true});
+  }
+});
+
 test("Functional Pyramid session-start notice reaches event.system once", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-fp-start-"));
   const bin = path.join(root, "fake-span-hooks");

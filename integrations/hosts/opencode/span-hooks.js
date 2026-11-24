@@ -99,20 +99,35 @@ function relativePaths(paths, root) {
   return [...new Set(found)];
 }
 
-function rememberNotice(pending, sessionID, notice, paths = []) {
-  if (!notice) return;
+function ensurePendingCapacity(pending, sessionID) {
   if (pending.size >= PENDING_LIMIT && !pending.has(sessionID)) {
     const oldest = pending.keys().next().value;
     console.warn("span: an undelivered lifecycle notice expired at the session bound; consult Span before completing work.");
     pending.delete(oldest);
   }
+}
+
+function rememberChangedPaths(pending, sessionID, paths) {
+  ensurePendingCapacity(pending, sessionID);
+  const current = pending.get(sessionID);
+  const merged = [...new Set([...(current ? current.paths : []), ...paths])];
+  pending.set(sessionID, {
+    text: current ? current.text : "",
+    paths: merged,
+  });
+  return merged;
+}
+
+function rememberNotice(pending, sessionID, notice, paths = []) {
+  if (!notice) return;
+  ensurePendingCapacity(pending, sessionID);
   pending.set(sessionID, { text: notice.slice(0, NOTICE_LIMIT), paths });
 }
 
 function filePathsFromArgs(args) {
   const found = [];
   const walk = (node, depth) => {
-    if (depth > 4 || found.length > 16) return;
+    if (depth > 4) return;
     if (typeof node === "string") {
       if (
         node.includes("/") &&
@@ -234,9 +249,11 @@ export default {
           }
           const paths = filePathsFromArgs(changed);
           if (paths.length === 0) return;
-          const notice = run(resolveBin(), ["source-changed", ...paths]);
+          const key = sessionKey(changed);
+          const completePaths = rememberChangedPaths(pending, key, paths);
+          const notice = run(resolveBin(), ["source-changed", ...completePaths]);
           if (!notice) return;
-          const relative = relativePaths(paths, locationRoot);
+          const relative = relativePaths(completePaths, locationRoot);
           const reminder = relative.length
             ? " call reconsider " +
               JSON.stringify({
@@ -247,9 +264,9 @@ export default {
             : "";
           rememberNotice(
             pending,
-            sessionKey(changed),
+            key,
             notice + reminder,
-            paths,
+            completePaths,
           );
         } catch {
           // Never break the session on hook failure.
@@ -291,7 +308,7 @@ export default {
           // The edit-time notice is delivered once, on the next context call.
           // Session identity is required; notices never cross session boundaries.
           const pendingNotice = pending.get(sessionID);
-          if (pendingNotice !== undefined) {
+          if (pendingNotice !== undefined && pendingNotice.text) {
             if (event && Array.isArray(event.system)) {
               event.system.push({ type: "text", text: pendingNotice.text });
               pending.delete(sessionID);

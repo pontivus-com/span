@@ -196,6 +196,63 @@ class LifecycleHooksTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 hooks.cmd_session_start(data, str(root))
 
+
+    def test_changed_scope_projection_receives_complete_input_before_render_bound(self):
+        class FakeReconsider:
+            def __init__(self):
+                self.requests = []
+
+            def preview_changed_scope(self, request):
+                self.requests.append(request)
+                return object()
+
+        class FakeContext:
+            def __init__(self, reconsider):
+                self.reconsider = reconsider
+
+        class FakeInstallation:
+            def __init__(self, reconsider):
+                self.reconsider = reconsider
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def context_for_locator(self, root):
+                return FakeContext(self.reconsider)
+
+        reconsider = FakeReconsider()
+        paths = tuple(
+            f"src/file-{index}.py"
+            for index in range(hooks.HOOK_DIAGNOSTIC_LIMIT + 3)
+        )
+        with (
+            mock.patch.object(hooks, "repo_map", return_value={"/repo": "/repo"}),
+            mock.patch(
+                "span.shell.installation_runtime.open_installation_runtime",
+                return_value=FakeInstallation(reconsider),
+            ),
+        ):
+            repository_id, projection = hooks._affected_for_root(
+                "/data", "/repo", paths
+            )
+
+        self.assertEqual(repository_id, "repo")
+        self.assertIsNotNone(projection)
+        self.assertEqual(reconsider.requests[0].changed_paths, paths)
+
+    def test_stdin_path_parser_does_not_silently_cap_changed_scope(self):
+        payload = [
+            {"file_path": f"/repo/src/file-{index}.py"}
+            for index in range(hooks.HOOK_DIAGNOSTIC_LIMIT * 5)
+        ]
+        with mock.patch("sys.stdin", io.StringIO(json.dumps(payload))):
+            paths = hooks._stdin_paths()
+        self.assertEqual(len(paths), len(payload))
+        self.assertEqual(paths[-1], payload[-1]["file_path"])
+
     def test_source_change_reports_bounded_dependents(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = _recorded(tmp)
