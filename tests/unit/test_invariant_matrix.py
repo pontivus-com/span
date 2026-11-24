@@ -275,9 +275,7 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
         path = REPO_ROOT / "src/span/core/functional_pyramid.py"
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         functions = {
-            node.name: node
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef)
+            node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
         }
         owner = functions["_governing_edge_is_valid"]
         owner_calls = {
