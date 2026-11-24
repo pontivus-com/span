@@ -1369,4 +1369,3 @@ class FunctionalPyramidContractSublayerTest(unittest.TestCase):
         self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
         self.assertNotIn("rule-p2w", p2s.downstream_rule_ids)
         self.assertEqual(p2w.governing_rule_ids, ("rule-p1",))
-

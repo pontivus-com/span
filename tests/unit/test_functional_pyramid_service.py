@@ -639,25 +639,19 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
                         rule_id="rule-p1",
                         layer=m.FunctionalPyramidLayer.P1,
                         owner=m.FunctionalRuleOwner("repo-a", "rules/p1.md"),
-                        governing_rule_ids=(
-                            m.FunctionalGraphRef("repo-a", "rule-p0"),
-                        ),
+                        governing_rule_ids=(m.FunctionalGraphRef("repo-a", "rule-p0"),),
                     ),
                     m.FunctionalRuleDeclaration(
                         rule_id="rule-p2s",
                         layer=m.FunctionalPyramidLayer.P2S,
                         owner=m.FunctionalRuleOwner("repo-a", "rules/p2s.md"),
-                        governing_rule_ids=(
-                            m.FunctionalGraphRef("repo-a", "rule-p1"),
-                        ),
+                        governing_rule_ids=(m.FunctionalGraphRef("repo-a", "rule-p1"),),
                     ),
                     m.FunctionalRuleDeclaration(
                         rule_id="rule-p2w",
                         layer=m.FunctionalPyramidLayer.P2W,
                         owner=m.FunctionalRuleOwner("repo-a", "rules/p2w.md"),
-                        governing_rule_ids=(
-                            m.FunctionalGraphRef("repo-a", "rule-p2s"),
-                        ),
+                        governing_rule_ids=(m.FunctionalGraphRef("repo-a", "rule-p2s"),),
                     ),
                 ),
             ),

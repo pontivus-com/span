@@ -653,7 +653,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 ),
                 "ask_a_error": ask_a_error,
                 "ask_a_route_status": fp_a.get("status"),
-                "ask_a_rule_ids": [rule.get("rule_id") for rule in fp_a.get("rules", [])],
+                "ask_a_rule_ids": [
+                    rule.get("rule_id") for rule in fp_a.get("rules", [])
+                ],
                 "ask_a_rule_authority_ids": _authority_ids(fp_a, repo_b_id),
                 "owner_ask_error": owner_ask_error,
                 "owner_scope_relation": owner_fp.get("scope_relation"),
