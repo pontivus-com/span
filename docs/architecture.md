@@ -1,8 +1,9 @@
 # Architecture
 
-Span keeps agent-authored understanding attached to its declared support.
-The interpreting agent owns meaning; deterministic core rules validate state
-transitions and classify support; the shell owns effects.
+This page is for contributors who need to understand **where Span's behavior is
+owned** before changing it.
+
+Span follows a functional-core / imperative-shell design:
 
 ```mermaid
 flowchart LR
@@ -12,82 +13,149 @@ flowchart LR
   S --> C[Pure core rules]
   S --> P[Typed ports]
   P --> E[Filesystem and structural evidence]
-  P --> D[Repository schema-14 SQLite store]
+  P --> D[Repository schema-15 SQLite store]
   I --> F[Installation Functional Pyramid store]
   S --> M
   M --> A
 ```
 
-## Ownership
+The central rule is simple:
 
-| Boundary | Responsibility |
+> **Core rules decide semantics. Services compose them. Ports define
+> capabilities. Shell adapters own effects.**
+
+A change belongs at the lowest layer that actually owns the decision.
+
+## Ownership boundaries
+
+| Boundary | Owns |
 | --- | --- |
-| Target repository and its owners | Implementation, tests, contracts, declared governance. |
-| Coding agent | Investigation, interpretation, applicability, edits, external verification. |
-| `core/model` and `core/schema` | Canonical immutable carriers, strict parsing, reference-only recording wire. |
-| `core/identity.py`, `core/recording.py` | Digests, receipt replay decisions, validated version/challenge transitions. |
-| `core/support_rules.py` | Pure support aggregation; Functional Pyramid graph/route rules remain pure core behavior. |
-| `ports/` | Typed evidence, structural, lifecycle-store, authority, declaration and repository-qualified Functional Pyramid boundaries. |
-| `service/` | Semantic composition: evidence/recording/qualification plus Functional Pyramid orientation and the single shared cross-repository effect engine. |
-| `shell/` | Filesystem, clocks, git, structural provider, repository/installation SQLite transactions, installation, MCP transport. |
+| Target repository and repository owners | Implementation, tests, canonical project authority, governance declarations |
+| Coding agent / human investigator | Investigation, interpretation, conformance judgment, edits, external verification |
+| `src/span/core/model`, `core/schema` | Canonical immutable carriers and strict parsing contracts |
+| `src/span/core/identity.py`, `core/recording.py` | Deterministic identities, replay decisions, validated semantic/version transitions |
+| `src/span/core/support_rules.py` and Functional Pyramid core rules | Pure support/state/graph decisions |
+| `src/span/ports/` | Typed capabilities for evidence, structure, stores, authority, declarations, and repository-qualified governance |
+| `src/span/service/` | Lifecycle composition across core rules and ports |
+| `src/span/shell/` | Filesystem, clocks, Git, structural provider, SQLite transactions, installation, host integration, MCP transport |
 
-The functional core imports no filesystem, database, MCP SDK, network, or
-model provider. Services call core rules; adapters do not duplicate semantic
-decisions. One canonical typed carrier crosses each internal boundary.
-Wire projection resolves references once into that contract; it does not
-introduce a second domain representation or compatibility writer.
+The functional core imports no filesystem, database, MCP SDK, network client, or
+model provider.
 
-## Version-1 composition boundary
+Shell adapters do not get to invent semantic decisions because they are closer
+to the effects. Services do not create shadow domain shapes to avoid using the
+canonical core contracts.
 
-A raw repository runtime contains only repository identity/root, its lifecycle
-store and exact evidence/structural capabilities. The installation runtime owns
-the registered-repository resolver, installation Functional Pyramid store,
-declaration and repository-qualified authority/evidence access, one
-Functional Pyramid service, and the factory that composes repository
-`ServiceContext` instances.
+## Installation and repository composition
 
-Production semantic services receive these installation capabilities
-mandatorily. There is no reduced repository-local support/effect mode and no
-shell-side Functional-Pyramid semantic coordinator. Ordinary changed-scope
-`reconsider` and participation writes use the same service-owned,
-repository-qualified dependency-effect engine.
+Span has two persistence/composition levels.
 
-## Request and persistence path
+### Repository lifecycle state
 
-Strict MCP ingress parses a canonical request. The service reads typed state
-and evidence, calls core rules, and invokes the owning persistence operation.
-The SQLite shell commits semantic transitions and receipts atomically.
-MCP serializes the result as text and structured content from one result.
+Each registered repository has its own lifecycle store containing repository
+semantic/audit state: retained understanding, observations, challenges,
+verification, receipts, and repository-local support indexes.
 
-Questions and evidence admission may persist recoverable operational contexts
-and immutable observations. They do not author conclusions. Recording writes
-understanding versions, conclusion revisions, explicit challenges, and
-independent verification runs. Ordinary startup and navigation do not build
-structural state; explicit setup owns provider currency work.
+The current Beta-3 repository store is schema **15**.
 
-## Shared state and recovery
+### Installation state
 
-Repository schema 14 holds repository contexts, semantic/audit history and
-ordinary receipts across process/session restarts. Functional Pyramid
-participation, versions, exclusions and installation receipts live in the
-separate installation store. The reasoning caller preserves its request identity before
-dispatch. Matching receipt replay precedes new-write checks, including checks
-that could fail after context expiry or source changes. Compare-and-set
-versions and challenge revisions reject conflicting concurrent updates.
-SQLite transactions serialize the actual commits.
+The installation runtime owns capabilities that span registered repositories,
+including:
 
-The store owns recoverable operational context and semantic history. Earlier stores use a separately invoked offline
-archive/export/stage/activate protocol; startup never migrates them.
+- registered-repository resolution;
+- the installation Functional Pyramid store;
+- repository-qualified evidence/authority access;
+- Functional Pyramid composition; and
+- the shared cross-repository dependency-effect path.
 
-## Currency and limits
+Functional Pyramid participation, instance versions, exclusions, and
+installation-scoped receipts therefore do not live inside one selected
+repository database.
 
-Support is checked from declared source observations, authority declarations,
-exact premise revisions, recorded discovery membership, and Functional Pyramid
-route support. Changed support
-requires agent reassessment; deterministic rules do not rewrite the meaning.
-Challenges and gaps remain separate from support currency. A current snapshot
-may be incomplete or disputed.
+Repository services are composed from the installation runtime so an ordinary
+repository operation and a Functional Pyramid operation cannot quietly use
+different governance models.
 
-Hooks deliver reminders; lifecycle operations evaluate currentness. Skills guide the
-agent and have no runtime semantic authority. See [lifecycle](lifecycle.md),
-[ports](ports.md), and [MCP reference](mcp.md).
+## Request path
+
+A normal request follows this direction:
+
+```text
+MCP request
+  → strict ingress
+  → installation/repository composition
+  → lifecycle service
+  → typed ports + pure core rules
+  → owning persistence operation when needed
+  → canonical result
+  → MCP egress
+```
+
+Strict ingress validates the public request into canonical contracts before
+semantic composition.
+
+Services read typed state/evidence through ports, apply core decisions, and
+invoke the one persistence owner for a state change.
+
+The SQLite shell commits accepted semantic transitions and their receipts
+atomically.
+
+MCP projects the canonical result to text/structured content; transport does not
+create a second semantic model.
+
+## Meaning is never authored by the infrastructure
+
+Evidence admission can persist observations and recoverable investigation
+context. It does not author a semantic conclusion.
+
+Recording can persist agent-authored conclusions, curation dispositions,
+challenges, verification, and history. The semantic meaning still comes from
+the investigator/reviewer.
+
+Likewise, the Functional Pyramid resolves declared project authority and
+applicability. It does not infer governing meaning from repository structure.
+
+This separation is governed by
+[Foundations](foundations.md), especially F1/F5/F11/F13.
+
+## Change effects use one semantic path
+
+Implementation change and governance change can both affect retained knowledge.
+
+Span therefore uses the same service-owned dependency/effect composition for:
+
+- ordinary changed-scope `reconsider`; and
+- Functional Pyramid participation/governance effects.
+
+There is no shell-side semantic coordinator and no reduced repository-local
+fallback that can disagree with the production installation composition.
+
+## Persistence, replay, and concurrency
+
+Accepted understanding history is immutable/versioned.
+
+The caller preserves recording identity before dispatch. Matching receipt replay
+is resolved before attempting a new write, so a lost response can be recovered
+without repeating the semantic mutation.
+
+Compare-and-set understanding/challenge versions prevent silent concurrent
+overwrite. SQLite transactions serialize committed state changes.
+
+Operational contexts may expire without deleting accepted semantic/audit
+history.
+
+Older repository schemas transition through the explicit offline procedure in
+[Install and connect](install.md#upgrade-an-existing-store). Runtime open never
+silently migrates them.
+
+## Where to go next
+
+- [Repository overview](overview.md) — where code and tests live.
+- [Port contracts](ports.md) — exact typed capability boundaries.
+- [Structural evidence and indexing](indexing.md) — structural-provider role.
+- [MCP reference](mcp.md) — public transport grammar.
+- [Contributing](contributing.md) — development and verification workflow.
+
+Binding behavior is owned by the Functional Pyramid documents, not by this
+architecture guide.
