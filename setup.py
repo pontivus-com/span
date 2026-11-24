@@ -15,21 +15,13 @@ from sync_assets import asset_manifest  # noqa: E402
 
 
 class build_py(_build_py):
-    """Map canonical assets directly into the wheel package-data build."""
+    """Map canonical external assets directly into package-data outputs."""
 
-    def get_data_files(self):
-        files = list(super().get_data_files() or ())
+    def _get_package_data_output_mapping(self):
+        yield from super()._get_package_data_output_mapping()
         asset_root = pathlib.Path(self.build_lib) / "span" / "_assets"
         for source, relative in asset_manifest():
-            files.append(
-                (
-                    "span",
-                    str(source.parent),
-                    str(asset_root / relative.parent),
-                    [source.name],
-                )
-            )
-        return files
+            yield str(asset_root / relative), str(source)
 
 
 setup(cmdclass={"build_py": build_py})
