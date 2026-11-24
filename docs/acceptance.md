@@ -158,7 +158,10 @@ workstream:
   projection as `reconsider`, including containment, source/discovery,
   authority/route, premise and cross-repository effects, without issuing
   re-establishment contexts;
-- OpenCode change reminders carry a complete changed-scope request shape, and
+- native host adapters evaluate complete changed scope before notice bounding:
+  Codex translates canonical `apply_patch` PostToolUse input to structured
+  additional context, while OpenCode retains documented edit/write/patch scope
+  until handoff and diagnoses incomplete native payloads rather than guessing;
   host-trigger documentation no longer carries stale Beta-1/T13 candidate
   claims; and
 - the new semantic skill/hook regressions increased the measured
@@ -168,9 +171,12 @@ workstream:
 The earlier F14 and skill/hook runs remain evidence only for their exact trees.
 The deeper lifecycle review corrected FD-58/FD-94 and Technical Design §22.
 T14-H2–H6 now implement complete changed-scope evaluation, session edit
-accumulation, managed data-directory identity, documented native event mapping,
-singular session-entry/completion composition, representative preview
-purity/parity, and the minimum executable hook acceptance set.
+accumulation without arbitrary eviction/truncation, managed data-directory
+identity, documented native Codex/OpenCode event mapping, singular
+session-entry/completion composition, representative preview purity/parity, and
+the minimum executable hook acceptance set. The installed lane now builds from
+the canonical packaging inputs and proves the wheel-bundled OpenCode plugin can
+be deployed through the real installed `span-hooks` path.
 
 The authoritative Beta-3 T14 closure proof is the required GitHub CI check
 attached to the exact H7 candidate commit. Its run identifier is intentionally
@@ -213,8 +219,10 @@ claims.
 For the current Version-1 candidate:
 
 - Codex remains a managed integration target;
-- OpenCode managed integration has a packaged real-plugin → installed
+- OpenCode managed integration has a wheel-bundled plugin → installed
   `span-hooks` → temporary-store acceptance path;
+- Codex managed hook acceptance covers canonical `apply_patch` PostToolUse
+  payload normalization and structured `additionalContext` output;
 - Claude Code registration/health/installer support is present; and
 - authenticated live Version-1 model delivery remains **UNVERIFIED** unless a
   separate recorded acceptance run establishes it.
