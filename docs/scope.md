@@ -1,125 +1,157 @@
 # Scope and product boundaries
 
-Span retains software understanding for the exact scope an agent is dealing
-with and separately qualifies exact semantic revisions for shared reuse. At task
-time, supported and curated knowledge becomes working context: retained
-understanding of the implementation and, for participating repositories, the
-project guidance that applies to the same scope. The task determines the scope;
-Span keeps captured meaning, curation state, support, governing relationships and
-later change effects attached to it through the required lifecycle.
+Span has a deliberately narrow job:
 
-## The unit is an explanation
+> **maintain reusable software understanding for coding agents, keep it connected
+> to the things it depends on, and identify what needs another look after
+> change.**
 
-An understanding answers a question over a declared scope. Its immutable
-versions contain exact conclusion revisions and explicit gaps. An understanding
-may span source, tests, configuration, and contracts. A file or symbol is an evidence anchor.
+It does not replace the coding agent, the source of project authority, or the
+engineering tools used to do the work.
 
-An agent can select an exact `FILE`, `SYMBOL`, `SERVICE`, or `DOMAIN` surface.
-A service or domain surface is declared through `record(kind="surface")` with a
-boundary and optional parent; its identity survives boundary updates, which use
-compare-and-set. A file or symbol surface needs no declaration. The service
-never auto-declares a surface from an understanding.
+This page explains where that boundary sits.
 
-Ordinary coding work can start with saved answers, a cold investigation,
-or evidence gathered outside Span. Recording is an explicit action, with an
-inspectable receipt. Follow [the required lifecycle](lifecycle-contract.md#required-agent-completion).
+## What Span owns
 
-## Reuse has qualifications
+Span owns the lifecycle around maintained software knowledge.
 
-The surface document view groups current conclusions by recorded question;
-a targeted query matches the exact recorded question. The agent
-judges applicability and meaning. A `CURRENT` qualification establishes only
-that declared support still passes its checks. It does not prove semantic
-correctness, full coverage, or the absence of an unresolved dispute.
+That includes:
 
-A relevant source/authority change, superseded premise, or changed recorded
-membership boundary can require reassessment. Unsupported or missing evidence
-remains explicit. Changes outside a declared dependency boundary do not make
-all saved understanding noncurrent.
+- retaining useful understanding established during engineering work;
+- keeping that understanding associated with the software scope it describes;
+- keeping its declared supporting evidence and history;
+- separating task-time capture from review for shared reuse;
+- checking whether required support still holds when knowledge is reused;
+- identifying retained knowledge affected by implementation or governance
+  change; and
+- for participating repositories, resolving the declared project guidance that
+  applies to the software scope being worked on.
 
-The intended benefit is maintained software knowledge that can be projected as
-complete working context for the exact software scope once the semantic revision
-is both curated and supported: retained implementation understanding, the
-applicable canonical project guidance, and focused review when either side
-changes. Net time/token savings depend on the task, recording
-effort, reuse, and host delivery. The beta does not claim a measured universal
-saving or a comparative product-fitness ACCEPT result.
+The coding task determines what needs to be understood. Span maintains what that
+work establishes so future work can start better informed.
 
-## Declared governance is scoped, not inferred
+## What Span does not own
 
-The Functional Pyramid connects the exact software scope to the project
-guidance that applies to it. An ACTIVE member declares its Functional Scope and
-governing graph explicitly. Ordinary `ask` resolves that guidance from the same
-scope used for retained implementation understanding. A scope outside the
-declared Functional Scope receives a resolved empty governing projection, while
-covered, uncovered, and mixed scopes remain distinct.
+Span does **not**:
 
-For NORMATIVE recording in an ACTIVE repository, Span derives one functional
-route dependency plus every applicable canonical authority dependency. The
-agent cannot make a normative conclusion current by omitting governance.
-DESCRIPTIVE understanding remains independent unless it explicitly cites
-authority.
+- choose or run the coding model;
+- replace source search, code reading, debugging, editing, or test execution;
+- decide whether an agent-authored interpretation is semantically true;
+- autonomously promote every task conclusion into shared knowledge;
+- originate product requirements, policy, professional authority, or project
+  design;
+- infer authority from filenames, directory layout, search relevance, or model
+  preference;
+- turn installation into automatic semantic understanding of a repository; or
+- crawl a repository and manufacture explanations simply because files exist.
 
-## Agent and server responsibilities
+Repository owners remain the source of governing authority. Investigators and
+reviewers remain responsible for semantic judgment. Span maintains the
+relationships, lifecycle, and change consequences around those decisions.
 
-The agent owns semantic judgment, source investigation, applicability, edits,
-and external tests. The repository's owners supply authority. Span validates
-commands, admits evidence, preserves versions and receipts, qualifies support,
-and returns bounded discovery with explicit omissions.
+## The working scope follows the task
 
-Source search and structural tools remain useful for new investigation.
-Span's structural navigation describes locations and adjacency; it cannot
-assign ownership, policy, intent, or professional authority from topology.
+Span works against an explicit software surface: a **file, symbol, service, or
+domain**.
 
-## Scope and boundedness
+That lets knowledge be retained at the level the engineering task actually
+needs. A conclusion about a service may depend on several files and tests; a
+file or symbol may be only one piece of the supporting evidence.
 
-A surface reports its unexamined members as a bounded status, never as
-completeness. Source inventory and evidence batches expose their limits.
-An unexamined file or truncated result is not proof of absence. A complete
-membership observation must actually cover its stated boundary. See
-[queries](queries.md).
+The important distinction is:
 
-Investigation scope is explicit. Broader work requires the agent to choose
-and examine the broader scope; Span does not turn a local question into an
-automatic semantic crawl. Installation establishes readiness; investigation establishes understanding.
+- **scope** says what the conclusion is about;
+- **support** says what established it.
 
-Verification has its own declared scope. A run applies to the surfaces within
-that scope: a single-file run is not widened to a broader service, and a
-service-wide run applies to the files it covers.
+Span does not widen a local investigation into an automatic repository-wide
+claim. If the work needs a broader scope, the agent must actually investigate
+that broader scope.
 
-## Local storage and operational effects
+This keeps a useful local conclusion from being mistaken for complete knowledge
+of a larger system.
 
-Beta 3 repository runtime state uses schema 15 in the external data directory.
-Installation-level Functional Pyramid participation and receipts remain in the
-separate installation database under `<DATA_DIR>/installation/` at installation
-schema 1. Recoverable contexts and observation admission are operational state;
-recording creates semantic history and curation dispositions qualify exact
-semantic revisions for shared reuse. Context expiry does not erase accepted conclusions, challenges,
-verification runs, or retained receipts. Receipt expiry ends that replay
-window, not the existence of the recorded understanding.
+## Reuse is qualified, not automatic
 
-The managed structural artifact lives under
-`<DATA_DIR>/structural/<repository-id>/.graph/wiring.json`. Explicit setup owns
-provider currency work. Ordinary lifecycle operations and hooks do not build
-it. Runtime operation does not write target source or provider artifacts into
-the target repository. Installation may write a managed `AGENTS.md` block and
-host configuration as described in [install](install.md).
+Retained knowledge is useful only when it is appropriate to share and the things
+it depends on still hold.
 
-Existing schema-7–14 repository stores use the separately invoked offline
-inspect/apply/verify/rollback protocol into schema 15. The Beta-3 schema-14→15
-mapping preserves durable semantic/audit/governance state and the existing route
-lookup projection while creating zero curation dispositions. Earlier schemas
-retain their documented preservation/mapping boundaries before the final
-schema-15 transition. See the
-[transition procedure](install.md#upgrade-an-existing-store).
+That is why Span separates:
 
-## Beta delivery boundary
+- **capture** — keep useful understanding produced during work;
+- **review/curation** — decide whether an exact revision is suitable for shared
+  reuse; and
+- **support currency** — determine whether its recorded dependencies still
+  hold.
 
-Generic Beta-3 behavior is verified through the full FA-01–FA-64 functional
-acceptance matrix and installed stdio MCP lane. Codex, OpenCode and Claude Code
-remain managed integration targets, but live model delivery for the current
-Beta-3 candidate is **UNVERIFIED**. Registration, configured hooks and observed
-model behavior remain separate facts. Beta 3 remains unpublished until the
-release owner separately authorizes publication.
+These qualifications do not mean Span has proved the explanation true. They
+make the state of reusable knowledge explicit instead of silently treating old
+or unreviewed material as trustworthy context.
 
-See [usage](usage.md), [freshness](freshness.md), and [FAQ](faq.md).
+See [Agent lifecycle](lifecycle.md) and
+[Support currency and reassessment](freshness.md) for the deeper model.
+
+## Project guidance is declared, not guessed
+
+For repositories that participate in the Functional Pyramid, Span can also tell
+the agent which project guidance applies to the software scope being worked on.
+
+That governing path is explicitly declared. Span does not make a document
+authoritative because it has a promising filename, appears high in a repository,
+or looks semantically relevant.
+
+The canonical project documents remain where their owners maintain them. Span
+keeps their declared identity, applicability, relationships, and change effects
+available to the task.
+
+This keeps two questions separate:
+
+- **What is this software understood to do?**
+- **What is it supposed to follow?**
+
+See [Evidence, authority, and interpretation](authority-trust.md).
+
+## Span keeps uncertainty bounded and visible
+
+A gap is not evidence that an entire repository is undocumented. It means the
+requested understanding is not currently available for the selected scope.
+
+Likewise, inspecting part of a service or repository does not establish that
+everything outside the inspected boundary is absent or understood.
+
+Span keeps those limits explicit rather than turning incomplete investigation
+into a completeness claim.
+
+This is also why change reassessment is dependency-focused: a relevant change
+can make dependent knowledge require another look without invalidating all
+retained knowledge everywhere.
+
+See [Questions, retrieval, and bounds](queries.md) for retrieval and boundedness
+details.
+
+## Verification is evidence, not meaning
+
+A test run, review, or other external verification can be retained as evidence
+of what was observed.
+
+That record does not automatically create or rewrite the semantic explanation
+of the software. A passing test is not the same thing as an interpretation of
+what the implementation means, and it does not silently settle a disagreement.
+
+Span keeps verification and semantic understanding separate so each can retain
+the scope and evidence appropriate to it.
+
+## Operational concerns live elsewhere
+
+Installation, host registration, storage layout, schema transitions, backups,
+and recovery are necessary operational details, but they are not the product
+scope model.
+
+Use:
+
+- [Install and connect](install.md) for setup, hosts, and upgrades;
+- [Backup and recovery](recovery.md) for state protection and restore;
+- [MCP reference](mcp.md) for exact protocol behavior; and
+- [Acceptance and evidence](acceptance.md) for the current Beta candidate's
+  verified delivery boundary.
+
+For ordinary engineering work, start with [Using Span](usage.md).
