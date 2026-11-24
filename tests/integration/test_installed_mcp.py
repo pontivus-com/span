@@ -119,8 +119,25 @@ def _ensure_isolated_exe(work):
         srctree / "src",
         ignore=_shutil.ignore_patterns("__pycache__"),
     )
-    for name in ("pyproject.toml", "README.md"):
+    for name in ("pyproject.toml", "README.md", "setup.py"):
         _shutil.copy(repo_root / name, srctree / name)
+    _shutil.copytree(
+        repo_root / "scripts",
+        srctree / "scripts",
+        ignore=_shutil.ignore_patterns("__pycache__"),
+    )
+    _shutil.copytree(repo_root / "skills", srctree / "skills")
+    (srctree / "docs").mkdir()
+    _shutil.copy(
+        repo_root / "docs" / "agents-snippet.md",
+        srctree / "docs" / "agents-snippet.md",
+    )
+    plugin_dir = srctree / "integrations" / "hosts" / "opencode"
+    plugin_dir.mkdir(parents=True)
+    _shutil.copy(
+        repo_root / "integrations" / "hosts" / "opencode" / "span-hooks.js",
+        plugin_dir / "span-hooks.js",
+    )
     identity = {
         "source_revision": _tree_revision(repo_root),
         "source_digest": _tree_digest(repo_root),
