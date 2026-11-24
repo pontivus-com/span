@@ -61,8 +61,8 @@ directory untouched.
 ### Deploy a repository with its Span data
 
 ```bash
-git clone <remote> pontivus-awb
-cd pontivus-awb
+git clone <remote> repository-clone
+cd repository-clone
 span-install --repo .
 span-install --load-repository-backup .
 span-install --verify-only
