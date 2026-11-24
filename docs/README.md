@@ -60,6 +60,9 @@ Use these when you need an exact operational answer.
   retention.
 - [Lifecycle hooks](hooks.md) — host lifecycle notices and their boundaries.
 - [Glossary](glossary.md) — exact Span terminology.
+- [Offline initialization and readiness contract](../INITIALIZATION_CONTRACT.md)
+  — derived installer/readiness contract used by operator tests; not a
+  Functional Pyramid authority layer.
 
 ## Contributor and developer reference
 
@@ -94,8 +97,6 @@ lower-level design remains traceable to the outcome it serves:
    behavior.
 6. [Technical design](technical-design.md) — layer 4: implementation
    mechanisms.
-7. [Offline initialization contract](../INITIALIZATION_CONTRACT.md) — explicit
-   administrative initialization/readiness contract.
 
 [Method grounding](method-grounding.md) provides supporting evidence for the
 method; it is not a requirements layer.
