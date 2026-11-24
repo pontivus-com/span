@@ -40,8 +40,8 @@ to own the organization's complete knowledge system.
 - [1.0.0 Beta 2 implementation plan](implementation-plans/1.0.0-beta2.md) —
   one reconciled campaign covering capture/curation, repository schema 15,
   B2-D01/B2-D02 installer and production-topology remediation, Functional
-  Pyramid-preserving implementation, first-adopter revalidation, public
-  knowledge-factory narrative alignment and release gates. The canonical
+  Pyramid-preserving implementation, external integration verification and
+  release gates. The canonical
   behavior/mechanisms are owned by the layer-0–4 documents above; the plan
   derives from them.
 - [1.0.0 Beta 1 implementation plan](implementation-plans/1.0.0-beta.md) —
