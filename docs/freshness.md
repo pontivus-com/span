@@ -1,79 +1,136 @@
 # Support currency and reassessment
 
-Span checks whether the dependencies recorded for an explanation remain
-current. It does not determine semantic truth from a fingerprint. The agent
-judges the meaning and completeness of the explanation.
+Maintained software knowledge is useful only while the things it depends on
+still hold.
 
-## States
+Span therefore checks **support currency** separately from the meaning of the
+explanation itself. It can tell you that recorded support changed; it does not
+pretend that a matching fingerprint proves the explanation semantically true.
 
-| Support state | Meaning |
+## The three support states
+
+| State | What it means for the user |
 | --- | --- |
-| `CURRENT` | The declared dependencies passed their current checks. |
-| `REASSESSMENT_REQUIRED` | Recorded support changed or a premise was superseded/withdrawn; investigate before reuse. |
-| `UNVERIFIABLE` | Required support cannot be established, such as missing evidence, unresolved authority, or a bounded/cyclic premise walk. |
+| `CURRENT` | The recorded dependencies still pass their checks. |
+| `REASSESSMENT_REQUIRED` | Something the conclusion depends on changed; investigate the conclusion again before reuse. |
+| `UNVERIFIABLE` | Span cannot currently establish required support, for example because evidence or declared authority is unavailable or unresolved. |
 
-These are support states, separate from gaps, challenge state, operational
-availability, and test outcome. An all-current aggregate does not prove that
-any substantive conclusion exists or that the investigation was complete.
+These states answer **“does the recorded support still hold?”**
 
-## What is checked
+They do not answer:
 
-- **Source:** current content against the immutable observation's digest.
-  Missing content is unverifiable; changed bytes require reassessment.
-- **Authority:** declared identity, accepted status, kind, applicability, and
-  recorded content identity. Missing/undeclared authority is not promoted by
-  finding relevant prose. Superseded or changed authority requires review.
-- **Premise:** existence and current membership of an exact conclusion
-  revision, then its support through a bounded dependency walk. A replacement
-  or withdrawal can affect dependents without changing their own source files.
-- **Discovery:** current membership against the recorded scope fingerprint.
-  Additions/removals matter for conclusions that declare this dependency.
-  Truncated inventory never supplies a complete membership observation.
-- **Functional route:** re-resolve the exact recorded semantic scope against the
-  current ACTIVE participation/declaration graph. Leaving the recorded active
-  instance or changing the resolved route identity requires reassessment;
-  operational inability to inspect an otherwise correctly composed ACTIVE graph
-  is unverifiable. A resolved unchanged route remains current. Canonical rule
-  content currency is evaluated separately through authority support.
+- whether the explanation is complete;
+- whether the interpretation was originally correct;
+- whether a dispute has been resolved;
+- whether a test passed; or
+- whether the repository has been fully investigated.
 
-Checks follow declared dependencies. A conclusion citing a whole-file content
-observation can require reassessment after any change to that file, even if
-the meaning still holds. Unrelated files do not invalidate it merely because
-repository HEAD or a timestamp changed. Omitted support cannot be detected
-as a semantic omission by deterministic comparison alone.
+Those are separate questions.
 
-Functional Pyramid route changes and authority-content changes remain distinct.
-Changing context coverage, inheritance, rule membership, governing edges or
-material member bindings can change route support without changing source rule
-text. Conversely, an applicable canonical rule can change while the route
-identity remains stable. `reconsider` uses the same shared effect engine for
-ordinary implementation changes and declared governance changes.
+## What can make knowledge need another look?
 
-## Reading and recording
+A conclusion can depend on several kinds of things.
 
-Snapshot retrieval, `ask`, new recording, and verification qualification
-use the owning support service and pure core rules. A provider/store failure
-is operational failure, not an invented support state. After an accepted
-record, a qualification failure is `SupportUnavailable` beside the durable
-receipt; it must not be reported as a rejected write.
+### Source evidence
 
-After a relevant edit, investigate the affected explanation, admit current
-evidence, and record the appropriate update with its basis. A new immutable
-version preserves history. `ask` checks currency; it does not reinterpret,
-execute tests, or settle a challenge. Gaps and disputes remain explicit.
+If recorded source content changes or disappears, a conclusion that depends on
+it may require reassessment.
 
-A surface status names its stale conclusions through `stale_refs` (exact
-revision, understanding version, present state). The reference is not content.
-Read the prior statement with
-`ask(selector=UnderstandingSnapshotSelector{understanding_id, version})`, then
-withdraw, correct, or replace it through `record` with the expected version.
-Nothing is auto-withdrawn, and the count and references always describe the same
-set.
+A broad source dependency can make a conclusion sensitive to any change inside
+that dependency. Unrelated source does not become stale merely because the
+repository has a newer commit or timestamp.
 
-## Independent runs
+### Project authority
 
-`ask` returns each saved run with its live qualification,
-including dirty-tree changes without a new commit. The run's
-`PASS`/`FAIL`/`INCONCLUSIVE` outcome remains historical fact. Current support
-for a failed run means the failure evidence still applies; it does not mean
-that the test now passes. See [recording](interpretation.md).
+A normative conclusion can depend on project goals, contracts, rules, or design
+decisions.
+
+If the declared authority changes, becomes superseded, becomes unavailable, or
+stops applying to the software scope, dependent knowledge may need another look
+even when the implementation itself did not change.
+
+### Other retained knowledge
+
+A conclusion may depend on another exact conclusion. Correcting, replacing, or
+withdrawing that premise can therefore affect downstream knowledge without any
+source edit.
+
+### Observed membership
+
+Some conclusions depend on what was found within a declared search or discovery
+boundary. If members are added or removed, the conclusion may need
+reassessment.
+
+An incomplete or truncated inventory is not silently treated as proof of a
+complete boundary.
+
+### The governing route
+
+For repositories using the Functional Pyramid, a conclusion can also depend on
+the declared path that connects its software scope to applicable project
+guidance.
+
+Changing coverage, relationships, repository bindings, or applicability can
+change that route even when the text of the governing rule is unchanged.
+
+The governing route and the governing rule's own content are therefore checked
+as separate dependencies.
+
+## What happens after change?
+
+After changing source or relevant project guidance, call `reconsider` with the
+changed paths.
+
+Span identifies retained knowledge that may depend on those changes and reports
+its present support state.
+
+Inclusion in that result does **not** automatically mean the conclusion is
+wrong. Some considered knowledge may remain current.
+
+For knowledge that actually requires reassessment:
+
+- investigate the changed support;
+- confirm the meaning if it still holds;
+- correct or replace it if the meaning changed; or
+- withdraw it if it no longer applies.
+
+A semantic change creates a new captured revision that must go through review
+again before shared reuse.
+
+See [Using Span — After code or project guidance changes](usage.md#after-code-or-project-guidance-changes)
+for the workflow and [MCP reference — reconsider](mcp.md#reconsider) for the
+exact result contract.
+
+## Why Span does not automatically rewrite knowledge
+
+A changed dependency tells Span **where human or agent judgment is needed**. It
+does not tell Span what the new meaning should be.
+
+That distinction matters. A source edit may leave an explanation semantically
+unchanged, or a one-line change may completely invalidate it.
+
+Span identifies the reassessment obligation and preserves history; the
+investigator decides the new meaning.
+
+## Verification has its own currency
+
+An external test or review is retained as an observation with its own support.
+
+If a recorded run says `FAIL`, and its support remains current, that means the
+recorded failure evidence still applies. It does not mean the test has somehow
+become a pass.
+
+Likewise, changed tested source can make an old run require new verification.
+
+Verification evidence and semantic understanding remain separate so neither is
+mistaken for the other.
+
+See [Interpretation and recording](interpretation.md).
+
+## Go deeper
+
+For the conceptual distinction between implementation evidence and project
+authority, read [Evidence, authority, and interpretation](authority-trust.md).
+
+For exact support fields, historical retrieval, stale references, and typed
+results, use the [MCP reference](mcp.md).
