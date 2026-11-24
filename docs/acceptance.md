@@ -49,6 +49,19 @@ Pyramid schema 1. Schema-14 migration does not fabricate curation for retained
 Beta-1 conclusions. Span has no built-in curator model and does not treat
 curation as semantic truth or Functional Pyramid authority.
 
+Beta-3 corrective exact-head verification passed on
+`f797c049917c0d3e70d402e2f4fed714dfd6efd5`: push CI `45296868951` and
+pull-request CI `45296879433` both succeeded. The package build produced and
+installed `span_mcp-1.0.0b3`; Ruff/Black passed, typing remained at zero
+errors, pytest reported `980 passed, 1 skipped, 150 subtests`, aggregate
+coverage was 85%, and plugin notice delivery passed. The strict-ingress
+regression proves missing canonical discriminators are rejected for both
+authority carrier families, and the repository-wide release-identity guard
+proves the active candidate contains only the Beta-3 release identity. The
+committed first-adopter seed/binding inputs also carry the required canonical
+`EvidenceRef`/`AuthorityBinding` discriminators, so the stricter ingress
+does not invalidate the previously passed cold-install adopter path.
+
 Live authenticated model delivery through supported managed hosts remains
 **UNVERIFIED**. Registration, installer and hook support are not promoted into
 a model-delivery claim. Beta 3 is **not authorized for publication**. Its release
