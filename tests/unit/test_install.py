@@ -59,6 +59,7 @@ class NoSpanImportTest(unittest.TestCase):
             "sys",
             "pathlib",
             "re",
+            "shlex",
             "typing",
         }
         for node in _module_level_imports(tree):
