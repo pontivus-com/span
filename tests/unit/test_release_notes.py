@@ -108,5 +108,40 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertIn('if [[ "${requested}" != "${version}" ]]', workflow)
 
 
+    def test_active_tree_contains_no_beta2_release_identity(self):
+        roots = (
+            REPO_ROOT / "docs",
+            REPO_ROOT / "src",
+            REPO_ROOT / "skills",
+            REPO_ROOT / "integrations",
+            REPO_ROOT / ".github",
+        )
+        forbidden = (
+            "Beta " + "2",
+            "Beta-" + "2",
+            "1.0.0" + "b2",
+            "1.0.0-beta." + "2",
+            "B2-" + "D01",
+            "B2-" + "D02",
+        )
+        offenders = []
+        for root in roots:
+            if not root.exists():
+                continue
+            for path in root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if "1.0.0-beta2" in path.name.lower():
+                    offenders.append(str(path.relative_to(REPO_ROOT)))
+                    continue
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    continue
+                if any(value in text for value in forbidden):
+                    offenders.append(str(path.relative_to(REPO_ROOT)))
+        self.assertEqual(offenders, [])
+
+
 if __name__ == "__main__":
     unittest.main()
