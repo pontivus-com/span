@@ -1,154 +1,140 @@
 # Span documentation
 
-This index separates **user guidance**, **reference**, **binding authority**,
-**verification evidence**, and **programme history**. They serve different
-purposes and should not be read as one continuous documentation set.
+You do not need to read the whole documentation set to use Span.
 
-If you are trying to use Span, start with the user path below. The requirements
-pyramid and implementation plans are not tutorials.
+Start with what you are trying to do. The deeper material is there when you
+need to understand the product model, inspect exact protocol behavior, contribute
+to Span, or verify the requirements behind it.
 
-## Start here
+## What are you trying to do?
 
-| Need | Read |
+| I want to… | Start here |
 | --- | --- |
-| Understand what Span is and whether it is useful | [Project README](../README.md) |
-| Install and connect it | [Install and connect](install.md) |
-| Run a first real investigation | [First investigation](onboarding-runbook.md) |
-| Use Span during normal engineering work | [Using Span](usage.md) |
-| Look up the exact MCP grammar | [MCP reference](mcp.md) |
-| Resolve a conceptual or Beta-limit question | [FAQ](faq.md) |
+| Try Span for the first time | [Install and connect](install.md) → [First investigation](onboarding-runbook.md) |
+| Use Span during normal coding work | [Using Span](usage.md) |
+| Understand the knowledge lifecycle | [Agent lifecycle](lifecycle.md) |
+| Understand how Span keeps knowledge aligned with change | [Support currency and reassessment](freshness.md) |
+| Understand how project guidance applies to code | [Evidence, authority, and interpretation](authority-trust.md) |
+| Look up the exact MCP request/result grammar | [MCP reference](mcp.md) |
+| Back up, restore, or move Span state | [Backup and recovery](recovery.md) |
+| Troubleshoot a common product question | [FAQ](faq.md) |
+| Contribute to Span | [Architecture](architecture.md) → [Repository overview](overview.md) → [Contributing](contributing.md) |
+| Verify a product requirement or design decision | [Binding authority](#binding-authority) |
+| Inspect what the current Beta candidate actually demonstrated | [Acceptance and evidence](acceptance.md) |
 
-A normal user should not need the binding design corpus or implementation plans
-to operate Span.
+If you are new to Span, the shortest useful path is:
 
-## Documentation roles
+1. [Install and connect](install.md).
+2. Follow [First investigation](onboarding-runbook.md) on a real engineering task.
+3. Keep [Using Span](usage.md) as the day-to-day guide.
 
-| Role | Purpose | Authority |
-| --- | --- | --- |
-| User guidance | Explain how to install, understand, and use Span | Explanatory; does not redefine the product contract |
-| Concepts | Explain lifecycle, support, governance, scope, and interpretation | Explanatory; canonical rules remain in the authority layers |
-| Operator/reference | Exact protocol, installation, recovery, and host behavior | Reference for the implemented interface; wire grammar is owned by the MCP reference and generated schemas |
-| Contributor/developer | Explain code ownership, architecture, ports, and integration surfaces | Derived from the binding design and implementation |
-| Binding authority | State why Span exists and the requirements/design it must satisfy | Normative |
-| Verification/evidence | Record what a candidate actually demonstrated | Evidence only; passing evidence does not create product authority |
-| Programme records | Track implementation campaigns, decisions, and release gates | Planning/history only; not product documentation |
-
-## User guidance
-
-- [Using Span](usage.md) — the ordinary ask → investigate → record → curate →
-  reuse → reconsider workflow.
-- [First investigation](onboarding-runbook.md) — a first end-to-end working
-  session and fresh-session reuse.
-- [FAQ](faq.md) — product boundaries, common misconceptions, and Beta limits.
-- [Scope and product boundaries](scope.md) — what Span owns and deliberately
-  does not own.
+The [project README](../README.md) explains the problem Span solves and why the
+knowledge-factory model matters.
 
 ## Concepts
 
-These pages explain parts of the same lifecycle model. They are explanatory
-material, not additional requirements layers.
+These pages explain the product model when you want to understand *why* Span
+behaves the way it does. You do not need them before your first use.
 
-- [Agent lifecycle](lifecycle.md) — the lifecycle at a conceptual level.
-- [Support currency and reassessment](freshness.md) — CURRENT,
-  REASSESSMENT_REQUIRED, and UNVERIFIABLE.
-- [Evidence, authority, and interpretation](authority-trust.md) — why
-  implementation evidence and governing authority are different.
-- [Interpretation and recording](interpretation.md) — agent judgment, support,
-  disputes, and recording.
-- [Questions, retrieval, and bounds](queries.md) — retrieval paths, exact detail,
-  bounds, and continuations.
+- [Agent lifecycle](lifecycle.md) — how maintained knowledge moves from use,
+  through capture and review, to reuse and reassessment after change.
+- [Support currency and reassessment](freshness.md) — how Span decides when
+  retained knowledge needs another look.
+- [Evidence, authority, and interpretation](authority-trust.md) — why knowing
+  what the code does is different from knowing what it is supposed to follow.
+- [Interpretation and recording](interpretation.md) — how agent judgment,
+  evidence, disputes, and retained conclusions fit together.
+- [Questions, retrieval, and bounds](queries.md) — how exact retrieval,
+  references, limits, and continuations work.
+- [Scope and product boundaries](scope.md) — what Span owns and what remains the
+  responsibility of the coding agent, reviewer, or repository owner.
 
 ## Operator and protocol reference
 
-Use these when you need an exact operational answer rather than another product
-explanation.
+Use these when you need an exact operational answer.
 
-- [Install and connect](install.md)
-- [MCP reference](mcp.md) — authoritative public request/result grammar.
-- [Backup and recovery](recovery.md)
-- [Lifecycle hooks](hooks.md)
-- [Glossary](glossary.md)
+- [Install and connect](install.md) — installation, host setup, upgrades, and
+  verification.
+- [MCP reference](mcp.md) — exact public request/result grammar.
+- [Backup and recovery](recovery.md) — backup, deployment, restore, and
+  retention.
+- [Lifecycle hooks](hooks.md) — host lifecycle notices and their boundaries.
+- [Glossary](glossary.md) — exact Span terminology.
 
 ## Contributor and developer reference
 
-- [Architecture](architecture.md) — implementation ownership and composition.
-- [Repository overview](overview.md) — code layout and where changes belong.
-- [Port contracts](ports.md)
-- [Structural evidence and indexing](indexing.md)
-- [Lifecycle vocabulary](taxonomy.md)
-- [Agent skills integration](skills.md)
-- [Managed agent snippet](agents-snippet.md)
-- [Historical design references](design-references.md)
-- [Contributing](contributing.md)
+These pages explain how Span is built and where implementation changes belong.
 
-These documents help contributors navigate the implementation. They do not
-replace the binding authority below.
+- [Architecture](architecture.md) — implementation ownership and composition.
+- [Repository overview](overview.md) — code layout and change locations.
+- [Port contracts](ports.md) — typed boundaries between the core and effects.
+- [Structural evidence and indexing](indexing.md) — structural navigation and
+  demand-driven semantic work.
+- [Lifecycle vocabulary](taxonomy.md) — canonical carriers and internal
+  vocabulary.
+- [Agent skills integration](skills.md) and [managed agent snippet](agents-snippet.md).
+- [Historical design references](design-references.md).
+- [Contributing](contributing.md).
 
 ## Binding authority
 
-Read these when changing Span's requirements, behavior, or implementation
-design. They are intentionally separate from the normal user reading path.
+You only need this section when changing Span's requirements, behavior, or
+implementation design.
 
-1. [Requirements pyramid](requirements-pyramid.md) — governs placement and
-   derivation.
-2. [Goals](goals.md) — layer 0: outcomes and non-goals.
+Span uses a Functional Pyramid so product decisions have one canonical owner and
+lower-level design remains traceable to the outcome it serves:
+
+1. [Requirements pyramid](requirements-pyramid.md) — how requirements are
+   placed, derived, and kept single-source.
+2. [Goals](goals.md) — layer 0: the problem, outcomes, success, and non-goals.
 3. [Foundations](foundations.md) — layer 1: axioms and principles.
 4. [Lifecycle contract](lifecycle-contract.md) — layer 2: public lifecycle
    requirements and contract laws.
-5. [Functional design](functional-design.md) — layer 3: deterministic behavior.
+5. [Functional design](functional-design.md) — layer 3: deterministic product
+   behavior.
 6. [Technical design](technical-design.md) — layer 4: implementation
    mechanisms.
 7. [Offline initialization contract](../INITIALIZATION_CONTRACT.md) — explicit
    administrative initialization/readiness contract.
 
-[Method grounding](method-grounding.md) is supporting evidence for the method;
-it is not an authority layer.
+[Method grounding](method-grounding.md) provides supporting evidence for the
+method; it is not a requirements layer.
 
 ## Verification and evidence
 
+These documents answer **what has been demonstrated**, not **what Span is
+required to do**.
+
 - [Acceptance and evidence](acceptance.md) — current candidate evidence first,
-  with older candidate evidence retained only for audit.
-- [Functional acceptance matrix](functional-acceptance.md) — executable
-  traceability from functional requirements to tests.
+  with older candidate evidence retained for audit.
+- [Functional acceptance matrix](functional-acceptance.md) — traceability from
+  functional requirements to executable tests.
 - [Invariant audit matrix](invariants.md) — cross-layer verification boundaries.
 - [Method grounding](method-grounding.md) — external grounding and claim limits.
 
-Verification says what was demonstrated. It does not redefine what Span is
-supposed to do.
+## Programme records and history
 
-## Current programme record
+Implementation plans track release campaigns. They are useful for programme
+history and audit, but they are not product documentation.
 
-The only active implementation campaign on this Beta-3 line is:
+The active Beta-3 programme record is:
 
 - [Span 1.0.0 Beta 3 implementation plan](implementation-plans/1.0.0-beta3.md)
 
-Implementation plans are **programme records, not product documentation**.
-Completed plans are retained only for provenance and audit and are deliberately
-excluded from the normal reading path. See the
-[implementation-plan index](implementation-plans/README.md) when historical
-campaign detail is specifically needed.
+Completed campaigns are listed in the
+[implementation-plan index](implementation-plans/README.md).
 
-## Documentation discipline
+## Why the documentation is organized this way
 
-Public documentation is governed by [F14](foundations.md#f14--public-documentation-starts-from-the-users-problem-and-discloses-detail-progressively)
-and the requirements-pyramid [no-restatement rule](requirements-pyramid.md#5-no-restatement).
-The role taxonomy above applies that authority to this documentation set:
+Public documentation follows
+[F14](foundations.md#f14--public-documentation-starts-from-the-users-problem-and-discloses-detail-progressively):
+start from the reader's problem and next useful action, then disclose deeper
+mechanics only when they are needed.
 
-- the README establishes the user problem, outcome, credible industry context,
-  and next useful action;
-- user guides explain task workflows and link downward when more detail is
-  needed;
-- concept pages explain the product model without becoming another requirements
-  layer;
-- the MCP reference and generated schemas own exact public wire grammar;
-- contributor material explains implementation ownership without creating new
-  product requirements;
-- binding requirements/design remain single-source at their Functional Pyramid
-  owners;
-- acceptance material records evidence rather than authority; and
-- implementation plans record campaigns and release gates rather than permanent
-  user guidance.
+The requirements-pyramid [no-restatement rule](requirements-pyramid.md#5-no-restatement)
+keeps binding product rules at one canonical owner. Guides explain what a rule
+means for the reader and link to the authority rather than recreating the
+contract.
 
-External industry sources may support context or credibility, but they do not
-become Span authority. Historical material stays out of the primary reading path
-unless it is needed to understand current behavior.
+External industry sources can support context or credibility for a problem or
+practice. They do not become Span product authority.
