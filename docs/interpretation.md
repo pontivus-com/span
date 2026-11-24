@@ -1,111 +1,157 @@
 # Interpretation and recording
 
-The coding agent investigates and judges meaning. Span accepts explicit,
-supported recording commands and keeps their history. Follow [the required lifecycle](lifecycle-contract.md#required-agent-completion).
-Direct-create ingress also accepts pre-existing evidence and conclusions.
+Span can maintain software knowledge, but it does not decide what the software
+means.
 
-## Evidence before conclusions
+The investigator — an agent or human — still does the engineering work, reads
+the evidence, and authors the conclusion. Span's job is to retain that
+conclusion with its scope and support so future work can reuse it responsibly.
 
-Cite the evidence you already hold through `record`. The agent reads the
-material sources and records locator/range support; Span admits it internally. Source support
-records a content observation; authority support cites declared governance;
-premise support names an exact conclusion revision; discovery support names
-an observed membership boundary. See [authority](authority-trust.md).
+## A useful retained conclusion starts with a real engineering question
 
-One conclusion can explain behavior across several files. Give it a statement,
-assertion nature, exact scope, support, and basis. Record descriptive behavior
-separately from a normative claim about what ought to govern. Include gaps for
-unresolved questions. Shape acceptance does not prove the prose is correct.
+Good retained knowledge should answer something that future work may otherwise
+have to rediscover.
 
-## Normative conclusions in an ACTIVE repository
+For example:
 
-The agent still authors the judgment, statement and empirical evidence. For a
-NORMATIVE conclusion, Span resolves the exact Functional Pyramid route from the
-already-fixed semantic scope and adds `FunctionalRouteSupport` plus every
-applicable canonical authority dependency. The caller does not enumerate the
-governing route and cannot make a normative conclusion current by omitting a
-governance dependency.
+- Why does this request take this path?
+- What responsibility does this service own?
+- Which behavior does this configuration control?
+- Does this implementation satisfy the governing contract?
 
-Route applicability and canonical authority currency are separate proof planes.
-A complete unchanged route can coexist with changed/superseded authority, and a
-governance topology change can require reassessment even when the rule prose and
-implementation bytes are unchanged. DESCRIPTIVE recording is not automatically
-converted into a normative claim merely because a route exists.
+The conclusion should be scoped to what was actually established, not to what
+the investigator hopes is true about the rest of the system.
 
-An accepted NORMATIVE write whose derived governance is non-current remains
-accepted but non-current; it must return to investigation/re-establishment
-before the lifecycle task is complete.
+A conclusion can depend on several files, tests, configuration values, runtime
+observations, or governing sources. Those dependencies are support; they are not
+automatically the semantic scope of the conclusion.
 
-## Create and update
+## Evidence should support the statement you actually make
 
-`record(kind="understanding", conclusion, locator|observation_id|support)` creates
-an understanding and its first immutable version. `support` is the complete
-typed dependency set when the agent already holds one. A locator may accompany
-support solely as carried semantic scope and adds no dependency in that form;
-an observation id remains exclusive. Scope is supplied or derived independently
-through `scope_paths`, the context, or a declared surface. A
-question-bound context supplies its question/scope; an evidence-only context
-requires an explicit target within the admitted scope.
+Retain the evidence that materially supports the conclusion.
 
-| Action | Effect |
-| --- | --- |
-| `actions.add` | Add a conclusion lineage while retaining other membership. |
-| `actions.confirm` | Record that the current explanation still holds, after reassessing its supplied support. |
-| `actions.correct` | Revise the explanation in its existing lineage. |
-| `actions.replace` | Supersede the current conclusion with a new lineage and a stated reason. |
-| `actions.withdraw` | Record an explicit withdrawal and its reason. |
-| `actions` object | Apply multiple conclusion actions and named challenge dispositions atomically. |
+That may include implementation source, tests, configuration, observations,
+other retained conclusions, or declared project authority.
 
-Update actions are compact deltas: the caller supplies the conclusion text and
-the evidence already held; Span derives new lineage identities, the old
-revision, unchanged assertion nature or scope, and the mechanical basis. `add`
-takes no identity; `confirm`, `correct`, `replace`, and `withdraw` name an
-existing `conclusion_id` returned by Span. Each action names one evidence mode
-(`locator`, `observation_id`, or non-empty `support`); a withdrawal may name
-none.
+The goal is not to attach every file the agent happened to read. It is to make
+the claimed meaning accountable to the things that established it.
 
-Updates compare the expected understanding version. Each accepted version
-records its full membership of exact conclusion revisions; earlier versions
-and revision history remain retrievable. Omitted conclusions are retained.
-Invalid references or version conflicts reject the command without a partial
-semantic write.
+If an important question remains unresolved, keep it as a gap rather than
+turning uncertainty into a clean explanation.
 
-## Explicit disputes
+Span validates and maintains the declared support, but it does not certify that
+the investigator selected every relevant dependency or interpreted the evidence
+correctly.
 
-`reconsider` records a dispute against an understanding/version and its
-specified conclusions. Challenge revisions are independent of understanding
-versions. `record` names the expected challenge revision and either
-records an unresolved question/basis or an evidence-backed resolution. A
-resolved disposition supplies reasoning, optional semantic
-`target_conclusion_ids`, and optional context-bound `evidence_refs`; Span
-derives the resulting understanding/version/revision coordinates from the same
-atomic update. Unmentioned disputes survive.
-Neither matching bytes nor a passing verification run resolves one implicitly.
+## Descriptive and normative conclusions are different
 
-## Acceptance and replay
+A **descriptive** conclusion explains what the implementation is understood to
+do.
 
-The caller preserves `(repository_id, request_id)` and content
-before sending. Matching replay returns its retained receipt before checking
-whether a new write could be accepted today. Different content under the same
-identity conflicts. A new update uses a new request identity.
+A **normative** conclusion makes a claim about what the implementation should do
+or whether it conforms to governing project guidance.
 
-Ordinary record acceptance contains a receipt selector, accepted subject
-coordinates and present support qualification; the full immutable receipt
-remains in storage and is retrieved explicitly when exact replay/audit detail is
-needed. `SupportUnavailable` after commit means acceptance succeeded but
-qualification failed; retrieve the receipt if exact acceptance detail is needed
-and investigate availability. It is not a rejected write and is not a support
-verdict.
+For repositories using the Functional Pyramid, Span can derive the applicable
+governing route and required authority support for a normative conclusion from
+the conclusion's software scope.
 
-## Independent verification
+That prevents an investigator from making a governance-dependent claim appear
+current simply by omitting the relevant authority.
 
-Use `record(kind="verification")` after an actual external execution, independently of
-semantic recording. Record command or scenario, tested source observations or
-evidence, observer, time, `PASS`/`FAIL`/`INCONCLUSIVE`, and environment
-limitations. A run requires observations or evidence; either is accepted. It
-applies to the surfaces within its declared scope; a single-file run is not
-widened to a broader service. `ask` returns the run with its live qualification
-without rerunning the work.
+The investigator still authors the judgment. Span does not automatically turn a
+descriptive observation into a normative one merely because project guidance is
+available.
 
-See [MCP reference](mcp.md) for the authoritative request/result grammar and
-[lifecycle](lifecycle.md) for context expiry and operational retention.
+See [Evidence, authority, and interpretation](authority-trust.md).
+
+## Capture is the first step, not publication
+
+When an investigation establishes useful understanding, capture it while the
+evidence and reasoning are fresh.
+
+A newly created or semantically changed conclusion is retained as captured
+knowledge. It still needs separate review before it becomes shared reusable
+knowledge for later agents.
+
+This separation lets ordinary task work contribute to the knowledge factory
+without making every task-local conclusion immediately global.
+
+See [Agent lifecycle](lifecycle.md).
+
+## Correct knowledge explicitly
+
+Software understanding evolves. Span preserves that history rather than silently
+rewriting it.
+
+Conceptually, an existing conclusion can be:
+
+- **confirmed** when reassessment shows the same meaning still holds;
+- **corrected** when the same underlying subject was stated incorrectly;
+- **replaced** when a different explanation supersedes the old one;
+- **withdrawn** when the old conclusion no longer applies; or
+- accompanied by additional conclusions when the understanding needs to grow.
+
+These are explicit changes to maintained knowledge. Earlier revisions remain
+available for audit rather than disappearing.
+
+The [MCP reference](mcp.md#record) owns the exact update actions, identities, and
+compare-and-set grammar.
+
+## Disagreements stay explicit
+
+A source file can remain unchanged while an interpretation becomes disputed.
+
+That is why a semantic challenge is not the same thing as stale support.
+
+If a reviewer or investigator believes a retained explanation is wrong,
+incomplete, or unsupported, preserve that disagreement explicitly and resolve it
+through the knowledge lifecycle.
+
+A later code version, matching source bytes, or a passing test does not silently
+settle the dispute. Resolution requires an explicit semantic disposition.
+
+This preserves the difference between **the evidence still exists** and **we
+agree on what it means**.
+
+## Verification records what happened, not what it means
+
+Tests, reviews, and other external executions can be retained independently from
+semantic conclusions.
+
+A useful verification record says what was run, what scope/evidence was tested,
+what outcome was observed, and any material limitations.
+
+That record can support later engineering judgment, but Span does not convert
+the test result into a semantic explanation automatically.
+
+A passing run is evidence of a pass under the recorded conditions. A failing run
+is evidence of a failure. Neither one is project authority.
+
+## Recording is designed to survive ordinary failure
+
+Writes use stable request identity so an accepted recording can be safely
+retried after a lost response.
+
+That operational contract matters because knowledge capture should not become
+fragile bookkeeping. The investigator should be able to preserve the conclusion
+without guessing whether a previous attempt committed.
+
+Exact replay, receipt, context, and error semantics belong to the
+[MCP reference](mcp.md#replay-identity-and-retention).
+
+## The principle to remember
+
+Span keeps the durable result of engineering judgment; it does not replace that
+judgment.
+
+A good retained conclusion is:
+
+- about a clear software scope;
+- supported by the evidence that established it;
+- explicit about unresolved questions;
+- descriptive or normative as appropriate;
+- corrected or withdrawn explicitly when meaning changes; and
+- reviewed separately before broad reuse.
+
+That is what turns a task-time interpretation into maintained software
+knowledge.
