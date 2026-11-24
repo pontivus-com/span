@@ -1,5 +1,10 @@
 # Acceptance and evidence
 
+> **Document role: verification evidence.** This page records what release
+> candidates demonstrated. It is not a user guide and does not create product
+> authority. The current Beta-3 evidence is presented first; older candidate
+> sections are retained only for audit and historical comparison.
+
 The current lifecycle is evaluated at three distinct boundaries: deterministic
 contracts, delivered host behavior, and useful real-task reuse. Passing a
 local suite proves neither host conversion nor comparative product value.

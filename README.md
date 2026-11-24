@@ -321,18 +321,13 @@ remain exactly `ask`, `record`, and `reconsider`.
 Beta-3 repository, installer, Functional Pyramid, capture/curation and installed
 production-topology acceptance are green at their recorded gates. Publication is
 a separate owner decision: merging or pushing does not publish, and no release
-workflow may be dispatched without explicit release authorization. See
-[the Beta-3 implementation plan](docs/implementation-plans/1.0.0-beta3.md),
-[acceptance](docs/acceptance.md), and [backup and recovery](docs/recovery.md).
+workflow may be dispatched without explicit release authorization.
 
-- [Install and connect](docs/install.md)
-- [Using Span](docs/usage.md) and [first investigation](docs/onboarding-runbook.md)
-- [Agent lifecycle](docs/lifecycle.md) and [MCP reference](docs/mcp.md)
-- [Support and reassessment](docs/freshness.md)
-- [Evidence and authority](docs/authority-trust.md)
-- [Scope and boundaries](docs/scope.md) and [FAQ](docs/faq.md)
-- [Architecture](docs/architecture.md), [repository overview](docs/overview.md), and [all docs](docs/README.md)
-- [Changelog](CHANGELOG.md)
+**Use the [documentation index](docs/README.md) as the single entry point.**
+It separates the normal user path from protocol/operator reference, contributor
+material, binding authority, verification evidence, and programme history. The
+[Beta-3 implementation plan](docs/implementation-plans/1.0.0-beta3.md) is a
+programme record rather than user documentation.
 
 ## Contributing
 
