@@ -180,7 +180,7 @@ class SpecializedSkillTest(unittest.TestCase):
         self.assertIn("surface declaration or Functional Pyramid lifecycle", record)
         self.assertNotIn("action` is used only for a", record)
         self.assertIn('"assertion_nature": "NORMATIVE"', record)
-        self.assertIn("Span derives the challenge", after)
+        self.assertIn("direct challenge evidence derives its context", after)
         self.assertIn("not a semantic-truth certification", after)
         self.assertIn(
             "#71-functional-pyramid-initializationadoption-lifecycle",

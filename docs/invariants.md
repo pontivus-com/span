@@ -57,7 +57,7 @@ document does not add a second Functional Pyramid contract.
 | I-25 | Runtime independence from skill text | Test | `test_implementation_ignores_skills` (no implementation file depends on skill content) |
 | I-26 | Lifecycle placement | Test | `AnswerServiceTest`; `test_unknown_surface_is_unassessed` |
 | I-27 | Offline bootstrap isolation | Test | `InitializationContractTest`; `test_cs07_uninitialized_context_creates_no_store` |
-| I-28 | Interactive hook boundedness | Test | `LifecycleHooksTest` (one event-local notice; no inventory scan) |
+| I-28 | Interactive hook boundedness and canonical effect reuse | Test | `LifecycleHooksTest` (one event-local notice; no inventory scan); `test_hook_source_uses_canonical_changed_scope_projection`; `test_changed_scope_preview_reuses_projection_without_context_issuance` |
 | I-29 | No automatic semantic interpretation | Test | `LifecycleHooksTest`; `test_hooks_never_build` (hook paths never build or record) |
 | I-30 | No automatic refresh | Test | `LifecycleHooksTest` (hooks report only) |
 | I-31 | Readiness/trust separation | Test | `StartupRegistrationTest`; `SupportServiceTest` (readiness is not currency) |

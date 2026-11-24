@@ -140,10 +140,33 @@ that ordering. The active primary navigation was rechecked on the refined tree:
 repository-relative file links and referenced section anchors resolve.
 
 This acceptance file and the Beta-3 programme record are closure receipts for
-that verified content tree. They add no runtime/product mechanism. The
-authoritative exact-head closure proof is the required GitHub CI check attached
-to the current commit; embedding that future run identifier here would itself
-create another head.
+that verified F14 content tree.
+
+A subsequent substantive review of all five shipped `SKILL.md` files and the
+agentic hook path found defects that structural presence/JSON-decoding tests had
+not detected. The corrections are part of Beta 3 rather than a post-release
+workstream:
+
+- skill prose now preserves the CURRENT + CURATED Answer boundary, bounded
+  PendingCuration pagination, Functional Pyramid `exclude`, NORMATIVE
+  conformance examples, exact action grammar, challenge-context alternatives,
+  and the current lifecycle authority anchor;
+- the hook runtime no longer maintains a parallel SOURCE-only dependent scan.
+  Change notices use a read-only preview of the same canonical changed-scope
+  projection as `reconsider`, including containment, source/discovery,
+  authority/route, premise and cross-repository effects, without issuing
+  re-establishment contexts;
+- OpenCode change reminders carry a complete changed-scope request shape, and
+  host-trigger documentation no longer carries stale Beta-1/T13 candidate
+  claims; and
+- the new semantic skill/hook regressions increased the measured
+  `test_lines` ratchet from **32,443 to 32,486**. No production/source-quality
+  ceiling or product gate was weakened.
+
+The earlier F14 run remains evidence for its exact documentation tree, not the
+assembled post-review candidate. The authoritative Beta-3 closure proof is the
+required GitHub CI check attached to the current exact commit; its run identifier
+is intentionally not embedded because doing so would create another head.
 
 ## Release identity and authorization
 

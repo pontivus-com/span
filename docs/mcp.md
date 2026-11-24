@@ -371,9 +371,11 @@ detail remains retrievable with `ReceiptRetrievalSelector`.
 ```
 
 Changed-scope reconsideration is the after-edit operation. The challenge branch
-is an explicit dispute and does not require an edit. For a challenge, the
-service derives the challenge context from the target version and cited
-evidence; the caller does not supply a context id.
+is an explicit dispute and does not require an edit. A challenge may supply the
+canonical context that already binds admitted evidence; in that branch the
+context determines repository routing and there is no independent repository
+override. When challenge evidence is direct, omit context and Span derives the
+challenge context internally.
 Results: `Changed`, `Challenged`, `Rejected`, or `Unavailable`.
 
 `Changed` names every surface to re-examine, the reasons it was considered

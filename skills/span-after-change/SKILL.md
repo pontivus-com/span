@@ -42,9 +42,11 @@ do not call `reconsider` again for that write; follow its returned contexts via
 the `span-functional-pyramid` skill.
 
 Use the returned re-establishment context with `record`. To dispute a
-recorded conclusion, call `reconsider` with the challenge branch; do not copy
-the changed-scope context into that request because Span derives the challenge
-context from the challenged target and admitted evidence. A semantic-preserving
+recorded conclusion, call `reconsider` with the challenge branch. A challenge
+that cites already admitted context-bound evidence may supply that canonical
+context; otherwise direct challenge evidence derives its context internally.
+The changed-scope re-establishment context is not a required challenge input.
+A semantic-preserving
 confirm can re-establish support while preserving inherited curation; a semantic
 correction/replacement becomes CAPTURED and requires separate curation for
 shared reuse. Settle a challenge through `record` with named

@@ -27,6 +27,23 @@
 - Preserve exactly three public MCP tools: `ask`, `record`, and
   `reconsider`.
 
+### Agent guidance and lifecycle-hook alignment
+
+- Reconcile all five shipped skills with the Beta-3 lifecycle: ordinary Answer
+  reuse is CURRENT + CURATED, reviewer queues follow bounded `next_after`
+  continuation, conformance examples are NORMATIVE, Functional Pyramid
+  participation includes explicit exclusion, and challenge guidance preserves
+  both context-bound and direct-evidence branches.
+- Remove the hook runtime's parallel SOURCE-only affected-understanding scan.
+  Change notices now preview the same canonical dependency-effect projection as
+  changed-scope `reconsider` without issuing re-establishment contexts.
+- Preserve containment, discovery, authority/route, premise and cross-repository
+  effects in hook notice selection, and deliver a complete repository-qualified
+  changed-scope reminder through the packaged OpenCode plugin.
+- Keep hooks advisory: they do not record, curate, make support current, create
+  Functional Pyramid participation, or turn configured wiring into a claim of
+  authenticated live-model delivery.
+
 ### Installer, governance and external-integration correction
 
 - Fix B3-D01 at the owning setup seam: `span-install` now accepts
