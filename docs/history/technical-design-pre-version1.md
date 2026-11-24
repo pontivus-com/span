@@ -39,10 +39,10 @@ remaining historical evidence items are delivery and measurement (O-2, O-3,
 O-6), which later release plans may supersede or close. Part B is **PARTIAL**: no runtime, schema, host configuration, or
 release is changed by this document.
 
-The [requirements pyramid](requirements-pyramid.md) governs placement and
+The [requirements pyramid](../requirements-pyramid.md) governs placement and
 precedence. Product and behavioural rules remain in layers 0–3; this document
 cites their IDs instead of defining replacements. Current Version-1 execution ordering and gate ownership live in the
-[1.0.0 Beta implementation plan](implementation-plans/1.0.0-beta.md).
+[1.0.0 Beta implementation plan](../implementation-plans/1.0.0-beta.md).
 
 **0.10.3 target amendment (2026-11-14).** Active mechanism choices below follow
 the amended lifecycle/functional contracts. Its dated runtime, host-delivery,
@@ -696,7 +696,7 @@ copy. Receipt targets not selected with `--repo` are inspected read-only and
 yield `conflict`, never `wired`. A fresh install defaults to `global`; an
 upgrade uses the current receipt's scope and a receipt with no unambiguous scope
 stops and names the flag. The authoritative full scope matrix is in
-[install](install.md#opencode).
+[install](../install.md#advanced-opencode-configuration).
 Foundations §1 binds the MCP **server**, which still makes no target edits; host
 integration and the upgrade migration are installer behaviour. Under the global
 scope, the installer uses that same fixed global configuration for the MCP
@@ -706,7 +706,7 @@ relocation removes the prior Span registration after the new registration
 succeeds. The receipt retains the MCP and plugin configuration paths independently; doctor reuses the
 recorded MCP path and uninstall removes each owned artifact from its recorded
 configuration. See
-[install](install.md#upgrading-from-09091).
+[install](../install.md#upgrade-an-existing-installation).
 
 **Measured 2026-11-03 (OpenCode):** with the readiness wait and the notice,
 **5/5** clean runs put the first `ask` before the first source read; without the
