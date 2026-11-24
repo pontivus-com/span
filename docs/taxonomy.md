@@ -1,79 +1,141 @@
 # Lifecycle vocabulary
 
-Canonical carriers are exported from `span.core.model`; reference-only record
-wire contracts live in `span.core.schema.record_wire`. The installed schemas
-and [MCP reference](mcp.md) define the executable public grammar.
+Use this page when contributing to Span code and you need the canonical domain
+carrier names behind the public lifecycle.
+
+Canonical carriers are exported from `span.core.model`. Reference-only public
+record wire contracts live in `span.core.schema.record_wire`.
+
+The installed schemas and [MCP reference](mcp.md) own executable public grammar;
+this page explains the internal canonical vocabulary.
 
 ## Understandings and conclusions
 
 | Carrier | Meaning |
 | --- | --- |
-| `Understanding` | Stable repository-bound identity, question, scope, and current version pointer. |
-| `UnderstandingVersion` | Immutable full membership of exact conclusion revisions, with gaps and predecessor. |
-| `ConclusionRevision` | Immutable revision in a conclusion lineage, with content and basis. |
-| `SupportedConclusion` | Statement, descriptive/normative assertion nature, scope, and declared support. |
-| `WithdrawnConclusion` | Explicit reason for withdrawal, preserving earlier content in history. |
-| `Gap` | Unanswered question and its basis within a version. |
-| `Challenge` | Explicit dispute with its own revision and disposition history. |
+| `Understanding` | Stable repository-bound semantic identity, question, scope, surface, and current-version pointer. |
+| `UnderstandingVersion` | Immutable complete membership snapshot of exact conclusion revisions plus recorded question gaps. |
+| `ConclusionRevision` | One immutable revision in a conclusion lineage. |
+| `SupportedConclusion` | Agent-authored statement with assertion nature, semantic scope, and declared support. |
+| `WithdrawnConclusion` | Explicit withdrawal preserving history rather than deleting the old lineage. |
+| `RecordedQuestionGap` | Explicit unresolved question retained in a version. |
+| `Challenge` | Explicit semantic dispute with its own revision/disposition history. |
 
-Conclusion revisions and understanding versions are different counters.
-An update preserves unmentioned membership and challenges. Replacement and
-withdrawal are explicit operations, not omission-based deletion.
+Conclusion revisions and understanding versions are separate counters.
 
-## Result composition carriers
+Updates preserve unmentioned membership. Replacement and withdrawal are explicit
+semantic operations, not omission-based deletion.
+
+## Capture and curation
+
+Beta 3 separates evidence-near capture from qualification for shared reuse.
 
 | Carrier | Meaning |
 | --- | --- |
-| `HistoricalConclusion` | Non-current conclusion content returned in an ask `Gap`: exact revision, understanding version, statement, evidence references, and present non-current state. |
-| `StaleConclusionRef` | Exact stale revision reference in a surface status: revision identity, understanding version, and present non-current state. |
+| `CurationState` | Derived reuse maturity for one exact semantic revision: `CAPTURED` or `CURATED`. |
+| `CurationDisposition` | Immutable accepted curation decision for one exact conclusion revision. |
+| `CurationOrigin` | How the disposition was established: explicit review or inherited confirmation. |
+| `PendingCurationSelector` | Select the deterministic repository-local queue of current captures awaiting review. |
+| `PendingCurationItem` | One exact current-membership captured revision awaiting review. |
+| `PendingCuration` | One bounded deterministic page of pending-curation references. |
 
-These are read-time projections over stored revisions. They are not a second
-stored shape; historical content never becomes current answer content.
+`CAPTURED` means the semantic revision is retained but has no accepted
+shared-reuse disposition.
+
+`CURATED` means an immutable curation disposition exists for that exact
+revision. Curation does not substitute for support currency, evidence,
+governing authority, or challenge settlement.
+
+A semantic create/add/correct/replace produces captured meaning. A
+semantic-preserving confirmation may inherit curation only through the explicit
+Beta-3 inheritance rule.
+
+## Result-composition carriers
+
+| Carrier | Meaning |
+| --- | --- |
+| `HistoricalConclusion` | Non-current retained conclusion content projected in a Gap/history path. |
+| `StaleConclusionRef` | Exact stale revision reference projected in surface status without carrying statement content. |
+
+These are read-time projections over canonical stored state, not second
+persistence models.
+
+Historical content never becomes current Answer content merely because it is
+retrieved.
 
 ## Support
 
 Source, authority, premise, discovery, and Functional Pyramid route dependencies
-use one closed tagged union. `FunctionalRouteSupport` is the route branch;
-canonical rule currency remains an authority dependency. `SupportState` is
-`CURRENT`, `REASSESSMENT_REQUIRED`, or `UNVERIFIABLE`.
-`SupportUnavailable` is an operational qualification failure, not another
-support state. Challenge states are `OPEN`, `UNRESOLVED`, and `RESOLVED`;
-verification outcomes are `PASS`, `FAIL`, and `INCONCLUSIVE`.
+form one closed support union.
+
+`FunctionalRouteSupport` is the route-dependency branch; canonical governing
+content remains independently represented by authority support.
+
+`SupportState` is exactly:
+
+- `CURRENT`;
+- `REASSESSMENT_REQUIRED`; or
+- `UNVERIFIABLE`.
+
+`SupportUnavailable` is operational inability to qualify support, not a fourth
+support state.
+
+Challenge states are `OPEN`, `UNRESOLVED`, and `RESOLVED`.
+Verification outcomes are `PASS`, `FAIL`, and `INCONCLUSIVE`.
 
 ## Functional Pyramid
 
 | Carrier | Meaning |
 | --- | --- |
-| `FunctionalPyramidParticipation` | Exact UNCONFIGURED/EXCLUDED repository participation. |
-| `FunctionalPyramidStatus` | Exact participation or ACTIVE pyramid/version/member view with live health. |
-| `FunctionalPyramidCandidate` | Read-only action-aware validation and graph findings for proposed participation. |
+| `FunctionalPyramidParticipation` | Repository participation outside an active instance: UNCONFIGURED/EXCLUDED state. |
+| `FunctionalPyramidStatus` | Exact participation or ACTIVE pyramid/version/member projection with live health. |
+| `FunctionalPyramidCandidate` | Read-only validation/findings for a proposed activation or revision. |
 | `FunctionalPyramidView` | Governing projection for the exact semantic scope of an ordinary ask. |
-| `FunctionalRouteSupport` | Server-derived dependency on the exact resolved governing route for a NORMATIVE conclusion. |
-| `FunctionalPyramidRecorded` | Accepted activate/revise/deactivate/exclude result with immutable receipt selector and live affected projection. |
-| `RetrievedFunctionalPyramidReceipt` | Exact installation-scoped accepted participation/effect identities; live context state is not stored in the receipt. |
+| `FunctionalRouteSupport` | Server-derived dependency on the resolved governing route for a normative conclusion. |
+| `FunctionalPyramidRecorded` | Accepted participation lifecycle result with immutable receipt selector and affected projection. |
+| `RetrievedFunctionalPyramidReceipt` | Exact installation-scoped accepted participation/effect identities. |
 
-Functional Pyramid lifecycle branches are carried through the existing
-`ask`, `record`, and `reconsider` operations. They do not create a fourth MCP
-tool or a second ordinary-development lifecycle.
+Functional Pyramid lifecycle branches remain inside the existing `ask`,
+`record`, and `reconsider` operations. They do not create a fourth MCP
+tool.
 
 ## Operational carriers
 
-Contexts bind caller request identity to repository, question/scope, origin,
-and expiry. Sources are admitted as immutable observations with per-item
-outcomes. Recording identities and receipts support retry/restart recovery.
-Discovery candidates and compact references indicate potentially reusable
-understanding, never an asserted semantic answer. See [glossary](glossary.md).
+Investigation contexts bind operational request identity to repository/scope and
+may retain admitted evidence. They are recoverable and expiring operational
+state, not semantic understanding.
+
+Recording identities and receipts support retry/restart recovery.
+
+Exact selectors retrieve current membership, historical snapshots, receipts, or
+pending-curation references without converting them into ordinary shared
+Answers.
+
+See [Glossary](glossary.md) for the user-facing terminology and
+[MCP reference](mcp.md) for public selector/result grammar.
 
 ## Structural identities
 
-`SubjectId` remains a typed repository/kind/locator identity for structural
-navigation. Provider nodes map through a closed vocabulary: files/modules to
-components; functions, classes, methods, interfaces, types, enums, structs,
-and constants to code symbols. Structural edges describe defines, imports,
-calls, references, and dependencies. Unknown provider kinds fail explicitly.
-A module node does not establish a semantic subsystem or owner.
+`SubjectId` remains the typed repository/kind/locator identity used for
+structural navigation.
 
-The old mandatory claim kinds, semantic-question classes, subject coverage
-statuses, campaigns, and interpretation continuations are retired from the
-active lifecycle. Retained model definitions and archived data do not add
-public operations or a second semantic writer.
+Provider nodes map through the closed structural vocabulary. Structural edges
+describe relationships such as defines, imports, calls, references, and
+dependencies.
+
+Unknown provider kinds fail explicitly.
+
+A structural node does not establish semantic subsystem ownership or governing
+authority.
+
+## Legacy vocabulary
+
+Older retained data or exports may still contain retired claim kinds, semantic
+question classes, coverage-campaign vocabulary, or historical interpretation
+continuations.
+
+Those retained definitions do not add current public operations, lifecycle
+states, or a second semantic writer.
+
+See [Historical design references](design-references.md) when tracing those
+older terms.
