@@ -102,8 +102,8 @@ class InvariantMatrixTest(unittest.TestCase):
     def test_matrix_lists_every_invariant_once_in_order(self):
         self.assertEqual(
             [row[0] for row in self.rows],
-            [f"I-{number:02d}" for number in range(1, 48)],
-            "the matrix must carry I-01..I-47 in order, one row each",
+            [f"I-{number:02d}" for number in range(1, 49)],
+            "the matrix must carry I-01..I-48 in order, one row each",
         )
 
     def test_every_test_row_names_a_live_boundary_test(self):
@@ -270,6 +270,48 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
         source = path.read_text(encoding="utf-8")
         self.assertIn("open_installation_runtime", source)
         self.assertNotIn("open_functional_pyramid_service", source)
+
+    def test_governing_edge_admissibility_has_one_core_owner(self):
+        path = REPO_ROOT / "src/span/core/functional_pyramid.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        functions = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        owner = functions["_governing_edge_is_valid"]
+        owner_calls = {
+            node.func.id
+            for node in ast.walk(owner)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertNotIn("_layer_rank", owner_calls)
+
+        for consumer_name in ("_rule_edge_findings", "_resolve_rule_refs"):
+            calls = {
+                node.func.id
+                for node in ast.walk(functions[consumer_name])
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            }
+            self.assertIn("_governing_edge_is_valid", calls)
+            self.assertNotIn("_layer_rank", calls)
+
+        edge_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_governing_edge_is_valid"
+        ]
+        rank_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_layer_rank"
+        ]
+        self.assertEqual(len(edge_calls), 2)
+        self.assertEqual(len(rank_calls), 1)
 
     def test_context_composition_wires_all_mandatory_pyramid_capabilities(self):
         path = REPO_ROOT / "src/span/shell/context.py"

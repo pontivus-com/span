@@ -86,6 +86,7 @@ remains separate under T14-H7.
 | I-45 | Missing curation never means approval | Test | `test_missing_curation_never_defaults_to_approval` |
 | I-46 | No parallel curate operation or rejected-curation state | Test | `test_no_parallel_curate_operation_or_rejected_state` |
 | I-47 | No curation compatibility grammar | Test | `test_curation_rejects_compatibility_action_aliases` |
+| I-48 | Governing-edge admissibility has one semantic owner and is independent from route presentation order | Test | `test_governing_edge_admissibility_has_one_core_owner` |
 
 Downstream-compensation check (no silent repairs, no salvage, no
 fallback parsing): validation rejects whole units; strict decode has
