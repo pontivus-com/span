@@ -1,6 +1,43 @@
-"""Schema-15 lifecycle SQLite definition."""
+"""Schema-15 lifecycle SQLite definition and open-time validation."""
+
+from __future__ import annotations
+
+import sqlite3 as _sqlite3
+import typing as _typing
 
 SCHEMA_VERSION = 15
+
+
+def validate_schema(
+    connection: _sqlite3.Connection,
+    *,
+    allow_empty: bool,
+    error_factory: _typing.Callable[[str], Exception],
+) -> None:
+    """Validate one existing lifecycle database without mutating it."""
+    tables = {
+        str(row["name"])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master"
+            " WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        )
+    }
+    if "meta" not in tables and (tables or not allow_empty):
+        raise error_factory(
+            "existing store has no schema version marker; refusing to open"
+        )
+    if "meta" not in tables:
+        return
+    row = connection.execute(
+        "SELECT value FROM meta WHERE key='schema_version'"
+    ).fetchone()
+    if row is None:
+        raise error_factory("existing store has no schema version; refusing to open")
+    if int(row["value"]) != SCHEMA_VERSION:
+        raise error_factory(
+            f"unsupported lifecycle store schema {row['value']}; "
+            f"expected {SCHEMA_VERSION}"
+        )
 
 DDL = (
     """

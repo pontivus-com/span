@@ -43,7 +43,11 @@ from span.shell.sqlite_store.contexts import (
     add_context_evidence_row as _add_context_evidence_row,
     insert_context_row as _insert_context_row,
 )
-from span.shell.sqlite_store.schema import DDL as _DDL, SCHEMA_VERSION
+from span.shell.sqlite_store.schema import (
+    DDL as _DDL,
+    SCHEMA_VERSION,
+    validate_schema as _validate_schema,
+)
 from span.shell.sqlite_store.transactions import immediate_transaction as _transaction
 
 __all__ = [
@@ -142,7 +146,11 @@ class LifecycleStore:
         self._connection.row_factory = _sqlite3.Row
         try:
             self._connection.execute("PRAGMA foreign_keys = ON")
-            self._validate_schema(allow_empty=initialize_schema)
+            _validate_schema(
+                self._connection,
+                allow_empty=initialize_schema,
+                error_factory=SchemaVersionError,
+            )
             if initialize_schema:
                 self._initialize_schema()
         except BaseException:
@@ -151,32 +159,6 @@ class LifecycleStore:
 
     def close(self) -> None:
         self._connection.close()
-
-    def _validate_schema(self, *, allow_empty: bool) -> None:
-        tables = {
-            str(row["name"])
-            for row in self._connection.execute(
-                "SELECT name FROM sqlite_master"
-                " WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-            )
-        }
-        if "meta" not in tables and (tables or not allow_empty):
-            raise SchemaVersionError(
-                "existing store has no schema version marker; refusing to open"
-            )
-        if "meta" in tables:
-            row = self._connection.execute(
-                "SELECT value FROM meta WHERE key='schema_version'"
-            ).fetchone()
-            if row is None:
-                raise SchemaVersionError(
-                    "existing store has no schema version; refusing to open"
-                )
-            if int(row["value"]) != SCHEMA_VERSION:
-                raise SchemaVersionError(
-                    f"unsupported lifecycle store schema {row['value']}; "
-                    f"expected {SCHEMA_VERSION}"
-                )
 
     def _initialize_schema(self) -> None:
         with _transaction(self._connection) as connection:
