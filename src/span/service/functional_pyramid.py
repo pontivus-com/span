@@ -1452,6 +1452,7 @@ class FunctionalPyramidService:
         bindings: _AuthorityMap = {}
         findings: list[m.FunctionalPyramidFinding] = []
         evaluated_documents: set[tuple[str, str]] = set()
+        unavailable_documents: set[tuple[str, str]] = set()
 
         for placement in sorted(
             placements,
@@ -1498,16 +1499,18 @@ class FunctionalPyramidService:
                     None,
                 )
                 if isinstance(source, m.EvidenceSourceFailure):
-                    findings.append(
-                        _graph_finding(
-                            m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
-                            document.repository_id,
-                            "canonical Functional Pyramid document is unavailable",
-                            "restore the canonical document at its declared locator",
-                            placement=placement,
-                        )
-                    )
+                    unavailable_documents.add(key)
                 evaluated_documents.add(key)
+            if key in unavailable_documents:
+                findings.append(
+                    _graph_finding(
+                        m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
+                        document.repository_id,
+                        "canonical Functional Pyramid document is unavailable",
+                        "restore the canonical document at its declared locator",
+                        placement=placement,
+                    )
+                )
 
             candidates = tuple(
                 binding

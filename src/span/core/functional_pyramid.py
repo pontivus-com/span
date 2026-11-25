@@ -28,11 +28,10 @@ from span.core.model.functional_pyramid import (
     FunctionalRouteIdentity,
     FunctionalRouteProvenance,
 )
-from span.core.model.investigation import EvidenceRequest
+from span.core.model.investigation import EvidenceRequest, SourceRange
 from span.core.model.primitives import (
     AuthorityBinding,
     EvidenceScope,
-    SourceRange,
     _require_non_empty,
 )
 from span.core.model.surfaces import SurfaceKey, SurfaceKind
