@@ -89,7 +89,6 @@ class SurfaceConformanceTest(unittest.TestCase):
             self.assertIn(name, TOOL_SCHEMAS)
             self.assertIn(name, TOOL_OUTPUT_SCHEMAS)
 
-
     def test_document_route_parent_union_matches_compact_wire_grammar(self):
         schema = TOOL_OUTPUT_SCHEMAS["ask"]
         route = schema["$defs"]["FunctionalDocumentRoute"]
