@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.0b5 — 2026-11-25
+
+### Total document-placement Functional Pyramid
+
+- Replace the Version-1 rule/context/coverage graph with Version-2 whole-document
+  placements carrying explicit repository-relative directory scopes.
+- Make directory resolution total through a mandatory root-scoped P0 placement;
+  compose ancestor scopes additively, exclude sibling/descendant-only scopes,
+  and report absent layers without manufacturing uncovered states.
+- Add exact directory lookup, deterministic multi-path layer summaries,
+  placement-qualified structural findings and graph-only
+  `INVALID_PLACEMENT_SCOPE`.
+- Preserve Functional Pyramid participation and the ordinary Span lifecycle:
+  ACTIVE Version-1 installations remain ACTIVE but DEGRADED until an explicit
+  Version-2 revision, with dependent normative conclusions re-established from
+  retained route-support identities rather than a compatibility graph.
+- Add explicit Version-2 bootstrap installation, document-based route/authority
+  support, cross-repository reconsideration, updated MCP wire/guidance and
+  Beta-5 acceptance coverage while retaining exactly `ask`, `record` and
+  `reconsider`.
+
 ## 1.0.0b4 — 2026-11-25
 
 ### Functional Pyramid contract-sublayer derivation
