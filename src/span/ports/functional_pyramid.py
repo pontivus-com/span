@@ -47,6 +47,10 @@ class FunctionalPyramidDeclarationPort(_typing.Protocol):
         """Return the conventional bootstrap, or None when it is absent."""
         ...
 
+    def directory_exists(self, repository_id: str, directory: str) -> bool:
+        """Whether one canonical repository-relative directory currently exists."""
+        ...
+
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
     ) -> (

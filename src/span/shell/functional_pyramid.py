@@ -61,6 +61,16 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
             ) from exc
         return result.evidence_ref, bootstrap
 
+    def directory_exists(self, repository_id: str, directory: str) -> bool:
+        root = _pathlib.Path(self._repository_root(repository_id)).resolve()
+        selected = root if directory == "." else (root / directory).resolve()
+        try:
+            selected.relative_to(root)
+        except ValueError:
+            return False
+        return selected.is_dir()
+
+
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
     ) -> (
