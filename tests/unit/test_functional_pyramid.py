@@ -1,186 +1,86 @@
-"""Version-1 Functional Pyramid domain/algebra tests (T01)."""
-
-import datetime
+import json
 import unittest
 
+from span.core import functional_pyramid as fp
 from span.core import model as m
-from span.core.functional_pyramid import (
-    functional_scope_contains,
-    functional_scope_intersects,
-    functional_scope_selector_contains,
-    functional_scope_selector_intersects,
-    functional_scope_uncovered,
-    functional_scope_union,
-    normalize_functional_scope,
-)
 
 
-def _selector(
-    kind: m.FunctionalScopeSelectorKind,
-    path: str | None = None,
-    locator: str | None = None,
-) -> m.FunctionalScopeSelector:
-    return m.FunctionalScopeSelector(kind=kind, path=path, locator=locator)
+def _doc(
+    repository_id: str,
+    locator: str,
+    layer: m.FunctionalPyramidLayer,
+) -> dict[str, object]:
+    return {
+        "repository_id": repository_id,
+        "document_ref": locator,
+        "layer": layer.value,
+    }
 
 
-def _scope(*selectors: m.FunctionalScopeSelector) -> m.FunctionalScope:
-    return m.FunctionalScope(selectors=selectors)
+class FunctionalDirectoryScopeTest(unittest.TestCase):
+    def test_root_and_canonical_relative_scopes_are_valid(self) -> None:
+        self.assertEqual(fp.normalize_directory_scope("."), ".")
+        self.assertEqual(fp.normalize_directory_scope("src"), "src")
+        self.assertEqual(fp.normalize_directory_scope("src/service"), "src/service")
 
-
-def _member_intent(repository_id: str = "repo-a") -> m.FunctionalPyramidMemberIntent:
-    return m.FunctionalPyramidMemberIntent(
-        repository_id=repository_id,
-        declaration_sources=(m.EvidenceRequest("docs/functional-pyramid.json"),),
-        functional_scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
-        coverage=m.FunctionalPyramidCoverage.PARTIAL,
-    )
-
-
-def _declaration_ref(repository_id: str = "repo-a") -> m.EvidenceRef:
-    return m.EvidenceRef(
-        evidence_id=m.EvidenceId(f"ev-{repository_id}-functional-pyramid"),
-        repository_id=repository_id,
-        source_kind=m.EvidenceSourceKind.CONFIGURATION,
-        locator="docs/functional-pyramid.json",
-        revision_or_fingerprint="digest",
-    )
-
-
-def _member_view(repository_id: str = "repo-a") -> m.FunctionalPyramidMemberView:
-    return m.FunctionalPyramidMemberView(
-        repository_id=repository_id,
-        declaration_refs=(_declaration_ref(repository_id),),
-        functional_scope=_scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src")),
-        coverage=m.FunctionalPyramidCoverage.PARTIAL,
-    )
-
-
-class FunctionalScopeCarrierTest(unittest.TestCase):
-    def test_selector_grammar_is_closed_and_strict(self):
-        whole = _selector(m.FunctionalScopeSelectorKind.REPOSITORY)
-        self.assertIsNone(whole.path)
-
-        with self.assertRaises(ValueError):
-            _selector(m.FunctionalScopeSelectorKind.REPOSITORY, "src")
-        with self.assertRaises(ValueError):
-            _selector(m.FunctionalScopeSelectorKind.PATH)
-        with self.assertRaises(ValueError):
-            _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py", "symbol")
-        with self.assertRaises(ValueError):
-            _selector(m.FunctionalScopeSelectorKind.SYMBOL, "src/a.py")
-
-        for invalid in (
+    def test_noncanonical_scopes_are_rejected(self) -> None:
+        for value in (
             "",
-            "/src/a.py",
-            "./src/a.py",
-            "src/../a.py",
-            "src//a.py",
-            "src/a.py/",
-            r"src\a.py",
+            "/src",
+            "src/",
+            "src//service",
+            "./src",
+            "src/./service",
+            "src/../service",
+            r"src\service",
         ):
-            with self.subTest(path=invalid):
-                with self.assertRaises(ValueError):
-                    _selector(m.FunctionalScopeSelectorKind.PATH, invalid)
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                fp.normalize_directory_scope(value)
 
-    def test_scope_is_non_empty_and_has_no_duplicate_selector(self):
-        path = _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py")
-        with self.assertRaises(ValueError):
-            m.FunctionalScope(())
-        with self.assertRaises(ValueError):
-            m.FunctionalScope((path, path))
-
-    def test_selector_containment_and_intersection_follow_symbolic_rules(self):
-        repo = _selector(m.FunctionalScopeSelectorKind.REPOSITORY)
-        prefix = _selector(m.FunctionalScopeSelectorKind.PREFIX, "src")
-        nested = _selector(m.FunctionalScopeSelectorKind.PREFIX, "src/service")
-        path = _selector(m.FunctionalScopeSelectorKind.PATH, "src/service/a.py")
-        symbol = _selector(
-            m.FunctionalScopeSelectorKind.SYMBOL,
-            "src/service/a.py",
-            "Service.run",
-        )
-        other = _selector(m.FunctionalScopeSelectorKind.PATH, "ui/view.py")
-
-        self.assertTrue(functional_scope_selector_contains(repo, other))
-        self.assertTrue(functional_scope_selector_contains(prefix, nested))
-        self.assertTrue(functional_scope_selector_contains(prefix, path))
-        self.assertTrue(functional_scope_selector_contains(path, symbol))
-        self.assertFalse(functional_scope_selector_contains(path, nested))
-        self.assertTrue(functional_scope_selector_intersects(nested, path))
-        self.assertFalse(functional_scope_selector_intersects(prefix, other))
-
-    def test_normalization_removes_redundancy_deterministically(self):
-        prefix = _selector(m.FunctionalScopeSelectorKind.PREFIX, "src")
-        path = _selector(m.FunctionalScopeSelectorKind.PATH, "src/a.py")
-        symbol = _selector(m.FunctionalScopeSelectorKind.SYMBOL, "src/a.py", "main")
-        other = _selector(m.FunctionalScopeSelectorKind.PATH, "README.md")
-
-        normalized = normalize_functional_scope((symbol, path, prefix, other))
-        self.assertEqual(
-            normalized,
-            _scope(prefix, other),
-        )
-        self.assertEqual(
-            normalize_functional_scope(reversed((symbol, path, prefix, other))),
-            normalized,
-        )
-
-    def test_scope_union_containment_and_intersection_are_symbolic(self):
-        src = _scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src"))
-        child = _scope(
-            _selector(m.FunctionalScopeSelectorKind.PATH, "src/service/a.py")
-        )
-        docs = _scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "docs"))
-
-        self.assertTrue(functional_scope_contains(src, child))
-        self.assertFalse(functional_scope_contains(child, src))
-        self.assertTrue(functional_scope_intersects(src, child))
-        self.assertFalse(functional_scope_intersects(src, docs))
-        self.assertEqual(
-            functional_scope_union((child, src)),
-            src,
-        )
-
-    def test_child_prefixes_do_not_prove_open_parent_complete(self):
-        member = _scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src"))
-        coverage = (
-            _scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src/a")),
-            _scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src/b")),
-        )
-        self.assertEqual(
-            functional_scope_uncovered(member, coverage),
-            member.selectors,
-        )
-
-    def test_repository_selector_absorbs_every_narrow_selector(self):
-        repo = _scope(_selector(m.FunctionalScopeSelectorKind.REPOSITORY))
-        narrow = _scope(_selector(m.FunctionalScopeSelectorKind.PREFIX, "src"))
-        self.assertEqual(functional_scope_union((narrow, repo)), repo)
-        self.assertTrue(functional_scope_contains(repo, narrow))
-        self.assertEqual(functional_scope_uncovered(repo, (narrow,)), repo.selectors)
+    def test_containment_and_intersection_are_directionally_correct(self) -> None:
+        self.assertTrue(fp.directory_scope_contains(".", "src/service"))
+        self.assertTrue(fp.directory_scope_contains("src", "src/service"))
+        self.assertFalse(fp.directory_scope_contains("src/service", "src"))
+        self.assertTrue(fp.directory_scope_intersects("src/service", "src"))
+        self.assertFalse(fp.directory_scope_intersects("src", "docs"))
 
 
 class FunctionalPyramidCarrierTest(unittest.TestCase):
-    def test_closed_vocabularies_match_functional_design(self):
+    def test_retired_model_is_absent_from_public_carriers(self) -> None:
+        retired = {
+            "FunctionalScope",
+            "FunctionalScopeRelation",
+            "FunctionalPyramidCoverage",
+            "FunctionalRuleDeclaration",
+            "FunctionalRuleRoute",
+            "FunctionalContextDeclaration",
+            "FunctionalContextRoute",
+            "FunctionalGraphRef",
+        }
+        self.assertTrue(retired.isdisjoint(set(m.__all__)))
+
+    def test_closed_finding_vocabularies_match_beta5_contract(self) -> None:
         self.assertEqual(
-            {item.value for item in m.FunctionalPyramidFindingReason},
+            {reason.value for reason in m.FunctionalPyramidFindingReason},
             {
-                "UNCOVERED_PATH",
                 "INVALID_DECLARATION",
-                "UNRESOLVED_SCOPE_INTERSECTION",
-                "DUPLICATE_CONTEXT_OWNER",
-                "UNKNOWN_CONTEXT",
-                "CONTEXT_CYCLE",
-                "REPOSITORY_UNAVAILABLE",
-                "DUPLICATE_RULE_OWNER",
-                "UNKNOWN_RULE",
-                "RULE_CYCLE",
+                "INVALID_PLACEMENT_SCOPE",
+                "DUPLICATE_DOCUMENT_PLACEMENT",
+                "INVALID_DOCUMENT_REFERENCE",
+                "MISSING_DOCUMENT_AUTHORITY",
+                "AMBIGUOUS_DOCUMENT_AUTHORITY",
+                "NONCANONICAL_DOCUMENT_AUTHORITY",
+                "DOCUMENT_UNAVAILABLE",
+                "UNKNOWN_DOCUMENT",
+                "DOCUMENT_CYCLE",
                 "INVALID_GOVERNING_EDGE",
-                "UNRESOLVED_RULE_PARENT",
+                "UNRESOLVED_DOCUMENT_PARENT",
+                "REPOSITORY_UNAVAILABLE",
+                "MISSING_ROOT_PLACEMENT",
             },
         )
         self.assertEqual(
-            {item.value for item in m.FunctionalPyramidValidationReason},
+            {reason.value for reason in m.FunctionalPyramidValidationReason},
             {
                 "UNREGISTERED_MEMBER",
                 "DUPLICATE_MEMBER",
@@ -189,196 +89,172 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
                 "STALE_PYRAMID_VERSION",
                 "MISSING_DECLARATION_SOURCE",
                 "INVALID_DECLARATION_SOURCE",
-                "INVALID_FUNCTIONAL_SCOPE",
-                "INCOMPLETE_COMPLETE_COVERAGE",
             },
         )
-        self.assertEqual(
-            {item.value for item in m.FunctionalPyramidLayer},
-            {"P0", "P1", "P2S", "P2W", "P3", "P4"},
+
+    def test_document_placement_identity_includes_scope_and_layer(self) -> None:
+        ref = m.FunctionalDocumentRef(
+            repository_id="repo-a",
+            document_ref="docs/foundation.md",
+            layer=m.FunctionalPyramidLayer.P0,
         )
+        root = m.FunctionalDocumentPlacement("repo-a", ref, ".")
+        local = m.FunctionalDocumentPlacement("repo-a", ref, "src")
+        self.assertNotEqual(root, local)
 
-    def test_graph_reference_is_repository_qualified(self):
-        ref = m.FunctionalGraphRef("repo-a", "C1")
-        self.assertEqual(ref.repository_id, "repo-a")
-        self.assertEqual(ref.identity, "C1")
+    def test_view_requires_one_selection_and_complete_layer_partition(self) -> None:
         with self.assertRaises(ValueError):
-            m.FunctionalGraphRef("", "C1")
-        with self.assertRaises(ValueError):
-            m.FunctionalGraphRef("repo-a", "")
-
-    def test_functional_pyramid_carries_references_not_governing_prose(self):
-        declaration_fields = set(m.FunctionalRuleDeclaration.__dataclass_fields__)
-        route_fields = set(m.FunctionalRuleRoute.__dataclass_fields__)
-        for forbidden in ("text", "content", "summary", "prose", "chunk"):
-            self.assertNotIn(forbidden, declaration_fields)
-            self.assertNotIn(forbidden, route_fields)
-        self.assertIn("owner", declaration_fields)
-        self.assertIn("authority", route_fields)
-
-    def test_conformance_uses_existing_normative_assertion_contract(self):
-        self.assertEqual(
-            {nature.value for nature in m.AssertionNature},
-            {"DESCRIPTIVE", "NORMATIVE"},
-        )
-        self.assertIs(m.AssertionNature.NORMATIVE, m.AssertionNature["NORMATIVE"])
-
-    def test_nominal_identity_and_version_are_strict(self):
-        with self.assertRaises(ValueError):
-            m.FunctionalPyramidId("")
-        with self.assertRaises(ValueError):
-            m.FunctionalRouteIdentity("")
-        with self.assertRaises(ValueError):
-            m.FunctionalPyramidVersion(0)
-
-    def test_member_intent_requires_repository_and_declaration_source(self):
-        with self.assertRaises(ValueError):
-            m.FunctionalPyramidMemberIntent(
-                repository_id="",
-                declaration_sources=(m.EvidenceRequest("decl.json"),),
-                functional_scope=_scope(
-                    _selector(m.FunctionalScopeSelectorKind.REPOSITORY)
-                ),
-                coverage=m.FunctionalPyramidCoverage.PARTIAL,
-            )
-        with self.assertRaises(ValueError):
-            m.FunctionalPyramidMemberIntent(
-                repository_id="repo-a",
-                declaration_sources=(),
-                functional_scope=_scope(
-                    _selector(m.FunctionalScopeSelectorKind.REPOSITORY)
-                ),
-                coverage=m.FunctionalPyramidCoverage.PARTIAL,
-            )
-
-    def test_candidate_selector_is_action_aware(self):
-        member = _member_intent()
-        activate = m.FunctionalPyramidCandidateSelector(
-            action=m.FunctionalPyramidAction.ACTIVATE,
-            members=(member,),
-        )
-        self.assertIsNone(activate.pyramid_id)
-
-        with self.assertRaises(ValueError):
-            m.FunctionalPyramidCandidateSelector(
-                action=m.FunctionalPyramidAction.REVISE,
-                members=(member,),
-            )
-
-        revise = m.FunctionalPyramidCandidateSelector(
-            action=m.FunctionalPyramidAction.REVISE,
-            members=(member,),
-            pyramid_id=m.FunctionalPyramidId("fp-1"),
-            expected_version=m.FunctionalPyramidVersion(2),
-        )
-        self.assertEqual(revise.expected_version.value, 2)
-
-    def test_status_keeps_participation_and_health_distinct(self):
-        self.assertEqual(
-            m.FunctionalPyramidStatus(
-                state=m.FunctionalPyramidParticipationState.UNCONFIGURED
-            ).health,
-            None,
-        )
-        with self.assertRaises(ValueError):
-            m.FunctionalPyramidStatus(
-                state=m.FunctionalPyramidParticipationState.UNCONFIGURED,
+            m.FunctionalPyramidView(
+                pyramid_id=m.FunctionalPyramidId("p"),
+                version=m.FunctionalPyramidVersion(1),
                 health=m.FunctionalPyramidHealth.VALID,
+                status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                directory=".",
+                semantic_scope=m.EvidenceScope(),
+                placements=(),
+                routes=(),
+                provenance=(),
+                declared_layers=(),
+                absent_layers=tuple(m.FunctionalPyramidLayer),
             )
 
-        active = m.FunctionalPyramidStatus(
-            state=m.FunctionalPyramidParticipationState.ACTIVE,
-            health=m.FunctionalPyramidHealth.VALID,
-            pyramid_id=m.FunctionalPyramidId("fp-1"),
-            version=m.FunctionalPyramidVersion(1),
-            members=(_member_view(),),
-        )
-        self.assertEqual(active.findings, ())
 
-        finding = m.FunctionalPyramidFinding(
-            reason=m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
-            repository_id="repo-a",
-            detail="member cannot be read",
-            recovery="restore repository availability",
+class FunctionalPyramidVersion2DecodeTest(unittest.TestCase):
+    def test_bootstrap_is_version2_only(self) -> None:
+        bootstrap = fp.decode_functional_pyramid_bootstrap(
+            json.dumps(
+                {
+                    "version": 2,
+                    "declaration_sources": [{"locator": ".span/pyramid.json"}],
+                }
+            )
         )
+        self.assertEqual(bootstrap.version, 2)
         with self.assertRaises(ValueError):
-            m.FunctionalPyramidStatus(
-                state=m.FunctionalPyramidParticipationState.ACTIVE,
-                health=m.FunctionalPyramidHealth.DEGRADED,
-                pyramid_id=m.FunctionalPyramidId("fp-1"),
-                version=m.FunctionalPyramidVersion(1),
-                members=(_member_view(),),
-            )
-        degraded = m.FunctionalPyramidStatus(
-            state=m.FunctionalPyramidParticipationState.ACTIVE,
-            health=m.FunctionalPyramidHealth.DEGRADED,
-            pyramid_id=m.FunctionalPyramidId("fp-1"),
-            version=m.FunctionalPyramidVersion(1),
-            members=(_member_view(),),
-            findings=(finding,),
-        )
-        self.assertEqual(degraded.findings, (finding,))
-
-    def test_declaration_wire_decode_is_strict(self):
-        rule = m.FunctionalRuleDeclaration(
-            rule_id="R1",
-            layer=m.FunctionalPyramidLayer.P1,
-            owner=m.FunctionalRuleOwner("repo-a", "docs/rules.md#r1"),
-            governing_rule_ids=("ROOT",),
-        )
-        payload = m.to_canonical(rule)
-        self.assertIsInstance(payload, dict)
-        assert isinstance(payload, dict)
-
-        with self.assertRaises(m.CanonicalDecodeError):
-            m.from_canonical(
-                m.FunctionalRuleDeclaration,
-                {**payload, "unexpected": True},
+            fp.decode_functional_pyramid_bootstrap(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "declaration_sources": [{"locator": ".span/pyramid.json"}],
+                    }
+                )
             )
 
-        invalid_layer = {**payload, "layer": "P9"}
-        with self.assertRaises(m.CanonicalDecodeError):
-            m.from_canonical(m.FunctionalRuleDeclaration, invalid_layer)
+    def test_decode_requires_fully_qualified_governing_placement(self) -> None:
+        payload = {
+            "version": 2,
+            "placements": [
+                {
+                    "document": _doc(
+                        "repo-a", "docs/foundation.md", m.FunctionalPyramidLayer.P0
+                    ),
+                    "scope": ".",
+                    "governing_placements": ["ROOT"],
+                },
+                {
+                    "document": _doc(
+                        "repo-a", "docs/design.md", m.FunctionalPyramidLayer.P3
+                    ),
+                    "scope": "src",
+                    "governing_placements": [
+                        {
+                            "document": _doc(
+                                "repo-a",
+                                "docs/foundation.md",
+                                m.FunctionalPyramidLayer.P0,
+                            ),
+                            "scope": ".",
+                        }
+                    ],
+                },
+            ],
+        }
+        with self.assertRaises(ValueError):
+            fp.decode_functional_pyramid_declaration(
+                json.dumps(payload),
+                repository_id="repo-a",
+                declaration_locator=".span/pyramid.json",
+            )
 
-    def test_route_support_uses_existing_support_union_shape(self):
-        support = m.FunctionalRouteSupport(
+    def test_invalid_scope_is_graph_finding_not_source_failure(self) -> None:
+        payload = {
+            "version": 2,
+            "placements": [
+                {
+                    "document": _doc(
+                        "repo-a", "docs/foundation.md", m.FunctionalPyramidLayer.P0
+                    ),
+                    "scope": "../outside",
+                    "governing_placements": ["ROOT"],
+                }
+            ],
+        }
+        declaration, findings = fp.decode_functional_pyramid_declaration(
+            json.dumps(payload),
             repository_id="repo-a",
-            pyramid_id=m.FunctionalPyramidId("fp-1"),
-            semantic_scope=m.EvidenceScope(paths=("src/a.py",)),
-            route_identity=m.FunctionalRouteIdentity("route-1"),
+            declaration_locator=".span/pyramid.json",
         )
-        encoded = m.to_canonical(support)
-        self.assertEqual(encoded["$type"], "FunctionalRouteSupport")
+        self.assertEqual(declaration.version, 2)
+        self.assertEqual(declaration.placements, ())
+        self.assertEqual(
+            tuple(finding.reason for finding in findings),
+            (m.FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE,),
+        )
+        self.assertEqual(findings[0].repository_id, "repo-a")
+        self.assertIsNone(findings[0].placement)
 
-    def test_receipt_action_shape_is_explicit(self):
-        committed = datetime.datetime(2026, 11, 21, tzinfo=datetime.timezone.utc)
-        receipt = m.RetrievedFunctionalPyramidReceipt(
-            request_id=m.RequestId("fp-request-1"),
-            content_digest=m.ContentDigest("digest-1"),
-            committed_at=committed,
-            action=m.FunctionalPyramidAction.ACTIVATE,
-            pyramid_id=m.FunctionalPyramidId("fp-1"),
-            version=m.FunctionalPyramidVersion(1),
-            members=(_member_view(),),
-            participation_effects=(
-                m.FunctionalPyramidParticipationEffect(
+    def test_invalid_json_and_version_remain_source_decode_failures(self) -> None:
+        for payload in ("{", json.dumps({"version": 1, "placements": []})):
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                fp.decode_functional_pyramid_declaration(
+                    payload,
                     repository_id="repo-a",
-                    state=m.FunctionalPyramidParticipationState.ACTIVE,
-                ),
-            ),
-            dependent_effect_refs=(),
-        )
-        self.assertEqual(receipt.action, m.FunctionalPyramidAction.ACTIVATE)
+                    declaration_locator=".span/pyramid.json",
+                )
 
-        with self.assertRaises(ValueError):
-            m.RetrievedFunctionalPyramidReceipt(
-                request_id=m.RequestId("fp-request-2"),
-                content_digest=m.ContentDigest("digest-2"),
-                committed_at=committed,
-                action=m.FunctionalPyramidAction.EXCLUDE,
-                pyramid_id=m.FunctionalPyramidId("fp-1"),
-                version=m.FunctionalPyramidVersion(1),
-                members=(),
-                participation_effects=(),
-                dependent_effect_refs=(),
-            )
+    def test_valid_declaration_round_trips_canonical_carriers(self) -> None:
+        payload = {
+            "version": 2,
+            "placements": [
+                {
+                    "document": _doc(
+                        "repo-a", "docs/foundation.md", m.FunctionalPyramidLayer.P0
+                    ),
+                    "scope": ".",
+                    "governing_placements": ["ROOT"],
+                },
+                {
+                    "document": _doc(
+                        "repo-a", "docs/design.md", m.FunctionalPyramidLayer.P3
+                    ),
+                    "scope": "src/service",
+                    "governing_placements": [
+                        {
+                            "declaring_repository_id": "repo-a",
+                            "document": _doc(
+                                "repo-a",
+                                "docs/foundation.md",
+                                m.FunctionalPyramidLayer.P0,
+                            ),
+                            "scope": ".",
+                        }
+                    ],
+                },
+            ],
+        }
+        declaration, findings = fp.decode_functional_pyramid_declaration(
+            json.dumps(payload),
+            repository_id="repo-a",
+            declaration_locator=".span/pyramid.json",
+        )
+        self.assertEqual(findings, ())
+        self.assertEqual(len(declaration.placements), 2)
+        restored = m.from_canonical(
+            m.FunctionalPyramidDeclaration,
+            m.to_canonical(declaration),
+        )
+        self.assertEqual(restored, declaration)
+
+
+if __name__ == "__main__":
+    unittest.main()

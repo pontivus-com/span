@@ -46,6 +46,39 @@ def _unconfigured_orientation(
     )
 
 
+def _functional_pyramid_view(
+    scope: m.EvidenceScope,
+    *,
+    pyramid_id: str = "fp",
+    status: m.FunctionalPyramidRouteStatus = m.FunctionalPyramidRouteStatus.RESOLVED,
+) -> m.FunctionalPyramidView:
+    unresolved: tuple[m.FunctionalPyramidFinding, ...] = ()
+    health = m.FunctionalPyramidHealth.VALID
+    if status is m.FunctionalPyramidRouteStatus.UNRESOLVED:
+        health = m.FunctionalPyramidHealth.DEGRADED
+        unresolved = (
+            m.FunctionalPyramidFinding(
+                reason=m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
+                repository_id="repo-1",
+                detail="canonical Functional Pyramid document is unavailable",
+                recovery="restore the declared canonical document",
+            ),
+        )
+    return m.FunctionalPyramidView(
+        pyramid_id=m.FunctionalPyramidId(pyramid_id),
+        version=m.FunctionalPyramidVersion(1),
+        health=health,
+        status=status,
+        semantic_scope=scope,
+        placements=(),
+        routes=(),
+        provenance=(),
+        unresolved=unresolved,
+        declared_layers=(),
+        absent_layers=tuple(m.FunctionalPyramidLayer),
+    )
+
+
 class AnswerServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -1168,14 +1201,9 @@ class AnswerServiceTest(unittest.TestCase):
             self.assertEqual(repository_id, "repo-1")
             self.assertEqual(surface.locator, "src/missing.py")
             seen.append(semantic_scope)
-            return m.FunctionalPyramidView(
-                pyramid_id=m.FunctionalPyramidId("fp-cold"),
-                version=m.FunctionalPyramidVersion(1),
-                health=m.FunctionalPyramidHealth.VALID,
-                coverage=m.FunctionalPyramidCoverage.PARTIAL,
-                scope_relation=m.FunctionalScopeRelation.COVERED,
-                status=m.FunctionalPyramidRouteStatus.RESOLVED,
-                semantic_scope=semantic_scope,
+            return _functional_pyramid_view(
+                semantic_scope,
+                pyramid_id="fp-cold",
             )
 
         service = AnswerService(
@@ -1242,23 +1270,11 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-normative"),
         )
-        finding = m.FunctionalPyramidFinding(
-            reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
-            repository_id="repo-1",
-            detail="functional scope is uncovered",
-            recovery="declare applicable Functional Context coverage",
-        )
-
         def unresolved(scope: m.EvidenceScope) -> m.FunctionalPyramidView:
-            return m.FunctionalPyramidView(
-                pyramid_id=m.FunctionalPyramidId("fp-mixed"),
-                version=m.FunctionalPyramidVersion(1),
-                health=m.FunctionalPyramidHealth.VALID,
-                coverage=m.FunctionalPyramidCoverage.PARTIAL,
-                scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+            return _functional_pyramid_view(
+                scope,
+                pyramid_id="fp-mixed",
                 status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
-                semantic_scope=scope,
-                unresolved=(finding,),
             )
 
         support = SupportService(
@@ -1305,22 +1321,10 @@ class AnswerServiceTest(unittest.TestCase):
         ) -> m.FunctionalPyramidView:
             self.assertEqual(repository_id, "repo-1")
             self.assertEqual(surface.locator, "src/a.py")
-            return m.FunctionalPyramidView(
-                pyramid_id=m.FunctionalPyramidId("fp-mixed"),
-                version=m.FunctionalPyramidVersion(1),
-                health=m.FunctionalPyramidHealth.VALID,
-                coverage=m.FunctionalPyramidCoverage.PARTIAL,
-                scope_relation=m.FunctionalScopeRelation.UNCOVERED,
+            return _functional_pyramid_view(
+                semantic_scope,
+                pyramid_id="fp-mixed",
                 status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
-                semantic_scope=semantic_scope,
-                unresolved=(
-                    m.FunctionalPyramidFinding(
-                        reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
-                        repository_id="repo-1",
-                        detail="functional scope is uncovered",
-                        recovery="declare applicable Functional Context coverage",
-                    ),
-                ),
             )
 
         service = AnswerService(

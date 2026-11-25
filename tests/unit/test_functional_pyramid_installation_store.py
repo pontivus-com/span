@@ -17,6 +17,7 @@ from span.shell.sqlite_store.functional_pyramid import (
     FunctionalPyramidInstallationSchemaError,
     FunctionalPyramidInstallationStore,
     FunctionalPyramidInstallationStoreError,
+    _decode_member,
     ensure_functional_pyramid_installation_store,
     functional_pyramid_installation_path,
 )
@@ -26,6 +27,50 @@ NOW = datetime.datetime(2026, 11, 21, 12, 0, tzinfo=datetime.timezone.utc)
 
 
 class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
+    def test_legacy_member_row_projects_only_version2_membership_identity(self) -> None:
+        payload = json.dumps(
+            {
+                "$type": "FunctionalPyramidMemberView",
+                "repository_id": "repo",
+                "declaration_refs": [
+                    {
+                        "$type": "EvidenceRef",
+                        "evidence_id": {
+                            "$type": "EvidenceId",
+                            "value": "decl-legacy",
+                        },
+                        "repository_id": "repo",
+                        "source_kind": "CONFIGURATION",
+                        "locator": ".span/functional-pyramid.json",
+                        "revision_or_fingerprint": "legacy-digest",
+                        "section_or_span": None,
+                    }
+                ],
+                "functional_scope": {
+                    "$type": "FunctionalScope",
+                    "selectors": [
+                        {
+                            "$type": "FunctionalScopeSelector",
+                            "kind": "REPOSITORY",
+                            "path": None,
+                            "locator": None,
+                        }
+                    ],
+                },
+                "coverage": "PARTIAL",
+            }
+        )
+
+        member = _decode_member(payload)
+
+        self.assertEqual(member.repository_id, "repo")
+        self.assertEqual(
+            tuple(ref.locator for ref in member.declaration_refs),
+            (".span/functional-pyramid.json",),
+        )
+        self.assertFalse(hasattr(member, "functional_scope"))
+        self.assertFalse(hasattr(member, "coverage"))
+
     def test_runtime_open_does_not_create_missing_store(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = functional_pyramid_installation_path(tmp)
@@ -179,14 +224,6 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
                         revision_or_fingerprint="sha256:decl-fp-rollback",
                     ),
                 ),
-                functional_scope=m.FunctionalScope(
-                    (
-                        m.FunctionalScopeSelector(
-                            m.FunctionalScopeSelectorKind.REPOSITORY
-                        ),
-                    )
-                ),
-                coverage=m.FunctionalPyramidCoverage.PARTIAL,
             )
             context = m.InvestigationContext(
                 context_id=m.InvestigationContextId("ctx-fp-rollback"),
@@ -280,14 +317,6 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
                         revision_or_fingerprint="sha256:decl-concurrent",
                     ),
                 ),
-                functional_scope=m.FunctionalScope(
-                    (
-                        m.FunctionalScopeSelector(
-                            m.FunctionalScopeSelectorKind.REPOSITORY
-                        ),
-                    )
-                ),
-                coverage=m.FunctionalPyramidCoverage.PARTIAL,
             )
             barrier = threading.Barrier(3)
             successes: list[str] = []
