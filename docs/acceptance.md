@@ -65,6 +65,25 @@ release-identity reconciliation. Exact-head release readiness is governed by
 the Beta-4 implementation plan; an earlier branch run is not substituted for
 the exact reviewed master check.
 
+### Assembled branch verification
+
+The assembled Beta-4 branch candidate
+`c7e4d45e06ec3411f6c8558a02f7503b27cd7ac4` passed GitHub Actions CI run
+`45514424797`:
+
+- build/distribution and wheel installation passed;
+- `span-mcp --help` and imported package version passed;
+- Ruff and Black passed;
+- typing remained at **0 errors**;
+- pytest reported **1001 passed, 1 skipped, 156 subtests**;
+- aggregate coverage was **85%**;
+- standalone plugin-notice delivery passed; and
+- the coverage artifact uploaded successfully.
+
+This closes the assembled-candidate verification gate. It is not the exact-head
+master release-readiness gate; that remains T10 after reconciliation to
+`master`.
+
 ## Release identity
 
 | Surface | Identity |
