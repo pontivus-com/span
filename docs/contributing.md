@@ -93,6 +93,21 @@ Span.
 
 Publication is a separate release-owner decision.
 
+### Release branch identity
+
+Each release version has exactly one repository branch: `release/<version>`.
+That branch is the sole branch on which release-specific implementation,
+reconciliation, candidate assembly, review corrections, and release fixes are
+carried. Do not create or retain a parallel `work/`, `fix/`, `candidate/`, or
+other branch for the same release version.
+
+Before release-specific work begins, confirm that no second branch represents
+that release. If one is found, stop release work, reconcile any unique commits
+into the canonical `release/<version>` branch, verify the canonical branch
+contains the complete intended tree, and delete the duplicate branch. A second
+ref that merely points at the same commit is still a duplicate and must not be
+retained.
+
 The package version lives in `src/span/__init__.py`; release identity is
 resolved through `scripts/release_identity.py` for the package version, Git
 tag, registry version, release title, and prerelease state.
