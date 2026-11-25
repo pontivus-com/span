@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import collections as _collections
+import collections.abc as _collections_abc
 import hashlib as _hashlib
 import json as _json
 import posixpath as _posixpath
@@ -97,7 +97,7 @@ def _finding_sort_key(
 
 
 def _ordered_findings(
-    findings: _collections.Iterable[FunctionalPyramidFinding],
+    findings: _collections_abc.Iterable[FunctionalPyramidFinding],
 ) -> tuple[FunctionalPyramidFinding, ...]:
     return tuple(sorted(set(findings), key=_finding_sort_key))
 
@@ -677,7 +677,7 @@ def _direct_selection(
 
 
 def _closure(
-    initial: _collections.Iterable[FunctionalDocumentPlacement],
+    initial: _collections_abc.Iterable[FunctionalDocumentPlacement],
     index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
 ) -> tuple[FunctionalDocumentPlacement, ...]:
     seen: set[FunctionalDocumentPlacement] = set()
