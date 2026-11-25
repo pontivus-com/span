@@ -3001,6 +3001,31 @@ class LifecycleServiceTest(unittest.TestCase):
             (self.authority.bindings["auth-1"],),
         )
 
+    def test_conformance_uses_existing_normative_assertion_contract(self):
+        self.assertEqual(
+            set(m.AssertionNature),
+            {m.AssertionNature.DESCRIPTIVE, m.AssertionNature.NORMATIVE},
+        )
+        route = self._document_route(self.authority.bindings["auth-1"])
+        service = self._governed_lifecycle(
+            lambda scope: self._resolved_route(scope, routes=(route,))
+        )
+        result = service.record(
+            _create_wire(
+                "sub-conformance",
+                conclusion=_conclusion(
+                    statement="Implementation conforms to the governing design.",
+                    assertion_nature=m.AssertionNature.NORMATIVE,
+                ),
+            )
+        )
+        self.assertIsInstance(result, m.UnderstandingRecorded)
+        content = self._latest_supported_content("u:sub-conformance")
+        self.assertTrue(
+            any(isinstance(item, m.FunctionalRouteSupport) for item in content.support)
+        )
+
+
     def test_descriptive_recording_does_not_gain_route_support(self):
         active = self._governed_lifecycle(lambda scope: self._resolved_route(scope))
         result = active.record(_create_wire("sub-descriptive"))

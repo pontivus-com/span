@@ -286,7 +286,12 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
         self.assertIn("_governing_layer_is_valid", owner_calls)
         self.assertIn("directory_scope_contains", owner_calls)
 
-        for consumer_name in ("_placement_findings", "_closure"):
+        for consumer_name in (
+            "_governing_findings",
+            "_cycle_findings",
+            "_closure",
+            "_downstream",
+        ):
             calls = {
                 node.func.id
                 for node in ast.walk(functions[consumer_name])
@@ -309,7 +314,7 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
             and isinstance(node.func, ast.Name)
             and node.func.id == "_governing_layer_is_valid"
         ]
-        self.assertEqual(len(edge_calls), 2)
+        self.assertEqual(len(edge_calls), 4)
         self.assertEqual(len(layer_calls), 1)
 
     def test_context_composition_wires_all_mandatory_pyramid_capabilities(self):
