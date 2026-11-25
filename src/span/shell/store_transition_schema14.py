@@ -1,8 +1,11 @@
-"""Schema-14 -> schema-15 durable copy for curation persistence.
+"""Schema-14 -> schema-15 durable copy for curation and Beta-5 cutover state.
 
-Schema 15 adds only immutable conclusion curation dispositions. Every schema-14
-repository row, including the Functional Pyramid route-dependency projection, is
-copied without reinterpretation. No curation disposition is fabricated.
+Every schema-14 repository row is copied without semantic reinterpretation.
+The Functional Pyramid route-dependency index is preserved independently of
+conclusion-payload decoding so an undecodable Version-1 support payload still
+retains conclusion/pyramid coordinates for forced reassessment during the
+Version-2 cutover. No curation disposition, placement scope, document placement
+or governing relationship is fabricated.
 """
 
 from __future__ import annotations
@@ -128,6 +131,7 @@ def stage_schema14(
     return (
         (
             "schema-14 state copied without semantic or governance reinterpretation",
+            "Functional Pyramid route-dependency coordinates preserved for cutover reassessment",
             "schema-15 curation storage initialized with zero dispositions",
         ),
         payload,

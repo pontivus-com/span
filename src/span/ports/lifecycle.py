@@ -227,6 +227,12 @@ class LifecycleStorePort(_typing.Protocol):
         """Return exact revisions whose support references one identity."""
         ...
 
+    def current_functional_route_dependents(
+        self, pyramid_id: str
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        """Return current-membership revisions indexed to one Functional Pyramid."""
+        ...
+
     def find_source_observation(
         self, observation_id: str
     ) -> m.SourceObservation | None:

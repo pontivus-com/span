@@ -1049,37 +1049,14 @@ class FunctionalPyramidService:
         pyramid_id: m.FunctionalPyramidId,
         repository_ids: tuple[str, ...],
     ) -> tuple[m.ConclusionRevisionRef, ...]:
+        """Enumerate retained current route dependents without decoding V1 support."""
         refs: set[m.ConclusionRevisionRef] = set()
         for repository_id in sorted(set(repository_ids)):
-            store = self._runtime(repository_id).store
-            for understanding in store.list_understandings(repository_id):
-                version = store.get_version(
-                    understanding.understanding_id.value,
-                    understanding.current_version.value,
+            refs.update(
+                self._runtime(repository_id).store.current_functional_route_dependents(
+                    pyramid_id.value
                 )
-                revisions = {
-                    (revision.conclusion_id, revision.revision): revision
-                    for revision in store.get_conclusions(
-                        understanding.understanding_id.value
-                    )
-                }
-                for ref in version.conclusions:
-                    revision = revisions.get((ref.conclusion_id, ref.revision))
-                    if revision is None or not isinstance(
-                        revision.content, m.SupportedConclusion
-                    ):
-                        continue
-                    if (
-                        revision.content.assertion_nature
-                        is not m.AssertionNature.NORMATIVE
-                    ):
-                        continue
-                    if any(
-                        isinstance(dependency, m.FunctionalRouteSupport)
-                        and dependency.pyramid_id == pyramid_id
-                        for dependency in revision.content.support
-                    ):
-                        refs.add(ref)
+            )
         return tuple(sorted(refs, key=lambda item: item.sort_key))
 
     def _proposed_changed_route_identities(

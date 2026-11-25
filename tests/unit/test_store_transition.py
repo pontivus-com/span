@@ -1032,6 +1032,62 @@ class Schema13To15Test(unittest.TestCase):
 
 
 class Schema14To15Test(unittest.TestCase):
+    def test_schema14_undecodable_route_payload_preserves_cutover_coordinates(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "demo"
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            source = _schema14_store(data / "demo.db", root)
+            connection = sqlite3.connect(source)
+            try:
+                connection.execute(
+                    "UPDATE conclusions SET canonical_json=?"
+                    " WHERE understanding_id='u-schema14'"
+                    " AND conclusion_id='c-schema14' AND revision=1",
+                    (
+                        json.dumps(
+                            {
+                                "$type": "ConclusionRevision",
+                                "legacy_v1_functional_route_support": {
+                                    "pyramid_id": "p-1",
+                                    "route_identity": "route-1",
+                                },
+                            },
+                            sort_keys=True,
+                        ),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            report = st.apply(_config(root, data))
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+
+            from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+            from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+            migrated = LifecycleStore(
+                data / "demo.db",
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                clock=lambda: NOW,
+            )
+            self.addCleanup(migrated.close)
+            self.assertEqual(
+                migrated.current_functional_route_dependents("p-1"),
+                (
+                    m.ConclusionRevisionRef(
+                        understanding_id=m.UnderstandingId("u-schema14"),
+                        conclusion_id=m.ConclusionId("c-schema14"),
+                        revision=m.ConclusionRevisionNumber(1),
+                    ),
+                ),
+            )
+            with self.assertRaises(m.CanonicalDecodeError):
+                migrated.get_conclusions("u-schema14")
+
     def test_schema14_state_is_preserved_and_curation_starts_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp) / "demo"

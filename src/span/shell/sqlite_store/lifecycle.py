@@ -1462,6 +1462,34 @@ class LifecycleStore:
             for row in rows
         )
 
+    def current_functional_route_dependents(
+        self, pyramid_id: str
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        """Enumerate current route dependents without decoding conclusion payloads."""
+        rows = self._connection.execute(
+            "SELECT DISTINCT route.understanding_id, route.conclusion_id,"
+            " route.revision"
+            " FROM functional_route_dependency_index AS route"
+            " JOIN understandings AS understanding"
+            " ON understanding.understanding_id=route.understanding_id"
+            " JOIN understanding_membership AS membership"
+            " ON membership.understanding_id=route.understanding_id"
+            " AND membership.version=understanding.current_version"
+            " AND membership.conclusion_id=route.conclusion_id"
+            " AND membership.revision=route.revision"
+            " WHERE route.pyramid_id=?"
+            " ORDER BY route.understanding_id, route.conclusion_id, route.revision",
+            (pyramid_id,),
+        ).fetchall()
+        return tuple(
+            m.ConclusionRevisionRef(
+                understanding_id=m.UnderstandingId(row["understanding_id"]),
+                conclusion_id=m.ConclusionId(row["conclusion_id"]),
+                revision=m.ConclusionRevisionNumber(row["revision"]),
+            )
+            for row in rows
+        )
+
     # -- challenges --------------------------------------------------------
 
     def list_context_discovery(
