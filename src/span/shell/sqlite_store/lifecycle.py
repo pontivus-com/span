@@ -1467,17 +1467,13 @@ class LifecycleStore:
     ) -> tuple[m.ConclusionRevisionRef, ...]:
         """Enumerate current route dependents without decoding conclusion payloads."""
         rows = self._connection.execute(
-            "SELECT DISTINCT route.understanding_id, route.conclusion_id,"
-            " route.revision"
+            "SELECT DISTINCT route.understanding_id, route.conclusion_id, route.revision"
             " FROM functional_route_dependency_index AS route"
-            " JOIN understandings AS understanding"
-            " ON understanding.understanding_id=route.understanding_id"
-            " JOIN understanding_membership AS membership"
-            " ON membership.understanding_id=route.understanding_id"
+            " JOIN understandings AS understanding ON understanding.understanding_id=route.understanding_id"
+            " JOIN understanding_membership AS membership ON membership.understanding_id=route.understanding_id"
             " AND membership.version=understanding.current_version"
             " AND membership.conclusion_id=route.conclusion_id"
-            " AND membership.revision=route.revision"
-            " WHERE route.pyramid_id=?"
+            " AND membership.revision=route.revision WHERE route.pyramid_id=?"
             " ORDER BY route.understanding_id, route.conclusion_id, route.revision",
             (pyramid_id,),
         ).fetchall()
