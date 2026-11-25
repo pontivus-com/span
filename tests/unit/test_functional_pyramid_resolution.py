@@ -152,7 +152,6 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         self.assertEqual(src.placements, (self.p0, self.p1))
         self.assertNotIn(self.p3, src.placements)
 
-
     def test_directory_without_own_placement_inherits_all_ancestors(self) -> None:
         leaf, _ = self._directory("src/service/leaf")
         self.assertEqual(leaf.placements, (self.p0, self.p1, self.p3))

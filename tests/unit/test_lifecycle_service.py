@@ -3025,7 +3025,6 @@ class LifecycleServiceTest(unittest.TestCase):
             any(isinstance(item, m.FunctionalRouteSupport) for item in content.support)
         )
 
-
     def test_descriptive_recording_does_not_gain_route_support(self):
         active = self._governed_lifecycle(lambda scope: self._resolved_route(scope))
         result = active.record(_create_wire("sub-descriptive"))
