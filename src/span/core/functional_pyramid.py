@@ -913,25 +913,26 @@ def _resolve(
         if not unresolved
         else FunctionalPyramidRouteStatus.UNRESOLVED
     )
-    directory_selection = selection if isinstance(selection, str) else None
-    semantic_selection = selection if isinstance(selection, EvidenceScope) else None
-    selection_identity: object = (
-        {"directory": directory_selection}
-        if directory_selection is not None
-        else {
+    if isinstance(selection, str):
+        directory_selection = selection
+        semantic_selection = None
+        selection_identity: object = {"directory": selection}
+    else:
+        directory_selection = None
+        semantic_selection = selection
+        selection_identity = {
             "semantic_scope": {
-                "paths": list(semantic_selection.paths),
+                "paths": list(selection.paths),
                 "evidence": [
                     (
                         ref.repository_id,
                         ref.locator,
                         ref.revision_or_fingerprint,
                     )
-                    for ref in semantic_selection.evidence_refs
+                    for ref in selection.evidence_refs
                 ],
             }
         }
-    )
     identity = _route_identity(
         repository_id=repository_id,
         selection=selection_identity,
