@@ -6,6 +6,7 @@ import collections.abc as _collections_abc
 import hashlib as _hashlib
 import json as _json
 import posixpath as _posixpath
+from dataclasses import dataclass as _dataclass
 
 from span.core import containment as _containment
 from span.core.model.functional_pyramid import (
@@ -361,6 +362,18 @@ def _governing_layer_is_valid(
     )
 
 
+def _governing_edge_is_valid(
+    child: FunctionalDocumentPlacement,
+    parent: FunctionalDocumentPlacement,
+) -> bool:
+    """One owner for layer and same-repository scope edge admissibility."""
+    if not _governing_layer_is_valid(child.document.layer, parent.document.layer):
+        return False
+    if child.declaring_repository_id != parent.declaring_repository_id:
+        return True
+    return directory_scope_contains(parent.scope, child.scope)
+
+
 def _indexes(
     declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
 ) -> tuple[
@@ -399,140 +412,127 @@ def _indexes(
     return by_placement, _ordered_findings(findings)
 
 
-def _graph_findings(
+def _member_availability_findings(
     members: tuple[FunctionalPyramidMemberView, ...],
-    declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
     available_repositories: frozenset[str],
-    declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
-) -> tuple[
-    dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
-    tuple[FunctionalPyramidFinding, ...],
-]:
-    member_ids = frozenset(member.repository_id for member in members)
-    index, duplicate_findings = _indexes(declarations)
-    findings: list[FunctionalPyramidFinding] = [
-        *declaration_findings,
-        *duplicate_findings,
-    ]
+) -> tuple[FunctionalPyramidFinding, ...]:
+    return tuple(
+        _finding(
+            FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+            "active Functional Pyramid member is unavailable",
+            "restore the named member repository",
+            repository_id=member.repository_id,
+        )
+        for member in members
+        if member.repository_id not in available_repositories
+    )
 
-    for member in members:
-        if member.repository_id not in available_repositories:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
-                    "active Functional Pyramid member is unavailable",
-                    "restore the named member repository",
-                    repository_id=member.repository_id,
-                )
-            )
 
-    for placement, declaration in index.items():
-        document_repository = placement.document.repository_id
-        if document_repository not in member_ids:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
-                    "document reference targets a repository outside the Functional Pyramid instance",
-                    "reference a canonical document owned by an instance member",
-                    repository_id=document_repository,
-                    placement=placement,
-                )
+def _placement_findings(
+    placement: FunctionalDocumentPlacement,
+    declaration: FunctionalDocumentDeclaration,
+    *,
+    member_ids: frozenset[str],
+    available_repositories: frozenset[str],
+    index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+) -> tuple[FunctionalPyramidFinding, ...]:
+    findings: list[FunctionalPyramidFinding] = []
+    document_repository = placement.document.repository_id
+    if document_repository not in member_ids:
+        findings.append(
+            _finding(
+                FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
+                "document reference targets a repository outside the Functional Pyramid instance",
+                "reference a canonical document owned by an instance member",
+                repository_id=document_repository,
+                placement=placement,
             )
-        elif document_repository not in available_repositories:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
-                    "document owner repository is unavailable",
-                    "restore the named member repository",
-                    repository_id=document_repository,
-                    placement=placement,
-                )
+        )
+    elif document_repository not in available_repositories:
+        findings.append(
+            _finding(
+                FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+                "document owner repository is unavailable",
+                "restore the named member repository",
+                repository_id=document_repository,
+                placement=placement,
             )
+        )
 
-        if placement.document.layer is FunctionalPyramidLayer.P0:
-            if declaration.governing_placements != ("ROOT",):
-                findings.append(
-                    _finding(
-                        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                        "P0 placement must have exactly ROOT as its governing relationship",
-                        "declare exactly ROOT for the P0 placement",
-                        repository_id=placement.declaring_repository_id,
-                        placement=placement,
-                    )
-                )
-        elif "ROOT" in declaration.governing_placements:
+    if placement.document.layer is FunctionalPyramidLayer.P0:
+        if declaration.governing_placements != ("ROOT",):
             findings.append(
                 _finding(
                     FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                    "only P0 placements may be governed directly by ROOT",
-                    "declare a permitted governing placement under FD-67",
+                    "P0 placement must have exactly ROOT as its governing relationship",
+                    "declare exactly ROOT for the P0 placement",
                     repository_id=placement.declaring_repository_id,
                     placement=placement,
                 )
             )
+    elif "ROOT" in declaration.governing_placements:
+        findings.append(
+            _finding(
+                FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+                "only P0 placements may be governed directly by ROOT",
+                "declare a permitted governing placement under FD-67",
+                repository_id=placement.declaring_repository_id,
+                placement=placement,
+            )
+        )
 
-        for parent in declaration.governing_placements:
-            if isinstance(parent, str):
-                continue
-            if parent.declaring_repository_id not in member_ids:
-                findings.append(
-                    _finding(
-                        FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
-                        "governing placement targets a repository outside the instance",
-                        "correct the repository-qualified governing placement",
-                        repository_id=parent.declaring_repository_id,
-                        placement=placement,
-                    )
+    for parent in declaration.governing_placements:
+        if isinstance(parent, str):
+            continue
+        if parent.declaring_repository_id not in member_ids:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
+                    "governing placement targets a repository outside the instance",
+                    "correct the repository-qualified governing placement",
+                    repository_id=parent.declaring_repository_id,
+                    placement=placement,
                 )
-                continue
-            if parent.declaring_repository_id not in available_repositories:
-                findings.append(
-                    _finding(
-                        FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
-                        "governing placement member repository is unavailable",
-                        "restore the named member repository",
-                        repository_id=parent.declaring_repository_id,
-                        placement=placement,
-                    )
+            )
+            continue
+        if parent.declaring_repository_id not in available_repositories:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+                    "governing placement member repository is unavailable",
+                    "restore the named member repository",
+                    repository_id=parent.declaring_repository_id,
+                    placement=placement,
                 )
-                continue
-            if parent not in index:
-                findings.append(
-                    _finding(
-                        FunctionalPyramidFindingReason.UNKNOWN_DOCUMENT,
-                        "governing placement does not exist in the named available member",
-                        "correct or declare the exact governing placement",
-                        repository_id=parent.declaring_repository_id,
-                        placement=placement,
-                    )
+            )
+            continue
+        if parent not in index:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.UNKNOWN_DOCUMENT,
+                    "governing placement does not exist in the named available member",
+                    "correct or declare the exact governing placement",
+                    repository_id=parent.declaring_repository_id,
+                    placement=placement,
                 )
-                continue
-            if not _governing_layer_is_valid(
-                placement.document.layer, parent.document.layer
-            ):
-                findings.append(
-                    _finding(
-                        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                        "governing placement layer is not admissible for the governed placement",
-                        "declare a governing edge permitted by FD-67",
-                        repository_id=placement.declaring_repository_id,
-                        placement=placement,
-                    )
+            )
+            continue
+        if not _governing_edge_is_valid(placement, parent):
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+                    "governing placement is not admissible by layer or declared scope",
+                    "declare a governing edge permitted by FD-67",
+                    repository_id=placement.declaring_repository_id,
+                    placement=placement,
                 )
-            if (
-                parent.declaring_repository_id == placement.declaring_repository_id
-                and not directory_scope_contains(parent.scope, placement.scope)
-            ):
-                findings.append(
-                    _finding(
-                        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                        "same-repository governing placement has narrower scope than the governed placement",
-                        "widen the governing placement scope or narrow the governed placement",
-                        repository_id=placement.declaring_repository_id,
-                        placement=placement,
-                    )
-                )
+            )
+    return tuple(findings)
 
+
+def _cycle_findings(
+    index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+) -> tuple[FunctionalPyramidFinding, ...]:
     cycle_nodes: set[FunctionalDocumentPlacement] = set()
     visiting: set[FunctionalDocumentPlacement] = set()
     visited: set[FunctionalDocumentPlacement] = set()
@@ -559,23 +559,30 @@ def _graph_findings(
 
     for placement in sorted(index, key=_placement_sort_key):
         visit(placement, ())
-    for placement in sorted(cycle_nodes, key=_placement_sort_key):
-        findings.append(
-            _finding(
-                FunctionalPyramidFindingReason.DOCUMENT_CYCLE,
-                "governing document placements form a cycle",
-                "remove the cycle from the declaration graph",
-                repository_id=placement.declaring_repository_id,
-                placement=placement,
-            )
+    return tuple(
+        _finding(
+            FunctionalPyramidFindingReason.DOCUMENT_CYCLE,
+            "governing document placements form a cycle",
+            "remove the cycle from the declaration graph",
+            repository_id=placement.declaring_repository_id,
+            placement=placement,
         )
+        for placement in sorted(cycle_nodes, key=_placement_sort_key)
+    )
 
+
+def _root_findings(
+    members: tuple[FunctionalPyramidMemberView, ...],
+    index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+    findings: _collections_abc.Iterable[FunctionalPyramidFinding],
+) -> tuple[FunctionalPyramidFinding, ...]:
     invalid_scope_repositories = {
         finding.repository_id
         for finding in findings
         if finding.reason is FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE
         and finding.repository_id is not None
     }
+    missing: list[FunctionalPyramidFinding] = []
     for member in members:
         if member.repository_id in invalid_scope_repositories:
             continue
@@ -587,7 +594,7 @@ def _graph_findings(
             for placement, declaration in index.items()
         )
         if not root_ok:
-            findings.append(
+            missing.append(
                 _finding(
                     FunctionalPyramidFindingReason.MISSING_ROOT_PLACEMENT,
                     "member declaration graph has no root-scoped P0 placement governed by ROOT",
@@ -596,7 +603,37 @@ def _graph_findings(
                     directory=".",
                 )
             )
+    return tuple(missing)
 
+
+def _graph_findings(
+    members: tuple[FunctionalPyramidMemberView, ...],
+    declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
+    available_repositories: frozenset[str],
+    declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
+) -> tuple[
+    dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+    tuple[FunctionalPyramidFinding, ...],
+]:
+    member_ids = frozenset(member.repository_id for member in members)
+    index, duplicate_findings = _indexes(declarations)
+    findings: list[FunctionalPyramidFinding] = [
+        *declaration_findings,
+        *duplicate_findings,
+        *_member_availability_findings(members, available_repositories),
+    ]
+    for placement, declaration in index.items():
+        findings.extend(
+            _placement_findings(
+                placement,
+                declaration,
+                member_ids=member_ids,
+                available_repositories=available_repositories,
+                index=index,
+            )
+        )
+    findings.extend(_cycle_findings(index))
+    findings.extend(_root_findings(members, index, findings))
     return index, _ordered_findings(findings)
 
 
@@ -691,7 +728,11 @@ def _closure(
         if declaration is None:
             continue
         for parent in declaration.governing_placements:
-            if not isinstance(parent, str) and parent in index:
+            if (
+                not isinstance(parent, str)
+                and parent in index
+                and _governing_edge_is_valid(placement, parent)
+            ):
                 stack.append(parent)
     return tuple(sorted(seen, key=_placement_sort_key))
 
@@ -787,22 +828,30 @@ def _route_identity(
     return FunctionalRouteIdentity(digest)
 
 
+@_dataclass(frozen=True)
+class _ResolutionInputs:
+    pyramid_id: FunctionalPyramidId
+    version: FunctionalPyramidVersion
+    members: tuple[FunctionalPyramidMemberView, ...]
+    declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...]
+    available_repositories: frozenset[str]
+    authority_bindings: dict[tuple[str, str], AuthorityBinding]
+    declaration_findings: tuple[FunctionalPyramidFinding, ...] = ()
+
+
 def _resolve(
+    inputs: _ResolutionInputs,
     *,
-    pyramid_id: FunctionalPyramidId,
-    version: FunctionalPyramidVersion,
-    members: tuple[FunctionalPyramidMemberView, ...],
     repository_id: str,
     seeds: tuple[tuple[str | None, EvidenceScope | None], ...],
     directory_selection: str | None,
     semantic_selection: EvidenceScope | None,
-    declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
-    available_repositories: frozenset[str],
-    authority_bindings: dict[tuple[str, str], AuthorityBinding],
-    declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
 ) -> tuple[FunctionalPyramidView, FunctionalRouteIdentity]:
     index, structural = _graph_findings(
-        members, declarations, available_repositories, declaration_findings
+        inputs.members,
+        inputs.declarations,
+        inputs.available_repositories,
+        inputs.declaration_findings,
     )
     health = (
         FunctionalPyramidHealth.VALID
@@ -833,25 +882,22 @@ def _resolve(
         closure=closure,
     )
 
-    routes: list[FunctionalDocumentRoute] = []
-    for placement in closure:
-        declaration = index.get(placement)
-        if declaration is None:
-            continue
-        authority = authority_bindings.get(
-            (placement.document.repository_id, placement.document.document_ref)
+    routes = tuple(
+        FunctionalDocumentRoute(
+            placement=placement,
+            authority=authority,
+            governing_placements=index[placement].governing_placements,
+            downstream_placements=_downstream(placement, index),
         )
-        if authority is None:
-            continue
-        routes.append(
-            FunctionalDocumentRoute(
-                placement=placement,
-                authority=authority,
-                governing_placements=declaration.governing_placements,
-                downstream_placements=_downstream(placement, index),
+        for placement in closure
+        if placement in index
+        and (
+            authority := inputs.authority_bindings.get(
+                (placement.document.repository_id, placement.document.document_ref)
             )
         )
-
+        is not None
+    )
     declared = tuple(
         layer
         for layer in _LAYER_ORDER
@@ -864,8 +910,9 @@ def _resolve(
         else FunctionalPyramidRouteStatus.UNRESOLVED
     )
 
+    selection_identity: object
     if directory_selection is not None:
-        selection_identity: object = {"directory": directory_selection}
+        selection_identity = {"directory": directory_selection}
     else:
         selection_identity = {
             "semantic_scope": {
@@ -892,21 +939,23 @@ def _resolve(
         closure=closure,
         index=index,
     )
-    view = FunctionalPyramidView(
-        pyramid_id=pyramid_id,
-        version=version,
-        health=health,
-        status=status,
-        directory=directory_selection,
-        semantic_scope=semantic_selection,
-        placements=closure,
-        routes=tuple(routes),
-        provenance=tuple(provenance),
-        unresolved=unresolved,
-        declared_layers=declared,
-        absent_layers=absent,
+    return (
+        FunctionalPyramidView(
+            pyramid_id=inputs.pyramid_id,
+            version=inputs.version,
+            health=health,
+            status=status,
+            directory=directory_selection,
+            semantic_scope=semantic_selection,
+            placements=closure,
+            routes=routes,
+            provenance=tuple(provenance),
+            unresolved=unresolved,
+            declared_layers=declared,
+            absent_layers=absent,
+        ),
+        identity,
     )
-    return view, identity
 
 
 def resolve_functional_pyramid_route(
@@ -927,17 +976,19 @@ def resolve_functional_pyramid_route(
         for directory, portion in _semantic_seeds(surface, semantic_scope)
     )
     return _resolve(
-        pyramid_id=pyramid_id,
-        version=version,
-        members=members,
+        _ResolutionInputs(
+            pyramid_id=pyramid_id,
+            version=version,
+            members=members,
+            declarations=declarations,
+            available_repositories=available_repositories,
+            authority_bindings=authority_bindings,
+            declaration_findings=declaration_findings,
+        ),
         repository_id=surface.repository_id,
         seeds=seeds,
         directory_selection=None,
         semantic_selection=semantic_scope,
-        declarations=declarations,
-        available_repositories=available_repositories,
-        authority_bindings=authority_bindings,
-        declaration_findings=declaration_findings,
     )
 
 
@@ -956,15 +1007,17 @@ def resolve_functional_pyramid_directory_route(
     """Resolve one exact directory as a point in the repository tree."""
     normalized = normalize_directory_scope(directory)
     return _resolve(
-        pyramid_id=pyramid_id,
-        version=version,
-        members=members,
+        _ResolutionInputs(
+            pyramid_id=pyramid_id,
+            version=version,
+            members=members,
+            declarations=declarations,
+            available_repositories=available_repositories,
+            authority_bindings=authority_bindings,
+            declaration_findings=declaration_findings,
+        ),
         repository_id=repository_id,
         seeds=((normalized, None),),
         directory_selection=normalized,
         semantic_selection=None,
-        declarations=declarations,
-        available_repositories=available_repositories,
-        authority_bindings=authority_bindings,
-        declaration_findings=declaration_findings,
     )

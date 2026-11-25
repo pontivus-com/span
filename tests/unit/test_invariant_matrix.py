@@ -283,16 +283,17 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
             for node in ast.walk(owner)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         }
-        self.assertNotIn("_layer_rank", owner_calls)
+        self.assertIn("_governing_layer_is_valid", owner_calls)
+        self.assertIn("directory_scope_contains", owner_calls)
 
-        for consumer_name in ("_rule_edge_findings", "_resolve_rule_refs"):
+        for consumer_name in ("_placement_findings", "_closure"):
             calls = {
                 node.func.id
                 for node in ast.walk(functions[consumer_name])
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
             }
             self.assertIn("_governing_edge_is_valid", calls)
-            self.assertNotIn("_layer_rank", calls)
+            self.assertNotIn("_governing_layer_is_valid", calls)
 
         edge_calls = [
             node
@@ -301,15 +302,15 @@ class FunctionalPyramidArchitectureTest(unittest.TestCase):
             and isinstance(node.func, ast.Name)
             and node.func.id == "_governing_edge_is_valid"
         ]
-        rank_calls = [
+        layer_calls = [
             node
             for node in ast.walk(tree)
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
-            and node.func.id == "_layer_rank"
+            and node.func.id == "_governing_layer_is_valid"
         ]
         self.assertEqual(len(edge_calls), 2)
-        self.assertEqual(len(rank_calls), 1)
+        self.assertEqual(len(layer_calls), 1)
 
     def test_context_composition_wires_all_mandatory_pyramid_capabilities(self):
         path = REPO_ROOT / "src/span/shell/context.py"
