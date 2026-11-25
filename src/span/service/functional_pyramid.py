@@ -244,15 +244,15 @@ class FunctionalPyramidService:
             return m.FunctionalPyramidParticipation(status.state)
         assert status.pyramid_id is not None
         assert status.version is not None
-        if not self._declarations.directory_exists(
-            selector.repository_id, selector.directory
-        ):
-            raise RecordingValidationError(
-                f"Functional Pyramid directory does not exist: {selector.directory!r}",
-                public_identity=selector.directory,
-                public_cause="the exact repository-relative directory is not present",
-            )
         try:
+            if not self._declarations.directory_exists(
+                selector.repository_id, selector.directory
+            ):
+                raise RecordingValidationError(
+                    f"Functional Pyramid directory does not exist: {selector.directory!r}",
+                    public_identity=selector.directory,
+                    public_cause="the exact repository-relative directory is not present",
+                )
             current_members, declarations, available, source_findings = (
                 self._load_active_members(status.members)
             )

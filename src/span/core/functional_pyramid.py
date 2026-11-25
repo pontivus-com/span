@@ -747,7 +747,6 @@ def _route_identity(
     selection: object,
     closure: tuple[FunctionalDocumentPlacement, ...],
     index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
-    members: tuple[FunctionalPyramidMemberView, ...],
 ) -> FunctionalRouteIdentity:
     payload = {
         "repository_id": repository_id,
@@ -775,10 +774,6 @@ def _route_identity(
                 else [],
             }
             for placement in closure
-        ],
-        "members": [
-            member.repository_id
-            for member in sorted(members, key=lambda value: value.repository_id)
         ],
     }
     digest = _hashlib.sha256(
@@ -891,7 +886,6 @@ def _resolve(
         selection=selection_identity,
         closure=closure,
         index=index,
-        members=members,
     )
     view = FunctionalPyramidView(
         pyramid_id=pyramid_id,

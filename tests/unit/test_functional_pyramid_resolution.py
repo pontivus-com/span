@@ -281,6 +281,202 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         )
         self.assertEqual(set(view.placements), {self.p0, self.p1, self.p3, self.sibling})
 
+    def test_unrelated_member_does_not_change_route_identity(self) -> None:
+        _, first = fp.resolve_functional_pyramid_directory_route(
+            pyramid_id=m.FunctionalPyramidId("pyramid"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(_member("repo-a"),),
+            repository_id="repo-a",
+            directory="src/service",
+            declarations=(("repo-a", self.declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings=self.authorities,
+        )
+        repo_b_root = _placement(
+            "repo-b",
+            "repo-b",
+            "docs/foundation.md",
+            m.FunctionalPyramidLayer.P0,
+            ".",
+        )
+        repo_b_declaration = m.FunctionalPyramidDeclaration(
+            version=2,
+            placements=(_declaration(repo_b_root, "ROOT"),),
+        )
+        _, second = fp.resolve_functional_pyramid_directory_route(
+            pyramid_id=m.FunctionalPyramidId("pyramid"),
+            version=m.FunctionalPyramidVersion(2),
+            members=(_member("repo-a"), _member("repo-b")),
+            repository_id="repo-a",
+            directory="src/service",
+            declarations=(
+                ("repo-a", self.declaration),
+                ("repo-b", repo_b_declaration),
+            ),
+            available_repositories=frozenset({"repo-a", "repo-b"}),
+            authority_bindings={
+                **self.authorities,
+                ("repo-b", "docs/foundation.md"): _authority(
+                    "repo-b", "docs/foundation.md", "b0"
+                ),
+            },
+        )
+        self.assertEqual(first, second)
+
+    def test_material_applicability_change_changes_route_identity(self) -> None:
+        _, first = self._directory("src/service")
+        changed = _placement(
+            "repo-a",
+            "repo-a",
+            "docs/extra.md",
+            m.FunctionalPyramidLayer.P4,
+            "src/service",
+        )
+        declaration = m.FunctionalPyramidDeclaration(
+            version=2,
+            placements=(
+                *self.declaration.placements,
+                _declaration(changed, self.p3),
+            ),
+        )
+        _, second = fp.resolve_functional_pyramid_directory_route(
+            pyramid_id=m.FunctionalPyramidId("pyramid"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(_member("repo-a"),),
+            repository_id="repo-a",
+            directory="src/service",
+            declarations=(("repo-a", declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings={
+                **self.authorities,
+                ("repo-a", "docs/extra.md"): _authority(
+                    "repo-a", "docs/extra.md", "a4"
+                ),
+            },
+        )
+        self.assertNotEqual(first, second)
+
+    def test_authority_currency_does_not_change_route_identity_or_health(self) -> None:
+        first_view, first_identity = self._directory("src/service")
+        draft = dict(self.authorities)
+        draft[("repo-a", "docs/design.md")] = m.AuthorityBinding(
+            evidence_ref=_evidence("repo-a", "docs/design.md", "a3-draft"),
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.DRAFT,
+        )
+        second_view, second_identity = fp.resolve_functional_pyramid_directory_route(
+            pyramid_id=m.FunctionalPyramidId("pyramid"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(_member("repo-a"),),
+            repository_id="repo-a",
+            directory="src/service",
+            declarations=(("repo-a", self.declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings=draft,
+        )
+        self.assertEqual(first_identity, second_identity)
+        self.assertEqual(first_view.health, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(second_view.health, m.FunctionalPyramidHealth.VALID)
+
+    def test_explicit_p2w_to_p2s_governing_edge_is_valid(self) -> None:
+        p2s = _placement(
+            "repo-a",
+            "repo-a",
+            "docs/shared-contract.md",
+            m.FunctionalPyramidLayer.P2S,
+            "src",
+        )
+        p2w = _placement(
+            "repo-a",
+            "repo-a",
+            "docs/workflow-contract.md",
+            m.FunctionalPyramidLayer.P2W,
+            "src/service",
+        )
+        declaration = m.FunctionalPyramidDeclaration(
+            version=2,
+            placements=(
+                _declaration(self.p0, "ROOT"),
+                _declaration(p2s, self.p0),
+                _declaration(p2w, p2s),
+            ),
+        )
+        health, findings = fp.evaluate_functional_pyramid_health(
+            (_member("repo-a"),),
+            (("repo-a", declaration),),
+            frozenset({"repo-a"}),
+        )
+        self.assertEqual(health, m.FunctionalPyramidHealth.VALID)
+        self.assertEqual(findings, ())
+
+    def test_reverse_p2s_to_p2w_governing_edge_is_invalid(self) -> None:
+        p2s = _placement(
+            "repo-a",
+            "repo-a",
+            "docs/shared-contract.md",
+            m.FunctionalPyramidLayer.P2S,
+            "src/service",
+        )
+        p2w = _placement(
+            "repo-a",
+            "repo-a",
+            "docs/workflow-contract.md",
+            m.FunctionalPyramidLayer.P2W,
+            "src",
+        )
+        declaration = m.FunctionalPyramidDeclaration(
+            version=2,
+            placements=(
+                _declaration(self.p0, "ROOT"),
+                _declaration(p2w, self.p0),
+                _declaration(p2s, p2w),
+            ),
+        )
+        _, findings = fp.evaluate_functional_pyramid_health(
+            (_member("repo-a"),),
+            (("repo-a", declaration),),
+            frozenset({"repo-a"}),
+        )
+        self.assertIn(
+            m.FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+            {finding.reason for finding in findings},
+        )
+
+    def test_same_contract_sublayer_governing_edges_are_invalid(self) -> None:
+        for layer in (m.FunctionalPyramidLayer.P2S, m.FunctionalPyramidLayer.P2W):
+            with self.subTest(layer=layer):
+                parent = _placement(
+                    "repo-a",
+                    "repo-a",
+                    "docs/parent-contract.md",
+                    layer,
+                    "src",
+                )
+                child = _placement(
+                    "repo-a",
+                    "repo-a",
+                    "docs/child-contract.md",
+                    layer,
+                    "src/service",
+                )
+                declaration = m.FunctionalPyramidDeclaration(
+                    version=2,
+                    placements=(
+                        _declaration(self.p0, "ROOT"),
+                        _declaration(parent, self.p0),
+                        _declaration(child, parent),
+                    ),
+                )
+                _, findings = fp.evaluate_functional_pyramid_health(
+                    (_member("repo-a"),),
+                    (("repo-a", declaration),),
+                    frozenset({"repo-a"}),
+                )
+                self.assertIn(
+                    m.FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+                    {finding.reason for finding in findings},
+                )
+
     def test_route_identity_tracks_applicability_not_pyramid_version(self) -> None:
         _, first = fp.resolve_functional_pyramid_directory_route(
             pyramid_id=m.FunctionalPyramidId("pyramid"),
