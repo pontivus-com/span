@@ -24,19 +24,20 @@ Neither matrix is a release receipt.
 The immutable published Beta-3 baseline is
 `6bbc84f7e074cf8532ed773b0f3fde736a03f0d7`.
 
-Before the runtime semantic correction, the generic FD-67 regression at
-`9a3b9981dec60d44f10df467bd91fa63f6fe6999` reached pytest in GitHub Actions
-CI run `45511051193`. Ruff/Black and the zero-error typing ratchet passed;
-pytest reported `993 passed, 1 skipped, 156 subtests` plus the one deliberate
-new regression failure: the explicitly declared P2W-to-P2S graph evaluated
-`DEGRADED` instead of `VALID`.
+The evidence-only Beta-3 probe at
+`72c80b1db7d3f2638b1f516abcf4f51cefd900f4` was exercised by GitHub Actions
+CI run `45514490751`. Build, Ruff/Black and typing reached the test lane. The
+generic action-aware candidate had no unrelated validation blocker and produced
+the exact observed tuple
+`(activation_ready=false, validation_findings=(), graph_findings=(INVALID_GOVERNING_EDGE,))`
+for the explicit P2W-to-P2S edge. Pytest reported `993 passed, 1 skipped, 156
+subtests` plus that deliberate defect assertion.
 
-At that immutable baseline, the graph classifier maps the equal-ranked
-P2W-to-P2S edge to `INVALID_GOVERNING_EDGE`. Candidate validation projects
-structural findings into `graph_findings` and computes
-`activation_ready = not validation_findings and not graph_findings`; the
-released defect therefore blocks activation for that otherwise-valid graph.
-This is the T01 before-state evidence.
+The earlier pre-fix regression run `45511051193` independently demonstrated
+the same released classifier at graph-health/route level: the explicit edge made
+health `DEGRADED` instead of `VALID`. Together these are the retained T01
+before-state evidence; neither evidence-only commit belongs to the Beta-4
+implementation line.
 
 ### Corrective semantic/runtime candidate
 
@@ -80,9 +81,11 @@ The assembled Beta-4 branch candidate
 - standalone plugin-notice delivery passed; and
 - the coverage artifact uploaded successfully.
 
-This closes the assembled-candidate verification gate. It is not the exact-head
-master release-readiness gate; that remains T10 after reconciliation to
-`master`.
+This was a green assembled-candidate run, but subsequent
+evidence/documentation corrections moved the branch head. It is therefore
+supporting evidence only; T07 remains open until the final branch head receives
+the same complete verification plus the required `git diff --check`. T10
+remains the separate exact-head master release-readiness gate.
 
 ## Release identity
 
