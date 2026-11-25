@@ -13,6 +13,7 @@ import json
 import os
 import pathlib
 import sys
+import traceback
 
 
 def _text(result) -> str:
@@ -723,6 +724,19 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
             }
 
 
+def _print_exception_tree(error):
+    children = getattr(error, "exceptions", ())
+    if children:
+        for child in children:
+            _print_exception_tree(child)
+        return
+    traceback.print_tb(error.__traceback__, file=sys.stderr)
+    message = str(error)
+    if len(message) > 2000:
+        message = message[:2000] + "...<truncated>"
+    print(f"{type(error).__name__}: {message}", file=sys.stderr)
+
+
 def main(argv):
     if len(argv) != 7:
         print(
@@ -731,21 +745,21 @@ def main(argv):
             file=sys.stderr,
         )
         return 2
-    print(
-        json.dumps(
-            asyncio.run(
-                _run(
-                    argv[1],
-                    argv[2],
-                    argv[3],
-                    argv[4],
-                    argv[5],
-                    argv[6],
-                )
-            ),
-            sort_keys=True,
+    try:
+        result = asyncio.run(
+            _run(
+                argv[1],
+                argv[2],
+                argv[3],
+                argv[4],
+                argv[5],
+                argv[6],
+            )
         )
-    )
+    except BaseException as exc:
+        _print_exception_tree(exc)
+        return 1
+    print(json.dumps(result, sort_keys=True))
     return 0
 
 
