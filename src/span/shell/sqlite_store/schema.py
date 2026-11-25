@@ -39,6 +39,7 @@ def validate_schema(
             f"expected {SCHEMA_VERSION}"
         )
 
+
 DDL = (
     """
     CREATE TABLE IF NOT EXISTS meta(
