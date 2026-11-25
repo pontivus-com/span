@@ -78,9 +78,11 @@ reported **1001 passed, 1 skipped, 156 subtests**, aggregate coverage was
 **85%**, the installed-MCP Beta-4 journey passed, plugin notice delivery was
 **14/14**, and coverage upload passed.
 
-This closes T07. T08 remains open until an independent reviewer who did not
-author the implementation reviews the exact candidate and leaves no unresolved
-release-blocking finding.
+Those runs are retained supporting evidence for the same assembled content.
+They do not self-close a later candidate head merely because documentation
+records them. T07–T10 are exact-head external closure facts under the Beta-4
+programme: any candidate movement reopens the applicable gate, and run/review
+identifiers are not written back into the candidate merely to record closure.
 
 ### Assembled branch verification
 
