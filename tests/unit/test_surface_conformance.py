@@ -12,6 +12,7 @@ import pathlib
 import re
 import typing
 import unittest
+from unittest import mock
 
 from jsonschema import Draft202012Validator
 
@@ -25,6 +26,7 @@ from span.shell.mcp import (
     TOOL_SCHEMAS,
     decode_request,
 )
+from span.shell.mcp.adapter import _call_functional_pyramid
 
 CORE = {"ask", "record", "reconsider"}
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -143,6 +145,19 @@ class SurfaceConformanceTest(unittest.TestCase):
         text = json.dumps(schema)
         for field in ("surface", "reference", "continuation", "selector"):
             self.assertIn(field, text)
+
+    def test_directory_selector_dispatches_to_installation_service(self):
+        selector = m.FunctionalPyramidDirectorySelector(
+            repository_id="repo-1",
+            directory="src",
+        )
+        request = m.AskRequest(selector=selector)
+        service = mock.Mock()
+        expected = object()
+        service.directory.return_value = expected
+
+        self.assertIs(_call_functional_pyramid("ask", request, service), expected)
+        service.directory.assert_called_once_with(selector)
 
     def test_reconsider_takes_paths_or_a_challenge(self):
         schema = TOOL_SCHEMAS["reconsider"]
