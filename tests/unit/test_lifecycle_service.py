@@ -2904,24 +2904,59 @@ class LifecycleServiceTest(unittest.TestCase):
             functional_pyramid_route=lifecycle_route,
         )
 
+    def _document_route(
+        self, authority: m.AuthorityBinding
+    ) -> m.FunctionalDocumentRoute:
+        placement = m.FunctionalDocumentPlacement(
+            declaring_repository_id="repo-1",
+            document=m.FunctionalDocumentRef(
+                repository_id=authority.evidence_ref.repository_id,
+                document_ref=authority.evidence_ref.locator,
+                layer=m.FunctionalPyramidLayer.P0,
+            ),
+            scope=".",
+        )
+        return m.FunctionalDocumentRoute(
+            placement=placement,
+            authority=authority,
+            governing_placements=("ROOT",),
+        )
+
     def _resolved_route(
         self,
         scope: m.EvidenceScope,
         *,
         route_id: str = "route-1",
-        relation: m.FunctionalScopeRelation = m.FunctionalScopeRelation.COVERED,
-        rules: tuple[m.FunctionalRuleRoute, ...] = (),
+        routes: tuple[m.FunctionalDocumentRoute, ...] = (),
+        status: m.FunctionalPyramidRouteStatus = m.FunctionalPyramidRouteStatus.RESOLVED,
+        unresolved: tuple[m.FunctionalPyramidFinding, ...] = (),
     ):
+        placements = tuple(route.placement for route in routes)
+        declared_layers = tuple(
+            layer
+            for layer in m.FunctionalPyramidLayer
+            if any(placement.document.layer is layer for placement in placements)
+        )
+        absent_layers = tuple(
+            layer for layer in m.FunctionalPyramidLayer if layer not in declared_layers
+        )
         return (
             m.FunctionalPyramidView(
                 pyramid_id=m.FunctionalPyramidId("fp-1"),
                 version=m.FunctionalPyramidVersion(1),
-                health=m.FunctionalPyramidHealth.VALID,
-                coverage=m.FunctionalPyramidCoverage.PARTIAL,
-                scope_relation=relation,
-                status=m.FunctionalPyramidRouteStatus.RESOLVED,
+                health=(
+                    m.FunctionalPyramidHealth.VALID
+                    if not unresolved
+                    else m.FunctionalPyramidHealth.DEGRADED
+                ),
+                status=status,
                 semantic_scope=scope,
-                rules=rules,
+                placements=placements,
+                routes=routes,
+                provenance=(),
+                unresolved=unresolved,
+                declared_layers=declared_layers,
+                absent_layers=absent_layers,
             ),
             m.FunctionalRouteIdentity(route_id),
         )
@@ -2940,14 +2975,9 @@ class LifecycleServiceTest(unittest.TestCase):
         return revision.content
 
     def test_normative_create_derives_route_and_all_applicable_authorities(self):
-        rule = m.FunctionalRuleRoute(
-            rule_id="rule-1",
-            layer=m.FunctionalPyramidLayer.P1,
-            authority=self.authority.bindings["auth-1"],
-            governing_rule_ids=("ROOT",),
-        )
+        route = self._document_route(self.authority.bindings["auth-1"])
         service = self._governed_lifecycle(
-            lambda scope: self._resolved_route(scope, rules=(rule,))
+            lambda scope: self._resolved_route(scope, routes=(route,))
         )
         result = service.record(
             _create_wire(
@@ -2998,59 +3028,55 @@ class LifecycleServiceTest(unittest.TestCase):
             any(isinstance(item, m.FunctionalRouteSupport) for item in content.support)
         )
 
-    def test_outside_functional_scope_records_resolved_empty_route_only(self):
+    def test_governed_normative_record_never_uses_empty_uncovered_route(self):
+        route = self._document_route(self.authority.bindings["auth-1"])
         service = self._governed_lifecycle(
             lambda scope: self._resolved_route(
                 scope,
-                route_id="route-empty",
-                relation=m.FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE,
+                route_id="route-root",
+                routes=(route,),
             )
         )
         result = service.record(
             _create_wire(
-                "sub-outside",
+                "sub-governed-root",
                 conclusion=_conclusion(assertion_nature=m.AssertionNature.NORMATIVE),
             )
         )
         self.assertIsInstance(result, m.UnderstandingRecorded)
         self.assertEqual(result.qualification.state, m.SupportState.CURRENT)
-        content = self._latest_supported_content("u:sub-outside")
+        content = self._latest_supported_content("u:sub-governed-root")
         self.assertEqual(
             tuple(
                 item.route_identity.value
                 for item in content.support
                 if isinstance(item, m.FunctionalRouteSupport)
             ),
-            ("route-empty",),
+            ("route-root",),
         )
-        self.assertFalse(
-            any(
-                isinstance(item, m.AuthoritySupportDependency)
+        self.assertEqual(
+            tuple(
+                item.authority
                 for item in content.support
-            )
+                if isinstance(item, m.AuthoritySupportDependency)
+            ),
+            (self.authority.bindings["auth-1"],),
         )
 
     def test_unresolved_governance_is_retained_but_qualified_unverifiable(self):
         finding = m.FunctionalPyramidFinding(
-            reason=m.FunctionalPyramidFindingReason.UNCOVERED_PATH,
+            reason=m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
             repository_id="repo-1",
-            detail="functional scope is uncovered",
-            recovery="declare applicable Functional Context coverage",
+            detail="canonical governing document is unavailable",
+            recovery="restore the declared canonical document",
         )
 
         def unresolved(scope):
-            return (
-                m.FunctionalPyramidView(
-                    pyramid_id=m.FunctionalPyramidId("fp-1"),
-                    version=m.FunctionalPyramidVersion(1),
-                    health=m.FunctionalPyramidHealth.VALID,
-                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
-                    scope_relation=m.FunctionalScopeRelation.UNCOVERED,
-                    status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
-                    semantic_scope=scope,
-                    unresolved=(finding,),
-                ),
-                m.FunctionalRouteIdentity("route-unresolved"),
+            return self._resolved_route(
+                scope,
+                route_id="route-unresolved",
+                status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
+                unresolved=(finding,),
             )
 
         service = self._governed_lifecycle(unresolved)
@@ -3170,17 +3196,12 @@ class LifecycleServiceTest(unittest.TestCase):
 
     def test_normative_confirm_reestablishes_changed_server_route_support(self):
         route_id = ["route-1"]
-        rule = m.FunctionalRuleRoute(
-            rule_id="rule-1",
-            layer=m.FunctionalPyramidLayer.P1,
-            authority=self.authority.bindings["auth-1"],
-            governing_rule_ids=("ROOT",),
-        )
+        route = self._document_route(self.authority.bindings["auth-1"])
         service = self._governed_lifecycle(
             lambda scope: self._resolved_route(
                 scope,
                 route_id=route_id[0],
-                rules=(rule,),
+                routes=(route,),
             )
         )
         created = service.record(
