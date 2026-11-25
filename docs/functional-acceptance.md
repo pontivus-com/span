@@ -24,7 +24,7 @@ temporary-store path. Exact-head release closure remains owned by T14-H7.
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
 | FA-01 | Unconfigured versus excluded | `test_status_projects_inactive_and_live_active_health`; `test_record_exclude_has_no_semantic_effect_projection`; `test_descriptive_recording_does_not_gain_route_support` |
-| FA-02 | Pure action-aware candidate validation | `test_valid_activate_candidate_is_ready`; `test_revision_candidate_reports_unknown_and_stale_target`; `test_candidate_reports_duplicate_unregistered_and_other_active_members` |
+| FA-02 | Pure action-aware candidate validation | `test_valid_activate_candidate_is_ready`; `test_candidate_accepts_explicit_p2w_to_p2s_edge`; `test_revision_candidate_reports_unknown_and_stale_target`; `test_candidate_reports_duplicate_unregistered_and_other_active_members` |
 | FA-03 | Activation and replay | `test_record_activate_commits_members_effects_and_receipt`; `test_invalid_activation_leaves_participation_state_unchanged`; `test_record_replay_preserves_receipt_without_new_effect_discovery`; `test_installed_lifecycle_over_stdio` |
 | FA-04 | Revision and removal | `test_record_revise_only_reports_actual_participation_changes`; `test_record_revise_enforces_version_cas`; `test_revision_candidate_reports_unknown_and_stale_target` |
 | FA-05 | Partial coverage | `test_partial_uncovered_path_is_route_unresolved_but_health_valid`; `test_wholly_outside_scope_is_resolved_empty_governance` |
@@ -37,13 +37,13 @@ temporary-store path. Exact-head release closure remains owned by T14-H7.
 | FA-12 | Multi-path and broad semantic scope | `test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered`; `test_overlapping_direct_contexts_precede_inherited_contexts` |
 | FA-13 | Membership is not applicability | `test_route_identity_ignores_instance_version_and_unrelated_member` |
 | FA-14 | Cross-repository authority | `test_unavailable_member_is_distinct_from_unknown_context`; `test_rule_owner_uses_existing_authority_resolver` |
-| FA-15 | Authority graph defects | `test_authority_graph_defects_are_explicit` |
+| FA-15 | Authority graph defects | `test_authority_graph_defects_are_explicit`; `test_explicit_p2w_to_p2s_governing_edge_is_valid`; `test_reverse_p2s_to_p2w_governing_edge_is_invalid`; `test_same_p2s_governing_edge_is_invalid`; `test_same_p2w_governing_edge_is_invalid`; `test_joint_p2_applicability_does_not_create_governing_edge` |
 | FA-16 | Route versus authority currency | `test_authority_currency_does_not_change_route_identity_or_health`; `test_authority_support_status_and_presence` |
 | FA-17 | Normative create | `test_normative_create_derives_route_and_all_applicable_authorities`; `test_unresolved_governance_is_retained_but_qualified_unverifiable`; `test_mixed_answer_excludes_noncurrent_normative_conclusion` |
 | FA-18 | Descriptive create | `test_descriptive_recording_does_not_gain_route_support` |
 | FA-19 | Authority-content change | `test_authority_currency_does_not_change_route_identity_or_health`; `test_authority_source_change_is_considered_not_forced_stale`; `test_authority_support_status_and_presence` |
 | FA-20 | Applicability change | `test_material_applicability_changes_change_route_identity`; `test_functional_route_support_distinguishes_route_states`; `test_governance_only_change_crosses_physical_repository_boundary` |
-| FA-21 | Reverse authority navigation | `test_exact_canonical_rule_owner_scope_exposes_reverse_graph`; `test_installed_cross_repository_governance_journey` |
+| FA-21 | Reverse authority navigation | `test_exact_canonical_rule_owner_scope_exposes_reverse_graph`; `test_explicit_p2w_to_p2s_governing_edge_is_valid`; `test_installed_cross_repository_governance_journey` |
 | FA-22 | Cross-repository reconsideration | `test_governance_only_change_crosses_physical_repository_boundary` |
 | FA-23 | Implementation change | `test_changed_path_maps_containment_direct_and_indirect`; `test_discovery_membership_change_is_direct` |
 | FA-24 | Mixed answer | `test_descriptive_answer_survives_unresolved_governing_route`; `test_mixed_answer_excludes_noncurrent_normative_conclusion`; `test_unresolved_governance_is_retained_but_qualified_unverifiable` |

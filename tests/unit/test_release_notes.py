@@ -106,7 +106,7 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertIn('if [[ "${REF_NAME}" != "master" ]]', workflow)
         self.assertIn('if [[ "${requested}" != "${version}" ]]', workflow)
 
-    def test_active_release_surfaces_contain_only_beta3_identity(self):
+    def test_active_release_surfaces_reject_beta2_identity(self):
         roots = (
             REPO_ROOT / "docs",
             REPO_ROOT / "src",

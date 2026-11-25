@@ -893,6 +893,21 @@ A MIXED route is RESOLVED only when every functional portion is covered and no
 other structural unresolved branch exists. Outside portions never create
 `UNCOVERED_PATH`.
 
+**Governing-edge admissibility.** Implement FD-67 with one pure closed relation
+owned by `src/span/core/functional_pyramid.py`. The core structural validator
+and ordinary rule traversal both delegate governing-edge classification to that
+same relation; candidate validation and ACTIVE health continue to consume the
+structural finding set produced from it. The relation encodes FD-67 directly and
+is never derived from an integer rank, enum declaration order, presentation
+order, joint applicability, membership, document class or another inferred
+property.
+
+The route-order helper (whether retained as `_layer_rank` or renamed) is a
+presentation mechanism for FD-72 only. Its fixed P0/P1/P2S/P2W/P3/P4 order must
+not decide whether a governing edge is valid. P0/`ROOT` remains the existing
+separate terminal rule. Do not add another graph validator or route-specific
+exception.
+
 The same declaration graph owns reverse navigation. Reverse traversal derives
 dependent rules/contexts from the forward declaration edges; no second impact
 registry is stored.

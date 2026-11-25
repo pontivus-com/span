@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.0b4 — 2026-11-25
+
+### Functional Pyramid contract-sublayer derivation
+
+- Accept an explicitly declared workflow-contract `P2W -> P2S` governing
+  relation. The reverse and same-sublayer P2 relations remain invalid, and
+  joint applicability never manufactures a governing edge.
+- Use one pure core governing-edge admissibility relation for graph validation
+  and ordinary route traversal. Deterministic `P0 -> P1 -> P2S -> P2W -> P3 ->
+  P4` presentation remains a separate projection concern and does not classify
+  graph validity.
+- Prove the corrected relation through candidate validation, ACTIVE structural
+  health, forward route resolution, reverse authority navigation and the
+  non-editable installed-MCP cross-repository journey.
+- Preserve repository lifecycle schema **15**, installation Functional Pyramid
+  schema **1**, declaration version **1**, the existing graph carriers, and
+  exactly the public `ask`, `record`, and `reconsider` operations.
+- Keep adopter declarations, manifests, receipts and raw integration evidence
+  outside the public Span repository; the correction is generic and contains
+  no repository-specific exception.
+
 ## 1.0.0b3 — 2026-11-24
 
 ### Beta 3 corrective integrity

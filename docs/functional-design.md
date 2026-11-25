@@ -193,23 +193,27 @@ and support; it never copies the rule text into a competing rule owner.
 
 **FD-67 — The layer relation is fixed and validated.**
 The Functional Pyramid layers are `P0`, `P1`, `P2S`, `P2W`, `P3` and
-`P4`.
+`P4`. For governing derivation, the contract layer has two ordered
+sublayers: `P2S` precedes `P2W`.
 
 - P0 rules have `ROOT`, not a governing rule.
 - P1 rules are governed by applicable P0 rules. A missing or undecided parent is
   `UNRESOLVED_RULE_PARENT`; an unresolved relationship is not a valid accepted
   governing edge.
-- P2S and P2W rules are contract-layer siblings. They identify applicable
-  higher goals/invariants; neither becomes the other's derivation parent merely
-  because both apply.
+- P2S and P2W rules identify applicable higher goals/invariants.
+- A P2W rule may explicitly identify a P2S rule as a direct governing rule. A
+  P2S rule cannot derive from a P2W rule.
+- Applicability never creates that P2W-to-P2S relationship. It exists only when
+  the P2W declaration names the P2S rule in its direct governing-rule IDs.
+- A governing edge within P2S or within P2W is invalid.
 - P3 rules identify the applicable contracts/invariants they realize.
 - P4 rules identify the applicable behavior or contracts they realize.
 - A direct governing edge may skip an absent intermediate layer.
-- Same-layer edges and edges from a higher layer to a lower governing parent are
-  invalid derivation edges.
+- Other same-layer edges and edges from a higher layer to a lower governing
+  parent are invalid derivation edges.
 
 A valid edge establishes derivation only. It does not prove that the semantic
-rule text is correct. *(G7, F11)*
+rule text is correct. *(G7, G8, F5, F11, F12)*
 
 **FD-68 — Route resolution follows declarations to closure.**
 For each selected semantic-scope portion Span:
@@ -285,9 +289,11 @@ to this functional design rather than an implementation-local string or fallback
 **FD-72 — Route ordering and provenance are deterministic.**
 Paths retain request order after normalization. Direct contexts precede inherited
 contexts and use declared stable ordering within each class. Rules are presented
-by layer from P0 through P4 and then stable rule identity. Provenance edges use
-stable identities. The same repository state and semantic scope produce the
-same route ordering. *(A2, F11)*
+in the fixed layer order `P0`, `P1`, `P2S`, `P2W`, `P3`, `P4` and
+then stable rule identity. This presentation order does not classify governing
+edges; FD-67 alone determines edge admissibility. Provenance edges use stable
+identities. The same repository state and semantic scope produce the same route
+ordering. *(A2, F11)*
 
 **FD-73 — Route identity tracks applicability, not rule prose.**
 A route-support identity changes when its normalized scope, directly matched
@@ -1191,7 +1197,8 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
    multi-repository member/declaration set and REVISE validation of an exact
    pyramid/version replacement return deterministic validation + graph findings,
    change no durable participation state, and set `activation_ready` exactly
-   from the closed blocker rules.
+   from the closed blocker rules. Governing-edge validation uses the same FD-67
+   relation later used by ACTIVE health and ordinary route resolution.
 3. **Activation and replay.** A valid activation atomically creates one pyramid
    identity/version and one installation-scoped Functional Pyramid receipt;
    replay is idempotent without choosing a member repository as receipt owner;
@@ -1242,7 +1249,9 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 15. **Authority graph defects.** Unknown rules, duplicate owners, context cycles,
     rule cycles, invalid governing edges and missing required parents are
     explicit unresolved states. An unresolved parent is never accepted as a
-    valid derivation edge.
+    valid derivation edge. The acceptance surface proves FD-67's permitted
+    contract-sublayer derivation and rejects its reverse and same-sublayer
+    prohibited cases as `INVALID_GOVERNING_EDGE`.
 16. **Route versus authority currency.** A structurally complete route can remain
     RESOLVED while an applicable authority is DRAFT/SUPERSEDED/changed and
     normative support becomes non-current through authority support.
@@ -1264,7 +1273,9 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     unchanged.
 21. **Reverse authority navigation.** Asking an exact canonical rule-owner scope
     exposes its declared downstream rule/context dependency graph without
-    predicting a proposed edit or copying rule text.
+    predicting a proposed edit or copying rule text. For FD-67's permitted
+    contract-sublayer derivation, selecting the governing rule's canonical owner
+    exposes the declared dependent through that same graph.
 22. **Cross-repository reconsideration.** A governing change in repository A
     returns affected normative understanding in repository B when the same
     pyramid graph connects them; the caller does not enumerate B. The Changed

@@ -37,7 +37,7 @@ _GOVERNED_A_FILES = {
     "docs/functional-pyramid.json": (
         '{"version":1,"contexts":[{"context_id":"ctx-a",'
         '"coverage":[{"kind":"PREFIX","path":"src"}],"inherits":[],'
-        '"rules":[{"repository_id":"repo-b","identity":"rule-p0"}]}],"rules":[]}\n'
+        '"rules":[{"repository_id":"repo-b","identity":"rule-p2w"}]}],"rules":[]}\n'
     ),
     "docs/invalid-functional-pyramid.json": "{not-json\n",
 }
@@ -46,10 +46,23 @@ _GOVERNED_B_FILES = {
     "README.md": "# governed B\n",
     "rules/p0-v1.md": "P0 authority version one.\n",
     "rules/p0-v2.md": "P0 authority version two.\n",
+    "rules/p1.md": "P1 authority.\n",
+    "rules/p2s.md": "Shared P2 contract authority.\n",
+    "rules/p2w.md": "Workflow P2 contract authority.\n",
     "docs/functional-pyramid.json": (
-        '{"version":1,"contexts":[],"rules":[{"rule_id":"rule-p0","layer":"P0",'
+        '{"version":1,"contexts":[],"rules":['
+        '{"rule_id":"rule-p0","layer":"P0",'
         '"owner":{"repository_id":"repo-b","authority_ref":"authority-p0-v1"},'
-        '"governing_rule_ids":["ROOT"]}]}\n'
+        '"governing_rule_ids":["ROOT"]},'
+        '{"rule_id":"rule-p1","layer":"P1",'
+        '"owner":{"repository_id":"repo-b","authority_ref":"authority-p1"},'
+        '"governing_rule_ids":[{"repository_id":"repo-b","identity":"rule-p0"}]},'
+        '{"rule_id":"rule-p2s","layer":"P2S",'
+        '"owner":{"repository_id":"repo-b","authority_ref":"authority-p2s"},'
+        '"governing_rule_ids":[{"repository_id":"repo-b","identity":"rule-p1"}]},'
+        '{"rule_id":"rule-p2w","layer":"P2W",'
+        '"owner":{"repository_id":"repo-b","authority_ref":"authority-p2w"},'
+        '"governing_rule_ids":[{"repository_id":"repo-b","identity":"rule-p2s"}]}]}\n'
     ),
 }
 
@@ -369,6 +382,9 @@ dispose();
             "items = [\n"
             "    binding('authority-p0-v1', 'rules/p0-v1.md'),\n"
             "    binding('authority-p0-v2', 'rules/p0-v2.md'),\n"
+            "    binding('authority-p1', 'rules/p1.md'),\n"
+            "    binding('authority-p2s', 'rules/p2s.md'),\n"
+            "    binding('authority-p2w', 'rules/p2w.md'),\n"
             "]\n"
             "out.write_text(json.dumps([m.to_canonical(item) for item in items]), "
             "encoding='utf-8')\n"
@@ -504,11 +520,18 @@ dispose();
 
         self.assertFalse(observed["ask_a_error"])
         self.assertEqual(observed["ask_a_route_status"], "RESOLVED")
+        self.assertEqual(
+            observed["ask_a_rule_ids"],
+            ["rule-p0", "rule-p1", "rule-p2s", "rule-p2w"],
+        )
         self.assertIn("authority-p0-v1", observed["ask_a_rule_authority_ids"])
+        self.assertIn("authority-p2s", observed["ask_a_rule_authority_ids"])
+        self.assertIn("authority-p2w", observed["ask_a_rule_authority_ids"])
 
         self.assertFalse(observed["owner_ask_error"])
         self.assertEqual(observed["owner_scope_relation"], "UNCOVERED")
         self.assertEqual(observed["owner_route_status"], "UNRESOLVED")
+        self.assertIn("rule-p2w", observed["owner_downstream_rules"])
         self.assertIn("ctx-a", observed["owner_downstream_contexts"])
 
         self.assertFalse(observed["created_error"])
