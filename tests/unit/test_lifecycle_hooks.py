@@ -119,15 +119,6 @@ class LifecycleHooksTest(unittest.TestCase):
                     locator="docs/functional-pyramid.json",
                 ),
             ),
-            functional_scope=m.FunctionalScope(
-                (
-                    m.FunctionalScopeSelector(
-                        m.FunctionalScopeSelectorKind.PREFIX,
-                        path="src",
-                    ),
-                )
-            ),
-            coverage=m.FunctionalPyramidCoverage.PARTIAL,
         )
         degraded_finding = m.FunctionalPyramidFinding(
             reason=m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
@@ -592,15 +583,6 @@ class LifecycleHooksTest(unittest.TestCase):
                             locator="docs/functional-pyramid.json",
                         ),
                     ),
-                    functional_scope=m.FunctionalScope(
-                        (
-                            m.FunctionalScopeSelector(
-                                m.FunctionalScopeSelectorKind.PREFIX,
-                                path="src",
-                            ),
-                        )
-                    ),
-                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
                 ),
             ),
         )
@@ -637,15 +619,6 @@ class LifecycleHooksTest(unittest.TestCase):
                             locator="docs/functional-pyramid.json",
                         ),
                     ),
-                    functional_scope=m.FunctionalScope(
-                        (
-                            m.FunctionalScopeSelector(
-                                m.FunctionalScopeSelectorKind.PREFIX,
-                                path="src",
-                            ),
-                        )
-                    ),
-                    coverage=m.FunctionalPyramidCoverage.PARTIAL,
                 ),
             ),
             findings=(finding,),

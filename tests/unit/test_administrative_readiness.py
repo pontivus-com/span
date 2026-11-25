@@ -110,9 +110,7 @@ class StoreProbeTest(unittest.TestCase):
             (root / ".span" / "functional-pyramid.json").write_text(
                 json.dumps(
                     {
-                        "version": 1,
-                        "functional_scope": [{"kind": "PREFIX", "path": "src"}],
-                        "coverage": "PARTIAL",
+                        "version": 2,
                         "declaration_sources": [
                             {
                                 "locator": "docs/functional-pyramid.json",
@@ -125,33 +123,34 @@ class StoreProbeTest(unittest.TestCase):
             (root / "docs" / "functional-pyramid.json").write_text(
                 json.dumps(
                     {
-                        "version": 1,
-                        "contexts": [
+                        "version": 2,
+                        "placements": [
                             {
-                                "context_id": "ctx-repo",
-                                "coverage": [{"kind": "PREFIX", "path": "src"}],
-                                "inherits": [],
-                                "rules": [],
+                                "document": {
+                                    "repository_id": "repo",
+                                    "document_ref": "docs/foundation.md",
+                                    "layer": "P0",
+                                },
+                                "scope": ".",
+                                "governing_placements": ["ROOT"],
                             }
                         ],
-                        "rules": [],
                     }
                 )
             )
+            (root / "docs" / "foundation.md").write_text("# Foundation\n")
 
             report = probe_functional_pyramid_repository(data, "repo", root)
 
             self.assertEqual(report["declarations"]["status"], "ready")
             self.assertTrue(report["declarations"]["valid"])
-            self.assertEqual(report["declarations"]["coverage"], "PARTIAL")
             self.assertEqual(report["declarations"]["sources"][0]["status"], "valid")
 
             (root / "docs" / "functional-pyramid.json").write_text(
                 json.dumps(
                     {
-                        "version": 1,
-                        "contexts": [],
-                        "rules": [],
+                        "version": 2,
+                        "placements": [],
                         "unexpected": True,
                     }
                 )
