@@ -70,10 +70,22 @@ jobs:
           "$RUNNER_TEMP/span-tools/node_modules/.bin/graft" --version
 
       - name: Diff hygiene
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin master:refs/remotes/origin/master
-          git diff --check origin/master...HEAD
+          zero=0000000000000000000000000000000000000000
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            git diff --check "${BASE_SHA}...HEAD"
+          elif [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "${zero}" ]]; then
+            git diff --check "${BEFORE_SHA}..HEAD"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --check HEAD^..HEAD
+          else
+            git diff --check
+          fi
 
       - name: Lint and format
         run: |
@@ -117,6 +129,51 @@ jobs:
           python -m pip install --upgrade pip build
           python scripts/build_identity.py
           python -m build
+
+      - name: Inspect distribution contents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          dist = Path("dist")
+          sdists = sorted(dist.glob("*.tar.gz"))
+          wheels = sorted(dist.glob("*.whl"))
+          if len(sdists) != 1 or len(wheels) != 1:
+              raise SystemExit(
+                  f"expected one sdist and one wheel, got {sdists!r} and {wheels!r}"
+              )
+
+          def validate_paths(names, label):
+              for raw in names:
+                  path = raw.replace("\\", "/")
+                  parts = path.split("/")
+                  if path.startswith("/") or ".." in parts:
+                      raise SystemExit(f"{label} contains unsafe archive path: {raw}")
+
+          with tarfile.open(sdists[0], "r:gz") as archive:
+              sdist_names = archive.getnames()
+          validate_paths(sdist_names, "sdist")
+          for suffix in (
+              "/pyproject.toml",
+              "/README.md",
+              "/src/span/__init__.py",
+              "/src/span/BUILD_IDENTITY",
+          ):
+              if not any(name.endswith(suffix) for name in sdist_names):
+                  raise SystemExit(f"sdist missing required content: {suffix}")
+
+          with zipfile.ZipFile(wheels[0]) as archive:
+              wheel_names = archive.namelist()
+          validate_paths(wheel_names, "wheel")
+          for required in ("span/__init__.py", "span/BUILD_IDENTITY"):
+              if required not in wheel_names:
+                  raise SystemExit(f"wheel missing required content: {required}")
+
+          print(sdists[0])
+          print(wheels[0])
+          PY
 
       - name: Check the distribution
         run: |
