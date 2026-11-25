@@ -89,6 +89,19 @@ class SurfaceConformanceTest(unittest.TestCase):
             self.assertIn(name, TOOL_SCHEMAS)
             self.assertIn(name, TOOL_OUTPUT_SCHEMAS)
 
+
+    def test_document_route_parent_union_matches_compact_wire_grammar(self):
+        schema = TOOL_OUTPUT_SCHEMAS["ask"]
+        route = schema["$defs"]["FunctionalDocumentRoute"]
+        branches = route["properties"]["governing_placements"]["items"]["anyOf"]
+        refs = {
+            branch["$ref"]
+            for branch in branches
+            if isinstance(branch, dict) and "$ref" in branch
+        }
+        self.assertIn("#/$defs/FunctionalDocumentPlacement", refs)
+        self.assertNotIn("#/$defs/FunctionalDocumentPlacement__tag", refs)
+
     def test_ask_has_no_context_input(self):
         text = json.dumps(TOOL_SCHEMAS["ask"])
         self.assertNotIn("context_id", text)

@@ -91,7 +91,9 @@ def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
             "items": _project_hint(item_hint, defs, seen),
         }
     if origin is _typing.Union or origin is _types.UnionType:
-        # Tagged dataclass unions dispatch on $type; other unions are anyOf.
+        # Only genuinely ambiguous dataclass unions retain $type on the wire.
+        # A single dataclass candidate plus scalar alternatives is structurally
+        # unambiguous and is compacted without a tag by to_wire().
         dataclass_members = [
             a
             for a in args
@@ -100,6 +102,7 @@ def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
         if dataclass_members and all(
             isinstance(a, type) for a in args if a is not type(None)
         ):
+            tagged = len(dataclass_members) >= 2
             refs = []
             for member in args:
                 if member is type(None):
@@ -108,7 +111,10 @@ def _project_inner(hint: object, defs: dict[str, dict], seen: set[str]) -> dict:
                     member, "__dataclass_fields__"
                 ):
                     _ensure_def(member, defs, seen)
-                    refs.append({"$ref": f"#/$defs/{public_schema_name(member)}__tag"})
+                    suffix = "__tag" if tagged else ""
+                    refs.append(
+                        {"$ref": f"#/$defs/{public_schema_name(member)}{suffix}"}
+                    )
                 else:
                     refs.append(_project_hint(member, defs, seen))
             if len(refs) == 1:
