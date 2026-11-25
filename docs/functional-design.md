@@ -121,7 +121,7 @@ write. Surface obtain projects UNCONFIGURED/EXCLUDED explicitly and projects
 ACTIVE together with current health rather than using absence or `None` to
 conflate states. *(G4, G7, G8, F11, F12, L12, L13)*
 
-**FD-62 — Directory resolution is total and declaration-driven.**
+**FD-62 — Directory selection is declaration-driven.**
 A declared document placement carries one canonical document reference, one
 layer, one explicit repository-relative directory `scope` in its declaring
 repository, and its declared governing placements. The repository root is the
@@ -158,19 +158,21 @@ ambiguous repository identity are rejected. Semantic classification, model
 judgment, file-name heuristics and structural proximity never participate.
 *(G1, G4, G7, F11, F12, L12–L13)*
 
-**FD-63 — Every applicable placement composes.**
-A directory resolves to all placements whose scope contains it. Applicability is
-additive: a narrower or more specific placement adds obligations and never
-suppresses a broader placement. Several placements applying to one directory is
-normal and is not an `AmbiguousSurface`. One placement applies to every
-descendant directory of its scope. *(G4, G7, F11)*
+**FD-63 — Applicable-set construction is monotone.**
+For one normalized directory, start with an empty placement set and walk the
+directory's canonical scope prefixes from `.` through the directory itself.
+At each visited scope, union the placements declared exactly at that scope by
+placement identity. The procedure only adds identities; it has no
+most-specific-wins subtraction step. For a semantic selection with several
+directory seeds, run the same procedure per seed and union the results while
+retaining seed provenance. *(G4, G7, F11)*
 
-**FD-64 — Ancestor composition is additive and never overrides.**
-Directory ancestry composes applicability to a fixed point: a directory receives
-every placement declared at its own scope and at each declared ancestor scope. A
-descendant placement may refine or add to an ancestor placement; it may not
-silently replace it. Governing-document relationships are separate derivation
-edges under FD-67 and do not create applicability. *(F11)*
+**FD-64 — Applicability selection and governing traversal are separate.**
+Complete FD-63 placement selection before following any governing-placement
+edge. FD-67 governing traversal may add governing placements to the returned
+route closure, but that relationship never changes which declaration scopes
+matched the selected directory or makes a placement applicable to an unrelated
+directory. *(F11)*
 
 **FD-65 — Placement identity has one declaration owner.**
 A placement identity names one canonical declaration within the resolved
@@ -405,12 +407,13 @@ Functional Pyramid record actions. No source, filesystem, installer, model,
 `ask`, `reconsider` or hook event performs a hidden participation write.
 
 For an ACTIVE instance, live health is computed from current structural state.
-A declaration source that exists but cannot be decoded into the current
-declaration model contributes the FD-71 graph reason `INVALID_DECLARATION`; in
-particular, an ACTIVE member that still names a Version-1 rule declaration
-remains ACTIVE but is structurally degraded until an accepted Version-2 revision.
-This ACTIVE-state classification is distinct from candidate validation of a
-proposed unsupported source, which uses `INVALID_DECLARATION_SOURCE`.
+A required ACTIVE declaration source that is missing or cannot be decoded into
+the current declaration model contributes the FD-71 graph reason
+`INVALID_DECLARATION`; in particular, an ACTIVE member that still names a
+Version-1 rule declaration remains ACTIVE but is structurally degraded until an
+accepted Version-2 revision. This ACTIVE-state classification is distinct from
+candidate validation of a proposed source, which uses
+`MISSING_DECLARATION_SOURCE` or `INVALID_DECLARATION_SOURCE`.
 
 - `VALID` iff there is no current structural finding for required member
   availability, declaration validity, placement/document identity ownership,
@@ -480,10 +483,10 @@ transaction decision. For the Beta-5 Version-1 → Version-2 cutover, a REVISE
 whose current ACTIVE declarations are undecodable solely because they are
 Version-1 rule declarations validates the replacement Version-2 candidate
 without translating or reconstructing the old graph. Its old-side route effect
-root is every retained normative revision whose existing FunctionalRouteSupport
-is bound to the target pyramid/current version; those revisions require
-re-establishment because a Version-1 rule-route identity cannot be proven equal
-to the Version-2 document-route identity. No other declaration defect receives
+root is every retained current normative revision whose existing
+FunctionalRouteSupport is bound to the target pyramid identity; those revisions
+require re-establishment because a Version-1 rule-route identity cannot be proven
+equal to the Version-2 document-route identity. No other declaration defect receives
 this cutover treatment, and no Version-1 placement/document graph is fabricated.
 
 The immutable receipt retains the durable participation

@@ -892,18 +892,9 @@ already has one owning surface under FD-6, so support re-evaluation recovers tha
 canonical owner from the retained understanding and combines it with the
 dependency's persisted semantic EvidenceScope.
 
-It returns the canonical governing projection and route identity. Resolution
-order is exactly FD-62/FD-68:
-
-1. normalize the selected directory or derive one directory per semantic-scope
-   member;
-2. select every placement declaring the repository whose scope contains that
-   directory, including `.` and every declared ancestor scope;
-3. order and deduplicate by placement identity while preserving provenance;
-4. resolve each placement's canonical document and authority binding;
-5. expand every direct governing-placement edge to `ROOT` or a typed structural
-   terminal;
-6. report `declared_layers` and `absent_layers` for the selection.
+It returns the canonical governing projection and route identity. FD-62 and
+FD-68 exclusively own the resolver decision procedure and ordering; this layer
+does not duplicate that procedure.
 
 Implement exact-directory selection with one canonical scope constructor plus
 one `contains(placement.scope, selected_directory)` filter over declarations;
@@ -959,8 +950,9 @@ otherwise `DEGRADED` with exactly those findings. The structural set includes a
 missing repository-root P0 placement, an illegal governing edge including scope
 containment, duplicate placement ownership, a document cycle, an unknown or
 unavailable required member/document, and FD-71 `INVALID_DECLARATION` when a
-required ACTIVE declaration cannot be decoded. Candidate-only
-`INVALID_DECLARATION_SOURCE` is never inserted into
+required ACTIVE declaration source is missing or cannot be decoded.
+Candidate-only `MISSING_DECLARATION_SOURCE` and
+`INVALID_DECLARATION_SOURCE` are never inserted into
 `FunctionalPyramidStatus.findings`. Do not persist health. Do not include
 authority currency, absent documentation layers or semantic support in health.
 
@@ -1424,8 +1416,9 @@ source remains candidate `INVALID_DECLARATION_SOURCE`.
 The Version-2 REVISE cutover does not need an old declaration adapter. After the
 replacement candidate passes ordinary Version-2 validation, service composition
 enumerates the old-side route-dependent set from retained canonical support:
-every normative conclusion revision whose `FunctionalRouteSupport` references
-the target pyramid and current version is an affected route dependency. The
+every retained current normative conclusion revision whose
+`FunctionalRouteSupport` references the target pyramid identity is an affected
+route dependency. The
 write combines that exact set with ordinary participation effects, commits the
 new Version-2 member intent atomically, retains historical receipts and semantic
 conclusions, and returns those dependent effects for evidence-near
