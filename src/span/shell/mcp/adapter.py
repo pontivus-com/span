@@ -382,6 +382,7 @@ def _is_functional_pyramid_request(tool_name: str, request: object) -> bool:
             request.selector,
             (
                 m.FunctionalPyramidSelector,
+                m.FunctionalPyramidDirectorySelector,
                 m.FunctionalPyramidCandidateSelector,
                 m.FunctionalPyramidReceiptSelector,
             ),

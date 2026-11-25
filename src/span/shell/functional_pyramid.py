@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib as _contextlib
 import datetime as _datetime
+import json as _json
 import pathlib as _pathlib
 import typing as _typing
 
@@ -56,13 +57,20 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
             bootstrap = _fp.decode_functional_pyramid_bootstrap(result.content)
         except ValueError as exc:
             raise FunctionalPyramidDeclarationInvalid(
-                "Functional Pyramid bootstrap violates the Version-1 contract"
+                "Functional Pyramid bootstrap violates the Version-2 contract"
             ) from exc
         return result.evidence_ref, bootstrap
 
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
-    ) -> tuple[m.EvidenceRef, m.FunctionalPyramidDeclaration] | m.EvidenceSourceFailure:
+    ) -> (
+        tuple[
+            m.EvidenceRef,
+            m.FunctionalPyramidDeclaration,
+            tuple[m.FunctionalPyramidFinding, ...],
+        ]
+        | m.EvidenceSourceFailure
+    ):
         if request.ranges:
             raise FunctionalPyramidDeclarationInvalid(
                 "Functional Pyramid declaration sources must be whole documents"
@@ -71,12 +79,26 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
         if isinstance(result, m.EvidenceSourceFailure):
             return result
         try:
-            declaration = _fp.decode_functional_pyramid_declaration(result.content)
+            declaration, findings = _fp.decode_functional_pyramid_declaration(
+                result.content,
+                repository_id=repository_id,
+                declaration_locator=request.locator,
+            )
         except ValueError as exc:
+            unsupported_version: int | None = None
+            try:
+                parsed = _json.loads(result.content)
+                if isinstance(parsed, dict):
+                    version = parsed.get("version")
+                    if isinstance(version, int) and not isinstance(version, bool):
+                        unsupported_version = version
+            except _json.JSONDecodeError:
+                pass
             raise FunctionalPyramidDeclarationInvalid(
-                "Functional Pyramid declaration violates the Version-1 contract"
+                "Functional Pyramid declaration violates the Version-2 contract",
+                unsupported_version=unsupported_version,
             ) from exc
-        return result.evidence_ref, declaration
+        return result.evidence_ref, declaration, findings
 
 
 class _InstallationAuthorityResolver:

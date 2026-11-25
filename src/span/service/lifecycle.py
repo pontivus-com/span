@@ -498,8 +498,8 @@ class LifecycleService:
                 route_identity=route_identity,
             )
         ]
-        for rule in view.rules:
-            dependency = m.AuthoritySupportDependency(authority=rule.authority)
+        for route in view.routes:
+            dependency = m.AuthoritySupportDependency(authority=route.authority)
             if dependency not in derived:
                 derived.append(dependency)
         return tuple(derived)

@@ -329,7 +329,7 @@ def probe_functional_pyramid_repository(
                         {
                             "locator": request.locator,
                             "status": "invalid",
-                            "reason": "declaration violates the Version-1 contract",
+                            "reason": "declaration violates the Version-2 contract",
                         }
                     )
                     valid = False
@@ -344,21 +344,23 @@ def probe_functional_pyramid_repository(
                     )
                     valid = False
                     continue
-                declaration_ref, _ = result
+                declaration_ref, _, graph_findings = result
                 source_reports.append(
                     {
                         "locator": request.locator,
-                        "status": "valid",
+                        "status": "valid" if not graph_findings else "invalid",
                         "evidence_id": declaration_ref.evidence_id.value,
+                        "findings": [finding.reason.value for finding in graph_findings],
                     }
                 )
+                if graph_findings:
+                    valid = False
 
             declaration_report = {
                 "status": "ready" if valid else "invalid",
                 "configured": True,
                 "valid": valid,
                 "bootstrap_locator": bootstrap_ref.locator,
-                "coverage": bootstrap.coverage.value,
                 "sources": source_reports,
                 "action": (
                     None

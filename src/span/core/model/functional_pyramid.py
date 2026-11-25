@@ -1,7 +1,8 @@
 """Functional Pyramid domain carriers.
 
-Binding Version-1 carriers for the Functional Pyramid integration (F11/F12,
-L12-L14, FD-61-FD-94). Import through span.core.model rather than this module.
+Binding Version-2 document-placement carriers for the Functional Pyramid
+integration (F11/F12, L12-L16, FD-61-FD-94). Import through
+span.core.model rather than this module.
 """
 
 from __future__ import annotations
@@ -23,18 +24,6 @@ from span.core.model.primitives import (
 from span.core.model.recording import ContentDigest
 
 
-class FunctionalScopeSelectorKind(_enum.Enum):
-    REPOSITORY = "REPOSITORY"
-    PATH = "PATH"
-    PREFIX = "PREFIX"
-    SYMBOL = "SYMBOL"
-
-
-class FunctionalPyramidCoverage(_enum.Enum):
-    PARTIAL = "PARTIAL"
-    COMPLETE = "COMPLETE"
-
-
 class FunctionalPyramidParticipationState(_enum.Enum):
     UNCONFIGURED = "UNCONFIGURED"
     EXCLUDED = "EXCLUDED"
@@ -44,13 +33,6 @@ class FunctionalPyramidParticipationState(_enum.Enum):
 class FunctionalPyramidHealth(_enum.Enum):
     VALID = "VALID"
     DEGRADED = "DEGRADED"
-
-
-class FunctionalScopeRelation(_enum.Enum):
-    OUTSIDE_FUNCTIONAL_SCOPE = "OUTSIDE_FUNCTIONAL_SCOPE"
-    COVERED = "COVERED"
-    UNCOVERED = "UNCOVERED"
-    MIXED = "MIXED"
 
 
 class FunctionalPyramidRouteStatus(_enum.Enum):
@@ -75,18 +57,20 @@ class FunctionalPyramidAction(_enum.Enum):
 
 
 class FunctionalPyramidFindingReason(_enum.Enum):
-    UNCOVERED_PATH = "UNCOVERED_PATH"
     INVALID_DECLARATION = "INVALID_DECLARATION"
-    UNRESOLVED_SCOPE_INTERSECTION = "UNRESOLVED_SCOPE_INTERSECTION"
-    DUPLICATE_CONTEXT_OWNER = "DUPLICATE_CONTEXT_OWNER"
-    UNKNOWN_CONTEXT = "UNKNOWN_CONTEXT"
-    CONTEXT_CYCLE = "CONTEXT_CYCLE"
-    REPOSITORY_UNAVAILABLE = "REPOSITORY_UNAVAILABLE"
-    DUPLICATE_RULE_OWNER = "DUPLICATE_RULE_OWNER"
-    UNKNOWN_RULE = "UNKNOWN_RULE"
-    RULE_CYCLE = "RULE_CYCLE"
+    INVALID_PLACEMENT_SCOPE = "INVALID_PLACEMENT_SCOPE"
+    DUPLICATE_DOCUMENT_PLACEMENT = "DUPLICATE_DOCUMENT_PLACEMENT"
+    INVALID_DOCUMENT_REFERENCE = "INVALID_DOCUMENT_REFERENCE"
+    MISSING_DOCUMENT_AUTHORITY = "MISSING_DOCUMENT_AUTHORITY"
+    AMBIGUOUS_DOCUMENT_AUTHORITY = "AMBIGUOUS_DOCUMENT_AUTHORITY"
+    NONCANONICAL_DOCUMENT_AUTHORITY = "NONCANONICAL_DOCUMENT_AUTHORITY"
+    DOCUMENT_UNAVAILABLE = "DOCUMENT_UNAVAILABLE"
+    UNKNOWN_DOCUMENT = "UNKNOWN_DOCUMENT"
+    DOCUMENT_CYCLE = "DOCUMENT_CYCLE"
     INVALID_GOVERNING_EDGE = "INVALID_GOVERNING_EDGE"
-    UNRESOLVED_RULE_PARENT = "UNRESOLVED_RULE_PARENT"
+    UNRESOLVED_DOCUMENT_PARENT = "UNRESOLVED_DOCUMENT_PARENT"
+    REPOSITORY_UNAVAILABLE = "REPOSITORY_UNAVAILABLE"
+    MISSING_ROOT_PLACEMENT = "MISSING_ROOT_PLACEMENT"
 
 
 class FunctionalPyramidValidationReason(_enum.Enum):
@@ -97,14 +81,10 @@ class FunctionalPyramidValidationReason(_enum.Enum):
     STALE_PYRAMID_VERSION = "STALE_PYRAMID_VERSION"
     MISSING_DECLARATION_SOURCE = "MISSING_DECLARATION_SOURCE"
     INVALID_DECLARATION_SOURCE = "INVALID_DECLARATION_SOURCE"
-    INVALID_FUNCTIONAL_SCOPE = "INVALID_FUNCTIONAL_SCOPE"
-    INCOMPLETE_COMPLETE_COVERAGE = "INCOMPLETE_COMPLETE_COVERAGE"
 
 
 @_dataclass(frozen=True)
 class FunctionalPyramidId:
-    """Opaque server-owned Functional Pyramid identity."""
-
     value: str
 
     def __post_init__(self) -> None:
@@ -113,8 +93,6 @@ class FunctionalPyramidId:
 
 @_dataclass(frozen=True)
 class FunctionalPyramidVersion:
-    """Positive compare-and-set version of one Functional Pyramid instance."""
-
     value: int
 
     def __post_init__(self) -> None:
@@ -123,8 +101,6 @@ class FunctionalPyramidVersion:
 
 @_dataclass(frozen=True)
 class FunctionalRouteIdentity:
-    """Canonical digest/value of FD-73 governing applicability."""
-
     value: str
 
     def __post_init__(self) -> None:
@@ -134,142 +110,90 @@ class FunctionalRouteIdentity:
 def _require_canonical_repository_path(name: str, value: str) -> None:
     _require_non_empty(name, value)
     if value.startswith("/") or "\\" in value:
-        raise ValueError(f"{name} must be canonical POSIX repository-relative path")
+        raise ValueError(f"{name} must be a canonical POSIX repository-relative path")
     if value.endswith("/"):
         raise ValueError(f"{name} must not use a trailing separator alias")
-    parts = value.split("/")
-    if any(part in ("", ".", "..") for part in parts):
+    if any(part in ("", ".", "..") for part in value.split("/")):
         raise ValueError(f"{name} must not contain empty, dot, or traversal segments")
 
 
-@_dataclass(frozen=True)
-class FunctionalScopeSelector:
-    """One strict Version-1 FunctionalScope selector."""
+def _require_directory_scope(name: str, value: str) -> None:
+    _require_non_empty(name, value)
+    if value == ".":
+        return
+    _require_canonical_repository_path(name, value)
 
-    kind: FunctionalScopeSelectorKind
-    path: str | None = None
-    locator: str | None = None
+
+@_dataclass(frozen=True)
+class FunctionalDirectoryScope:
+    """Strict canonical repository-relative directory scope."""
+
+    value: str
 
     def __post_init__(self) -> None:
-        if self.kind is FunctionalScopeSelectorKind.REPOSITORY:
-            if self.path is not None or self.locator is not None:
-                raise ValueError("REPOSITORY selector has no path or locator")
-            return
-
-        if self.path is None:
-            raise ValueError(f"{self.kind.value} selector requires path")
-        _require_canonical_repository_path("FunctionalScopeSelector.path", self.path)
-
-        if self.kind in (
-            FunctionalScopeSelectorKind.PATH,
-            FunctionalScopeSelectorKind.PREFIX,
-        ):
-            if self.locator is not None:
-                raise ValueError(f"{self.kind.value} selector has no locator")
-            return
-
-        if self.kind is FunctionalScopeSelectorKind.SYMBOL:
-            if self.locator is None:
-                raise ValueError("SYMBOL selector requires locator")
-            _require_non_empty("FunctionalScopeSelector.locator", self.locator)
-            return
-
-        raise ValueError(f"unsupported FunctionalScope selector kind: {self.kind!r}")
+        _require_directory_scope("FunctionalDirectoryScope.value", self.value)
 
 
 @_dataclass(frozen=True)
-class FunctionalScope:
-    """Non-empty FunctionalScope selector set shared by coverage and contexts."""
-
-    selectors: tuple[FunctionalScopeSelector, ...]
-
-    def __post_init__(self) -> None:
-        if not self.selectors:
-            raise ValueError("FunctionalScope requires at least one selector")
-        if len(set(self.selectors)) != len(self.selectors):
-            raise ValueError("FunctionalScope selectors must be distinct")
-
-
-@_dataclass(frozen=True)
-class FunctionalGraphRef:
-    """Repository-qualified context/rule identity used by declaration edges."""
-
+class FunctionalDocumentRef:
     repository_id: str
-    identity: str
-
-    def __post_init__(self) -> None:
-        _require_non_empty("FunctionalGraphRef.repository_id", self.repository_id)
-        _require_non_empty("FunctionalGraphRef.identity", self.identity)
-
-
-@_dataclass(frozen=True)
-class FunctionalRuleOwner:
-    repository_id: str
-    authority_ref: str
-
-    def __post_init__(self) -> None:
-        _require_non_empty("FunctionalRuleOwner.repository_id", self.repository_id)
-        _require_non_empty("FunctionalRuleOwner.authority_ref", self.authority_ref)
-
-
-@_dataclass(frozen=True)
-class FunctionalContextDeclaration:
-    context_id: str
-    coverage: FunctionalScope
-    inherits: tuple[FunctionalGraphRef, ...] = ()
-    rules: tuple[FunctionalGraphRef, ...] = ()
-
-    def __post_init__(self) -> None:
-        _require_non_empty("FunctionalContextDeclaration.context_id", self.context_id)
-        if len(set(self.inherits)) != len(self.inherits):
-            raise ValueError(
-                "FunctionalContextDeclaration.inherits contains duplicates"
-            )
-        if len(set(self.rules)) != len(self.rules):
-            raise ValueError("FunctionalContextDeclaration.rules contains duplicates")
-
-
-@_dataclass(frozen=True)
-class FunctionalRuleDeclaration:
-    rule_id: str
+    document_ref: str
     layer: FunctionalPyramidLayer
-    owner: FunctionalRuleOwner
-    governing_rule_ids: tuple[FunctionalGraphRef | str, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_non_empty("FunctionalRuleDeclaration.rule_id", self.rule_id)
-        for rule_ref in self.governing_rule_ids:
-            if isinstance(rule_ref, str) and rule_ref != "ROOT":
-                raise ValueError("FunctionalRuleDeclaration string parent must be ROOT")
-        if len(set(self.governing_rule_ids)) != len(self.governing_rule_ids):
-            raise ValueError(
-                "FunctionalRuleDeclaration.governing_rule_ids contains duplicates"
-            )
+        _require_non_empty("FunctionalDocumentRef.repository_id", self.repository_id)
+        _require_canonical_repository_path(
+            "FunctionalDocumentRef.document_ref", self.document_ref
+        )
+
+
+@_dataclass(frozen=True)
+class FunctionalDocumentPlacement:
+    declaring_repository_id: str
+    document: FunctionalDocumentRef
+    scope: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty(
+            "FunctionalDocumentPlacement.declaring_repository_id",
+            self.declaring_repository_id,
+        )
+        _require_directory_scope("FunctionalDocumentPlacement.scope", self.scope)
+
+
+@_dataclass(frozen=True)
+class FunctionalDocumentDeclaration:
+    placement: FunctionalDocumentPlacement
+    governing_placements: tuple[FunctionalDocumentPlacement | str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.governing_placements:
+            raise ValueError("FunctionalDocumentDeclaration requires a governing parent")
+        for parent in self.governing_placements:
+            if isinstance(parent, str) and parent != "ROOT":
+                raise ValueError("the only string governing terminal is ROOT")
+        if len(set(self.governing_placements)) != len(self.governing_placements):
+            raise ValueError("governing placements must be distinct")
 
 
 @_dataclass(frozen=True)
 class FunctionalPyramidDeclaration:
     version: int
-    contexts: tuple[FunctionalContextDeclaration, ...] = ()
-    rules: tuple[FunctionalRuleDeclaration, ...] = ()
+    placements: tuple[FunctionalDocumentDeclaration, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.version != 1:
-            raise ValueError("FunctionalPyramidDeclaration.version must be 1")
-        if not (self.contexts or self.rules):
-            raise ValueError("a Functional Pyramid declaration cannot be empty")
+        if self.version != 2:
+            raise ValueError("FunctionalPyramidDeclaration.version must be 2")
 
 
 @_dataclass(frozen=True)
 class FunctionalPyramidBootstrap:
     version: int
-    functional_scope: FunctionalScope
-    coverage: FunctionalPyramidCoverage
     declaration_sources: tuple[EvidenceRequest, ...]
 
     def __post_init__(self) -> None:
-        if self.version != 1:
-            raise ValueError("FunctionalPyramidBootstrap.version must be 1")
+        if self.version != 2:
+            raise ValueError("FunctionalPyramidBootstrap.version must be 2")
         if not self.declaration_sources:
             raise ValueError("FunctionalPyramidBootstrap requires declaration sources")
 
@@ -278,25 +202,19 @@ class FunctionalPyramidBootstrap:
 class FunctionalPyramidMemberIntent:
     repository_id: str
     declaration_sources: tuple[EvidenceRequest, ...]
-    functional_scope: FunctionalScope
-    coverage: FunctionalPyramidCoverage
 
     def __post_init__(self) -> None:
         _require_non_empty(
             "FunctionalPyramidMemberIntent.repository_id", self.repository_id
         )
         if not self.declaration_sources:
-            raise ValueError(
-                "FunctionalPyramidMemberIntent requires declaration sources"
-            )
+            raise ValueError("FunctionalPyramidMemberIntent requires declaration sources")
 
 
 @_dataclass(frozen=True)
 class FunctionalPyramidMemberView:
     repository_id: str
     declaration_refs: tuple[EvidenceRef, ...]
-    functional_scope: FunctionalScope
-    coverage: FunctionalPyramidCoverage
 
     def __post_init__(self) -> None:
         _require_non_empty(
@@ -317,9 +235,7 @@ class FunctionalPyramidParticipation:
 
     def __post_init__(self) -> None:
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
-            raise ValueError(
-                "ACTIVE participation is projected as FunctionalPyramidView"
-            )
+            raise ValueError("ACTIVE participation is projected as FunctionalPyramidView")
 
 
 @_dataclass(frozen=True)
@@ -340,8 +256,8 @@ class FunctionalPyramidFinding:
     recovery: str
     repository_id: str | None = None
     declaration_locator: str | None = None
-    context_id: str | None = None
-    rule_id: str | None = None
+    placement: FunctionalDocumentPlacement | None = None
+    directory: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty("FunctionalPyramidFinding.detail", self.detail)
@@ -349,11 +265,11 @@ class FunctionalPyramidFinding:
         for name, value in (
             ("repository_id", self.repository_id),
             ("declaration_locator", self.declaration_locator),
-            ("context_id", self.context_id),
-            ("rule_id", self.rule_id),
         ):
             if value is not None:
                 _require_non_empty(f"FunctionalPyramidFinding.{name}", value)
+        if self.directory is not None:
+            _require_directory_scope("FunctionalPyramidFinding.directory", self.directory)
 
 
 @_dataclass(frozen=True)
@@ -364,6 +280,7 @@ class FunctionalPyramidValidationFinding:
     repository_id: str | None = None
     pyramid_id: FunctionalPyramidId | None = None
     declaration_locator: str | None = None
+    directory: str | None = None
     expected_version: FunctionalPyramidVersion | None = None
     current_version: FunctionalPyramidVersion | None = None
 
@@ -376,6 +293,10 @@ class FunctionalPyramidValidationFinding:
         ):
             if value is not None:
                 _require_non_empty(f"FunctionalPyramidValidationFinding.{name}", value)
+        if self.directory is not None:
+            _require_directory_scope(
+                "FunctionalPyramidValidationFinding.directory", self.directory
+            )
 
 
 @_dataclass(frozen=True)
@@ -390,9 +311,7 @@ class FunctionalPyramidStatus:
     def __post_init__(self) -> None:
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
             if self.health is None or self.pyramid_id is None or self.version is None:
-                raise ValueError(
-                    "ACTIVE status requires health, pyramid_id, and version"
-                )
+                raise ValueError("ACTIVE status requires health, pyramid_id, and version")
             if not self.members:
                 raise ValueError("ACTIVE status requires at least one member")
             if self.health is FunctionalPyramidHealth.VALID and self.findings:
@@ -400,15 +319,12 @@ class FunctionalPyramidStatus:
             if self.health is FunctionalPyramidHealth.DEGRADED and not self.findings:
                 raise ValueError("DEGRADED Functional Pyramid status requires findings")
             return
-
         if self.health is not None:
             raise ValueError("inactive Functional Pyramid status has no health")
         if self.pyramid_id is not None or self.version is not None or self.members:
             raise ValueError("inactive Functional Pyramid status has no live instance")
         if self.findings:
-            raise ValueError(
-                "inactive Functional Pyramid status has no health findings"
-            )
+            raise ValueError("inactive Functional Pyramid status has no health findings")
 
 
 @_dataclass(frozen=True)
@@ -425,6 +341,20 @@ class FunctionalPyramidSelector:
             _require_non_empty(
                 "FunctionalPyramidSelector.repository_id", self.repository_id
             )
+
+
+@_dataclass(frozen=True)
+class FunctionalPyramidDirectorySelector:
+    repository_id: str
+    directory: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty(
+            "FunctionalPyramidDirectorySelector.repository_id", self.repository_id
+        )
+        _require_directory_scope(
+            "FunctionalPyramidDirectorySelector.directory", self.directory
+        )
 
 
 @_dataclass(frozen=True)
@@ -487,69 +417,32 @@ class FunctionalPyramidCandidate:
 
 
 @_dataclass(frozen=True)
-class FunctionalContextRoute:
-    context_id: str
-    repository_id: str
-    direct: bool
-    coverage: FunctionalScope
-    inherits: tuple[str, ...] = ()
-    rule_ids: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        _require_non_empty("FunctionalContextRoute.context_id", self.context_id)
-        _require_non_empty("FunctionalContextRoute.repository_id", self.repository_id)
-        for value in self.inherits:
-            _require_non_empty("FunctionalContextRoute.inherits", value)
-        for value in self.rule_ids:
-            _require_non_empty("FunctionalContextRoute.rule_ids", value)
-        if len(set(self.inherits)) != len(self.inherits):
-            raise ValueError("FunctionalContextRoute.inherits contains duplicates")
-        if len(set(self.rule_ids)) != len(self.rule_ids):
-            raise ValueError("FunctionalContextRoute.rule_ids contains duplicates")
-
-
-@_dataclass(frozen=True)
-class FunctionalRuleRoute:
-    rule_id: str
-    layer: FunctionalPyramidLayer
+class FunctionalDocumentRoute:
+    placement: FunctionalDocumentPlacement
     authority: AuthorityBinding
-    governing_rule_ids: tuple[str, ...] = ()
-    downstream_rule_ids: tuple[str, ...] = ()
-    downstream_context_ids: tuple[str, ...] = ()
+    governing_placements: tuple[FunctionalDocumentPlacement | str, ...] = ()
+    downstream_placements: tuple[FunctionalDocumentPlacement, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_non_empty("FunctionalRuleRoute.rule_id", self.rule_id)
-        for name, values in (
-            ("governing_rule_ids", self.governing_rule_ids),
-            ("downstream_rule_ids", self.downstream_rule_ids),
-            ("downstream_context_ids", self.downstream_context_ids),
-        ):
-            for value in values:
-                _require_non_empty(f"FunctionalRuleRoute.{name}", value)
-            if len(set(values)) != len(values):
-                raise ValueError(f"FunctionalRuleRoute.{name} contains duplicates")
+        for parent in self.governing_placements:
+            if isinstance(parent, str) and parent != "ROOT":
+                raise ValueError("the only string governing terminal is ROOT")
+        if len(set(self.governing_placements)) != len(self.governing_placements):
+            raise ValueError("governing placements must be distinct")
+        if len(set(self.downstream_placements)) != len(self.downstream_placements):
+            raise ValueError("downstream placements must be distinct")
 
 
 @_dataclass(frozen=True)
 class FunctionalRouteProvenance:
-    semantic_scope: EvidenceScope
-    relation: FunctionalScopeRelation
-    context_ids: tuple[str, ...] = ()
-    rule_ids: tuple[str, ...] = ()
+    directory: str
+    placements: tuple[FunctionalDocumentPlacement, ...]
+    semantic_scope: EvidenceScope | None = None
 
     def __post_init__(self) -> None:
-        if self.relation is FunctionalScopeRelation.MIXED:
-            raise ValueError("provenance portions cannot themselves be MIXED")
-        for value in self.context_ids:
-            _require_non_empty("FunctionalRouteProvenance.context_ids", value)
-        for value in self.rule_ids:
-            _require_non_empty("FunctionalRouteProvenance.rule_ids", value)
-        if len(set(self.context_ids)) != len(self.context_ids):
-            raise ValueError(
-                "FunctionalRouteProvenance.context_ids contains duplicates"
-            )
-        if len(set(self.rule_ids)) != len(self.rule_ids):
-            raise ValueError("FunctionalRouteProvenance.rule_ids contains duplicates")
+        _require_directory_scope("FunctionalRouteProvenance.directory", self.directory)
+        if len(set(self.placements)) != len(self.placements):
+            raise ValueError("FunctionalRouteProvenance placements must be distinct")
 
 
 @_dataclass(frozen=True)
@@ -557,35 +450,37 @@ class FunctionalPyramidView:
     pyramid_id: FunctionalPyramidId
     version: FunctionalPyramidVersion
     health: FunctionalPyramidHealth
-    coverage: FunctionalPyramidCoverage
-    scope_relation: FunctionalScopeRelation
     status: FunctionalPyramidRouteStatus
-    semantic_scope: EvidenceScope
-    contexts: tuple[FunctionalContextRoute, ...] = ()
-    rules: tuple[FunctionalRuleRoute, ...] = ()
-    provenance: tuple[FunctionalRouteProvenance, ...] = ()
+    placements: tuple[FunctionalDocumentPlacement, ...]
+    routes: tuple[FunctionalDocumentRoute, ...]
+    provenance: tuple[FunctionalRouteProvenance, ...]
+    declared_layers: tuple[FunctionalPyramidLayer, ...]
+    absent_layers: tuple[FunctionalPyramidLayer, ...]
+    directory: str | None = None
+    semantic_scope: EvidenceScope | None = None
     unresolved: tuple[FunctionalPyramidFinding, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.status is FunctionalPyramidRouteStatus.RESOLVED and self.unresolved:
+        if (self.directory is None) == (self.semantic_scope is None):
             raise ValueError(
-                "RESOLVED FunctionalPyramidView has no unresolved findings"
+                "FunctionalPyramidView requires exactly one directory or semantic_scope"
             )
-        if (
-            self.status is FunctionalPyramidRouteStatus.UNRESOLVED
-            and not self.unresolved
-        ):
+        if self.directory is not None:
+            _require_directory_scope("FunctionalPyramidView.directory", self.directory)
+        if self.status is FunctionalPyramidRouteStatus.RESOLVED and self.unresolved:
+            raise ValueError("RESOLVED FunctionalPyramidView has no unresolved findings")
+        if self.status is FunctionalPyramidRouteStatus.UNRESOLVED and not self.unresolved:
             raise ValueError("UNRESOLVED FunctionalPyramidView requires findings")
-        if self.scope_relation is FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE:
-            if self.status is not FunctionalPyramidRouteStatus.RESOLVED:
-                raise ValueError("outside FunctionalScope is a resolved empty route")
-            if self.contexts or self.rules or self.unresolved:
-                raise ValueError(
-                    "outside FunctionalScope has no governing route members"
-                )
-        if self.scope_relation is FunctionalScopeRelation.UNCOVERED:
-            if self.status is not FunctionalPyramidRouteStatus.UNRESOLVED:
-                raise ValueError("UNCOVERED FunctionalPyramidView is unresolved")
+        if len(set(self.placements)) != len(self.placements):
+            raise ValueError("FunctionalPyramidView placements must be distinct")
+        if len(set(self.declared_layers)) != len(self.declared_layers):
+            raise ValueError("declared_layers must be distinct")
+        if len(set(self.absent_layers)) != len(self.absent_layers):
+            raise ValueError("absent_layers must be distinct")
+        if set(self.declared_layers) & set(self.absent_layers):
+            raise ValueError("declared_layers and absent_layers must be disjoint")
+        if set(self.declared_layers) | set(self.absent_layers) != set(FunctionalPyramidLayer):
+            raise ValueError("declared_layers and absent_layers must cover every layer")
 
 
 @_dataclass(frozen=True)
@@ -617,26 +512,17 @@ class RetrievedFunctionalPyramidReceipt:
 
     def __post_init__(self) -> None:
         if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
-            raise ValueError(
-                "RetrievedFunctionalPyramidReceipt.committed_at must be aware"
-            )
+            raise ValueError("RetrievedFunctionalPyramidReceipt.committed_at must be aware")
         if len({effect.repository_id for effect in self.participation_effects}) != len(
             self.participation_effects
         ):
             raise ValueError("participation effects must be unique per repository")
         if len(set(self.dependent_effect_refs)) != len(self.dependent_effect_refs):
             raise ValueError("dependent effect refs must be distinct")
-
-        if self.action in (
-            FunctionalPyramidAction.ACTIVATE,
-            FunctionalPyramidAction.REVISE,
-        ):
+        if self.action in (FunctionalPyramidAction.ACTIVATE, FunctionalPyramidAction.REVISE):
             if self.pyramid_id is None or self.version is None or not self.members:
-                raise ValueError(
-                    "activate/revise receipt requires live instance members"
-                )
+                raise ValueError("activate/revise receipt requires live instance members")
             return
-
         if self.members:
             raise ValueError("deactivate/exclude receipt has no active members")
         if self.action is FunctionalPyramidAction.DEACTIVATE:

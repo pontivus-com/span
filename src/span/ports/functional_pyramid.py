@@ -13,6 +13,10 @@ from span.ports.lifecycle import LifecycleStorePort
 class FunctionalPyramidDeclarationInvalid(ValueError):
     """A named Functional Pyramid source exists but violates its strict contract."""
 
+    def __init__(self, message: str, *, unsupported_version: int | None = None) -> None:
+        super().__init__(message)
+        self.unsupported_version = unsupported_version
+
 
 class FunctionalPyramidRepositoryUnavailable(OSError):
     """A declared Functional Pyramid member cannot currently be read."""
@@ -45,7 +49,14 @@ class FunctionalPyramidDeclarationPort(_typing.Protocol):
 
     def read_declaration(
         self, repository_id: str, request: m.EvidenceRequest
-    ) -> tuple[m.EvidenceRef, m.FunctionalPyramidDeclaration] | m.EvidenceSourceFailure:
+    ) -> (
+        tuple[
+            m.EvidenceRef,
+            m.FunctionalPyramidDeclaration,
+            tuple[m.FunctionalPyramidFinding, ...],
+        ]
+        | m.EvidenceSourceFailure
+    ):
         """Read and strict-decode one exact whole-document declaration source."""
         ...
 

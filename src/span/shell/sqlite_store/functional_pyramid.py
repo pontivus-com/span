@@ -107,8 +107,36 @@ def _members_json(members: tuple[m.FunctionalPyramidMemberView, ...]) -> str:
     )
 
 
+def _decode_member_data(value: object) -> m.FunctionalPyramidMemberView:
+    try:
+        return m.from_canonical(m.FunctionalPyramidMemberView, value)
+    except m.CanonicalDecodeError:
+        pass
+    if not isinstance(value, dict):
+        raise FunctionalPyramidInstallationStoreError("stored pyramid member is invalid")
+    if value.get("$type") != "FunctionalPyramidMemberView":
+        raise FunctionalPyramidInstallationStoreError("stored pyramid member type is invalid")
+    allowed = {
+        "$type",
+        "repository_id",
+        "declaration_refs",
+        "functional_scope",
+        "coverage",
+    }
+    if set(value) - allowed or "repository_id" not in value or "declaration_refs" not in value:
+        raise FunctionalPyramidInstallationStoreError(
+            "stored pyramid member cannot be projected to Version-2 membership"
+        )
+    projected = {
+        "$type": "FunctionalPyramidMemberView",
+        "repository_id": value["repository_id"],
+        "declaration_refs": value["declaration_refs"],
+    }
+    return m.from_canonical(m.FunctionalPyramidMemberView, projected)
+
+
 def _decode_member(payload: str) -> m.FunctionalPyramidMemberView:
-    return m.from_canonical(m.FunctionalPyramidMemberView, _json.loads(payload))
+    return _decode_member_data(_json.loads(payload))
 
 
 def _decode_members(payload: str) -> tuple[m.FunctionalPyramidMemberView, ...]:
@@ -117,7 +145,7 @@ def _decode_members(payload: str) -> tuple[m.FunctionalPyramidMemberView, ...]:
         raise FunctionalPyramidInstallationStoreError(
             "stored pyramid members are invalid"
         )
-    return tuple(m.from_canonical(m.FunctionalPyramidMemberView, item) for item in raw)
+    return tuple(_decode_member_data(item) for item in raw)
 
 
 def _active_pyramid_id(
@@ -202,10 +230,7 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
             if version_value is None
             else m.FunctionalPyramidVersion(int(version_value))
         ),
-        members=tuple(
-            m.from_canonical(m.FunctionalPyramidMemberView, item)
-            for item in members_raw
-        ),
+        members=tuple(_decode_member_data(item) for item in members_raw),
         participation_effects=tuple(
             m.from_canonical(m.FunctionalPyramidParticipationEffect, item)
             for item in effects_raw

@@ -31,6 +31,7 @@ from span.core.model.investigation import (
 )
 from span.core.model.functional_pyramid import (
     FunctionalPyramidCandidateSelector,
+    FunctionalPyramidDirectorySelector,
     FunctionalPyramidReceiptSelector,
     FunctionalPyramidSelector,
 )
@@ -366,6 +367,7 @@ class AskRequest:
         | UnderstandingSnapshotSelector
         | ReceiptRetrievalSelector
         | FunctionalPyramidSelector
+        | FunctionalPyramidDirectorySelector
         | FunctionalPyramidCandidateSelector
         | FunctionalPyramidReceiptSelector
         | None

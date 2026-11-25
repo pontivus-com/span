@@ -1,18 +1,20 @@
-"""Pure FunctionalScope algebra for Functional Pyramid resolution."""
+"""Pure document-placement algebra and Functional Pyramid resolution."""
 
 from __future__ import annotations
 
-import collections.abc as _collections
+import collections as _collections
 import hashlib as _hashlib
 import json as _json
+import posixpath as _posixpath
 
 from span.core import containment as _containment
 from span.core.model.functional_pyramid import (
-    FunctionalContextDeclaration,
-    FunctionalContextRoute,
-    FunctionalGraphRef,
+    FunctionalDirectoryScope,
+    FunctionalDocumentDeclaration,
+    FunctionalDocumentPlacement,
+    FunctionalDocumentRef,
+    FunctionalDocumentRoute,
     FunctionalPyramidBootstrap,
-    FunctionalPyramidCoverage,
     FunctionalPyramidDeclaration,
     FunctionalPyramidFinding,
     FunctionalPyramidFindingReason,
@@ -25,170 +27,98 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidView,
     FunctionalRouteIdentity,
     FunctionalRouteProvenance,
-    FunctionalRuleDeclaration,
-    FunctionalRuleOwner,
-    FunctionalRuleRoute,
-    FunctionalScope,
-    FunctionalScopeRelation,
-    FunctionalScopeSelector,
-    FunctionalScopeSelectorKind,
 )
-from span.core.model.investigation import EvidenceRequest, SourceRange
+from span.core.model.investigation import EvidenceRequest
 from span.core.model.primitives import (
     AuthorityBinding,
     EvidenceScope,
+    SourceRange,
     _require_non_empty,
 )
 from span.core.model.surfaces import SurfaceKey, SurfaceKind
 
-_KIND_ORDER = (
-    FunctionalScopeSelectorKind.REPOSITORY,
-    FunctionalScopeSelectorKind.PREFIX,
-    FunctionalScopeSelectorKind.PATH,
-    FunctionalScopeSelectorKind.SYMBOL,
+_LAYER_ORDER = (
+    FunctionalPyramidLayer.P0,
+    FunctionalPyramidLayer.P1,
+    FunctionalPyramidLayer.P2S,
+    FunctionalPyramidLayer.P2W,
+    FunctionalPyramidLayer.P3,
+    FunctionalPyramidLayer.P4,
 )
+_LAYER_RANK = {layer: index for index, layer in enumerate(_LAYER_ORDER)}
 
 
-def _selector_sort_key(
-    selector: FunctionalScopeSelector,
-) -> tuple[int, str, str]:
+def normalize_directory_scope(value: str) -> str:
+    """Validate and return one canonical repository-relative directory scope."""
+    return FunctionalDirectoryScope(value).value
+
+
+def directory_scope_contains(outer: str, inner: str) -> bool:
+    """Return whether directory scope outer contains inner."""
+    outer = normalize_directory_scope(outer)
+    inner = normalize_directory_scope(inner)
+    return outer == "." or inner == outer or inner.startswith(outer + "/")
+
+
+def directory_scope_intersects(left: str, right: str) -> bool:
+    """Directory scopes intersect exactly when one contains the other."""
+    return directory_scope_contains(left, right) or directory_scope_contains(right, left)
+
+
+def _placement_sort_key(
+    placement: FunctionalDocumentPlacement,
+) -> tuple[int, str, str, str, str]:
     return (
-        _KIND_ORDER.index(selector.kind),
-        selector.path or "",
-        selector.locator or "",
+        _LAYER_RANK[placement.document.layer],
+        placement.declaring_repository_id,
+        placement.document.repository_id,
+        placement.document.document_ref,
+        placement.scope,
     )
 
 
-def _path_in_prefix(path: str, prefix: str) -> bool:
-    return path == prefix or path.startswith(prefix + "/")
-
-
-def functional_scope_selector_contains(
-    outer: FunctionalScopeSelector,
-    inner: FunctionalScopeSelector,
-) -> bool:
-    """Whether outer wholly contains inner under the Version-1 symbolic algebra."""
-    if outer.kind is FunctionalScopeSelectorKind.REPOSITORY:
-        return True
-
-    if outer.kind is FunctionalScopeSelectorKind.PREFIX:
-        if inner.kind is FunctionalScopeSelectorKind.REPOSITORY:
-            return False
-        assert outer.path is not None
-        assert inner.path is not None
-        return _path_in_prefix(inner.path, outer.path)
-
-    if outer.kind is FunctionalScopeSelectorKind.PATH:
-        if inner.kind is FunctionalScopeSelectorKind.PATH:
-            return outer.path == inner.path
-        if inner.kind is FunctionalScopeSelectorKind.SYMBOL:
-            return outer.path == inner.path
-        return False
-
-    if outer.kind is FunctionalScopeSelectorKind.SYMBOL:
-        return (
-            inner.kind is FunctionalScopeSelectorKind.SYMBOL
-            and outer.path == inner.path
-            and outer.locator == inner.locator
-        )
-
-    raise AssertionError(f"unhandled selector kind: {outer.kind!r}")
-
-
-def functional_scope_selector_intersects(
-    left: FunctionalScopeSelector,
-    right: FunctionalScopeSelector,
-) -> bool:
-    """Two selectors intersect iff either wholly contains the other."""
-    return functional_scope_selector_contains(
-        left, right
-    ) or functional_scope_selector_contains(right, left)
-
-
-def normalize_functional_scope(
-    selectors: _collections.Iterable[FunctionalScopeSelector],
-) -> FunctionalScope:
-    """Deduplicate and remove selectors wholly contained by broader selectors."""
-    unique = tuple(sorted(set(selectors), key=_selector_sort_key))
-    if not unique:
-        raise ValueError("FunctionalScope normalization requires selectors")
-
-    retained: list[FunctionalScopeSelector] = []
-    for selector in unique:
-        if any(
-            functional_scope_selector_contains(existing, selector)
-            for existing in retained
-        ):
-            continue
-        retained = [
-            existing
-            for existing in retained
-            if not functional_scope_selector_contains(selector, existing)
-        ]
-        retained.append(selector)
-
-    return FunctionalScope(selectors=tuple(retained))
-
-
-def functional_scope_contains(outer: FunctionalScope, inner: FunctionalScope) -> bool:
-    """Whether every normalized inner selector is contained by an outer selector."""
-    normalized_outer = normalize_functional_scope(outer.selectors)
-    normalized_inner = normalize_functional_scope(inner.selectors)
-    return all(
-        any(
-            functional_scope_selector_contains(outer_selector, inner_selector)
-            for outer_selector in normalized_outer.selectors
-        )
-        for inner_selector in normalized_inner.selectors
+def _finding_sort_key(
+    finding: FunctionalPyramidFinding,
+) -> tuple[str, str, tuple[int, str, str, str, str], str, str, str]:
+    placement_key = (
+        (-1, "", "", "", "")
+        if finding.placement is None
+        else _placement_sort_key(finding.placement)
+    )
+    return (
+        finding.reason.value,
+        finding.repository_id or "",
+        placement_key,
+        finding.directory or "",
+        finding.declaration_locator or "",
+        finding.detail,
     )
 
 
-def functional_scope_intersects(left: FunctionalScope, right: FunctionalScope) -> bool:
-    """Whether any selector from the two normalized scopes intersects."""
-    normalized_left = normalize_functional_scope(left.selectors)
-    normalized_right = normalize_functional_scope(right.selectors)
-    return any(
-        functional_scope_selector_intersects(left_selector, right_selector)
-        for left_selector in normalized_left.selectors
-        for right_selector in normalized_right.selectors
-    )
+def _ordered_findings(
+    findings: _collections.Iterable[FunctionalPyramidFinding],
+) -> tuple[FunctionalPyramidFinding, ...]:
+    return tuple(sorted(set(findings), key=_finding_sort_key))
 
 
-def functional_scope_union(
-    scopes: _collections.Iterable[FunctionalScope],
-) -> FunctionalScope:
-    """Canonical symbolic union of one or more FunctionalScopes."""
-    selectors: list[FunctionalScopeSelector] = []
-    supplied = False
-    for scope in scopes:
-        supplied = True
-        selectors.extend(scope.selectors)
-    if not supplied:
-        raise ValueError("FunctionalScope union requires at least one scope")
-    return normalize_functional_scope(selectors)
-
-
-def functional_scope_uncovered(
-    member_scope: FunctionalScope,
-    coverage_scopes: _collections.Iterable[FunctionalScope],
-) -> tuple[FunctionalScopeSelector, ...]:
-    """Return member selectors not wholly covered by the declared coverage union.
-
-    Version 1 deliberately returns uncovered member selectors rather than
-    inventing complement globs or enumerating current repository files.
-    """
-    normalized_member = normalize_functional_scope(member_scope.selectors)
-    supplied = tuple(coverage_scopes)
-    if not supplied:
-        return normalized_member.selectors
-    coverage = functional_scope_union(supplied)
-    return tuple(
-        selector
-        for selector in normalized_member.selectors
-        if not any(
-            functional_scope_selector_contains(covering, selector)
-            for covering in coverage.selectors
-        )
+def _finding(
+    reason: FunctionalPyramidFindingReason,
+    detail: str,
+    recovery: str,
+    *,
+    repository_id: str | None = None,
+    declaration_locator: str | None = None,
+    placement: FunctionalDocumentPlacement | None = None,
+    directory: str | None = None,
+) -> FunctionalPyramidFinding:
+    return FunctionalPyramidFinding(
+        reason=reason,
+        repository_id=repository_id,
+        declaration_locator=declaration_locator,
+        placement=placement,
+        directory=directory,
+        detail=detail,
+        recovery=recovery,
     )
 
 
@@ -197,7 +127,9 @@ def _require_json_object(
 ) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError("Functional Pyramid JSON value must be an object")
-    keys = frozenset(str(key) for key in value)
+    if any(not isinstance(key, str) for key in value):
+        raise ValueError("Functional Pyramid JSON object keys must be strings")
+    keys = frozenset(value)
     allowed = required | optional
     if keys - allowed:
         raise ValueError(
@@ -209,8 +141,6 @@ def _require_json_object(
         raise ValueError(
             "missing Functional Pyramid JSON fields: " + ", ".join(sorted(missing))
         )
-    if any(not isinstance(key, str) for key in value):
-        raise ValueError("Functional Pyramid JSON object keys must be strings")
     return value
 
 
@@ -224,57 +154,6 @@ def _require_json_string(value: object, name: str) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{name} must be a string")
     return _require_non_empty(name, value)
-
-
-def _decode_scope_selector(value: object) -> FunctionalScopeSelector:
-    raw = _require_json_object(
-        value, frozenset({"kind"}), frozenset({"path", "locator"})
-    )
-    try:
-        kind = FunctionalScopeSelectorKind(
-            _require_json_string(raw["kind"], "FunctionalScopeSelector.kind")
-        )
-    except ValueError as exc:
-        raise ValueError("unknown FunctionalScopeSelector.kind") from exc
-
-    expected = {
-        FunctionalScopeSelectorKind.REPOSITORY: frozenset({"kind"}),
-        FunctionalScopeSelectorKind.PATH: frozenset({"kind", "path"}),
-        FunctionalScopeSelectorKind.PREFIX: frozenset({"kind", "path"}),
-        FunctionalScopeSelectorKind.SYMBOL: frozenset({"kind", "path", "locator"}),
-    }[kind]
-    if frozenset(raw) != expected:
-        raise ValueError(f"{kind.value} selector has invalid fields")
-    path = raw.get("path")
-    locator = raw.get("locator")
-    return FunctionalScopeSelector(
-        kind=kind,
-        path=None if path is None else _require_json_string(path, "selector path"),
-        locator=(
-            None
-            if locator is None
-            else _require_json_string(locator, "selector locator")
-        ),
-    )
-
-
-def decode_functional_scope(value: object) -> FunctionalScope:
-    """Strictly decode and normalize one Version-1 FunctionalScope array."""
-    selectors = tuple(
-        _decode_scope_selector(item)
-        for item in _require_json_array(value, "FunctionalScope")
-    )
-    return normalize_functional_scope(selectors)
-
-
-def _decode_graph_ref(value: object) -> FunctionalGraphRef:
-    raw = _require_json_object(value, frozenset({"repository_id", "identity"}))
-    return FunctionalGraphRef(
-        repository_id=_require_json_string(
-            raw["repository_id"], "FunctionalGraphRef.repository_id"
-        ),
-        identity=_require_json_string(raw["identity"], "FunctionalGraphRef.identity"),
-    )
 
 
 def _decode_evidence_request(value: object) -> EvidenceRequest:
@@ -296,694 +175,428 @@ def _decode_evidence_request(value: object) -> EvidenceRequest:
 
 
 def decode_functional_pyramid_bootstrap(text: str) -> FunctionalPyramidBootstrap:
-    """Decode the optional navigation bootstrap into the canonical carrier."""
-
+    """Decode the optional Version-2 initialization bootstrap."""
     try:
         value = _json.loads(text)
     except _json.JSONDecodeError as exc:
         raise ValueError("Functional Pyramid bootstrap is not valid JSON") from exc
-    raw = _require_json_object(
-        value,
-        frozenset({"version", "functional_scope", "coverage", "declaration_sources"}),
-    )
-    if raw["version"] != 1:
-        raise ValueError("Functional Pyramid bootstrap version must be 1")
-    coverage_raw = _require_json_string(raw["coverage"], "bootstrap coverage")
-    try:
-        coverage = FunctionalPyramidCoverage(coverage_raw)
-    except ValueError as exc:
-        raise ValueError("unknown Functional Pyramid coverage mode") from exc
+    raw = _require_json_object(value, frozenset({"version", "declaration_sources"}))
+    if raw["version"] != 2:
+        raise ValueError("Functional Pyramid bootstrap version must be 2")
     sources = tuple(
         _decode_evidence_request(item)
         for item in _require_json_array(
             raw["declaration_sources"], "bootstrap declaration_sources"
         )
     )
-    return FunctionalPyramidBootstrap(
-        version=1,
-        functional_scope=decode_functional_scope(raw["functional_scope"]),
-        coverage=coverage,
-        declaration_sources=sources,
+    return FunctionalPyramidBootstrap(version=2, declaration_sources=sources)
+
+
+def _decode_document_ref(value: object) -> FunctionalDocumentRef:
+    raw = _require_json_object(
+        value, frozenset({"repository_id", "document_ref", "layer"})
+    )
+    try:
+        layer = FunctionalPyramidLayer(
+            _require_json_string(raw["layer"], "FunctionalDocumentRef.layer")
+        )
+    except ValueError as exc:
+        raise ValueError("unknown Functional Pyramid layer") from exc
+    return FunctionalDocumentRef(
+        repository_id=_require_json_string(
+            raw["repository_id"], "FunctionalDocumentRef.repository_id"
+        ),
+        document_ref=_require_json_string(
+            raw["document_ref"], "FunctionalDocumentRef.document_ref"
+        ),
+        layer=layer,
     )
 
 
-def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclaration:
-    """Strictly decode one repository-owned Functional Pyramid declaration."""
+def _decode_placement(
+    value: object,
+    *,
+    declaring_repository_id: str,
+    declaration_locator: str,
+    allow_explicit_owner: bool,
+) -> tuple[FunctionalDocumentPlacement | None, FunctionalPyramidFinding | None]:
+    required = (
+        {"declaring_repository_id", "document", "scope"}
+        if allow_explicit_owner
+        else {"document", "scope"}
+    )
+    raw = _require_json_object(value, frozenset(required))
+    explicit_owner = raw.get("declaring_repository_id")
+    if allow_explicit_owner:
+        declaring_repository_id = _require_json_string(
+            explicit_owner,
+            "FunctionalDocumentPlacement.declaring_repository_id",
+        )
+    document = _decode_document_ref(raw["document"])
+    scope = _require_json_string(raw["scope"], "FunctionalDocumentPlacement.scope")
+    try:
+        normalized = normalize_directory_scope(scope)
+    except ValueError:
+        return None, _finding(
+            FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE,
+            f"placement scope {scope!r} is not canonical repository-relative directory scope",
+            "declare '.' or a canonical POSIX repository-relative directory scope",
+            repository_id=declaring_repository_id,
+            declaration_locator=declaration_locator,
+        )
+    return (
+        FunctionalDocumentPlacement(
+            declaring_repository_id=declaring_repository_id,
+            document=document,
+            scope=normalized,
+        ),
+        None,
+    )
+
+
+def decode_functional_pyramid_declaration(
+    text: str,
+    *,
+    repository_id: str,
+    declaration_locator: str,
+) -> tuple[FunctionalPyramidDeclaration, tuple[FunctionalPyramidFinding, ...]]:
+    """Strictly decode one Version-2 declaration and retain scope graph findings.
+
+    JSON/version/structural failures raise ValueError and are owned by the
+    declaration-source validation path. Once a placement's non-scope coordinates
+    are recoverable, a non-canonical scope is returned exclusively as
+    INVALID_PLACEMENT_SCOPE and no invalid canonical placement is built.
+    """
     try:
         value = _json.loads(text)
     except _json.JSONDecodeError as exc:
         raise ValueError("Functional Pyramid declaration is not valid JSON") from exc
-    raw = _require_json_object(value, frozenset({"version", "contexts", "rules"}))
-    if raw["version"] != 1:
-        raise ValueError("Functional Pyramid declaration version must be 1")
+    raw = _require_json_object(value, frozenset({"version", "placements"}))
+    if raw["version"] != 2:
+        raise ValueError("Functional Pyramid declaration version must be 2")
 
-    contexts: list[FunctionalContextDeclaration] = []
-    for item in _require_json_array(raw["contexts"], "declaration contexts"):
-        context = _require_json_object(
-            item, frozenset({"context_id", "coverage", "inherits", "rules"})
+    declarations: list[FunctionalDocumentDeclaration] = []
+    findings: list[FunctionalPyramidFinding] = []
+    for item in _require_json_array(raw["placements"], "declaration placements"):
+        entry = _require_json_object(
+            item, frozenset({"document", "scope", "governing_placements"})
         )
-        contexts.append(
-            FunctionalContextDeclaration(
-                context_id=_require_json_string(context["context_id"], "context_id"),
-                coverage=decode_functional_scope(context["coverage"]),
-                inherits=tuple(
-                    _decode_graph_ref(value)
-                    for value in _require_json_array(
-                        context["inherits"], "context inherits"
-                    )
-                ),
-                rules=tuple(
-                    _decode_graph_ref(value)
-                    for value in _require_json_array(context["rules"], "context rules")
-                ),
-            )
+        placement, placement_finding = _decode_placement(
+            {"document": entry["document"], "scope": entry["scope"]},
+            declaring_repository_id=repository_id,
+            declaration_locator=declaration_locator,
+            allow_explicit_owner=False,
         )
+        if placement_finding is not None:
+            findings.append(placement_finding)
+            continue
+        assert placement is not None
 
-    rules: list[FunctionalRuleDeclaration] = []
-    for item in _require_json_array(raw["rules"], "declaration rules"):
-        rule = _require_json_object(
-            item,
-            frozenset({"rule_id", "layer", "owner", "governing_rule_ids"}),
-        )
-        owner = _require_json_object(
-            rule["owner"], frozenset({"repository_id", "authority_ref"})
-        )
-        try:
-            layer = FunctionalPyramidLayer(
-                _require_json_string(rule["layer"], "rule layer")
-            )
-        except ValueError as exc:
-            raise ValueError("unknown Functional Pyramid layer") from exc
-        governing: list[FunctionalGraphRef | str] = []
-        for value in _require_json_array(
-            rule["governing_rule_ids"], "rule governing_rule_ids"
+        governing: list[FunctionalDocumentPlacement | str] = []
+        invalid_parent_scope = False
+        for parent_raw in _require_json_array(
+            entry["governing_placements"], "placement governing_placements"
         ):
-            if isinstance(value, str):
-                if value != "ROOT":
+            if isinstance(parent_raw, str):
+                if parent_raw != "ROOT":
                     raise ValueError("the only string governing terminal is ROOT")
-                governing.append(value)
-            else:
-                governing.append(_decode_graph_ref(value))
-        rules.append(
-            FunctionalRuleDeclaration(
-                rule_id=_require_json_string(rule["rule_id"], "rule_id"),
-                layer=layer,
-                owner=FunctionalRuleOwner(
-                    repository_id=_require_json_string(
-                        owner["repository_id"], "rule owner repository_id"
-                    ),
-                    authority_ref=_require_json_string(
-                        owner["authority_ref"], "rule owner authority_ref"
-                    ),
-                ),
-                governing_rule_ids=tuple(governing),
+                governing.append("ROOT")
+                continue
+            parent, parent_finding = _decode_placement(
+                parent_raw,
+                declaring_repository_id=repository_id,
+                declaration_locator=declaration_locator,
+                allow_explicit_owner=True,
+            )
+            if parent_finding is not None:
+                findings.append(parent_finding)
+                invalid_parent_scope = True
+                continue
+            assert parent is not None
+            governing.append(parent)
+        if invalid_parent_scope and not governing:
+            continue
+        declarations.append(
+            FunctionalDocumentDeclaration(
+                placement=placement,
+                governing_placements=tuple(governing),
             )
         )
 
-    return FunctionalPyramidDeclaration(
-        version=1, contexts=tuple(contexts), rules=tuple(rules)
-    )
-
-
-def _layer_rank(layer: FunctionalPyramidLayer) -> int:
-    if layer is FunctionalPyramidLayer.P0:
-        return 0
-    if layer is FunctionalPyramidLayer.P1:
-        return 1
-    if layer is FunctionalPyramidLayer.P2S:
-        return 2
-    if layer is FunctionalPyramidLayer.P2W:
-        return 3
-    if layer is FunctionalPyramidLayer.P3:
-        return 4
-    return 5
-
-
-def _governing_edge_is_valid(
-    child_layer: FunctionalPyramidLayer,
-    parent_layer: FunctionalPyramidLayer,
-) -> bool:
-    if child_layer is FunctionalPyramidLayer.P1:
-        return parent_layer is FunctionalPyramidLayer.P0
-    if child_layer is FunctionalPyramidLayer.P2S:
-        return parent_layer in (
-            FunctionalPyramidLayer.P0,
-            FunctionalPyramidLayer.P1,
-        )
-    if child_layer is FunctionalPyramidLayer.P2W:
-        return parent_layer in (
-            FunctionalPyramidLayer.P0,
-            FunctionalPyramidLayer.P1,
-            FunctionalPyramidLayer.P2S,
-        )
-    if child_layer is FunctionalPyramidLayer.P3:
-        return parent_layer in (
-            FunctionalPyramidLayer.P0,
-            FunctionalPyramidLayer.P1,
-            FunctionalPyramidLayer.P2S,
-            FunctionalPyramidLayer.P2W,
-        )
-    if child_layer is FunctionalPyramidLayer.P4:
-        return parent_layer in (
-            FunctionalPyramidLayer.P0,
-            FunctionalPyramidLayer.P1,
-            FunctionalPyramidLayer.P2S,
-            FunctionalPyramidLayer.P2W,
-            FunctionalPyramidLayer.P3,
-        )
-    return False
-
-
-def _finding_sort_key(
-    finding: FunctionalPyramidFinding,
-) -> tuple[str, str, str, str, str, str]:
     return (
-        finding.reason.value,
-        finding.repository_id or "",
-        finding.context_id or "",
-        finding.rule_id or "",
-        finding.declaration_locator or "",
-        finding.detail,
+        FunctionalPyramidDeclaration(version=2, placements=tuple(declarations)),
+        _ordered_findings(findings),
     )
 
 
-def _ordered_findings(
-    findings: _collections.Iterable[FunctionalPyramidFinding],
-) -> tuple[FunctionalPyramidFinding, ...]:
-    return tuple(sorted(set(findings), key=_finding_sort_key))
-
-
-def _finding(
-    reason: FunctionalPyramidFindingReason,
-    detail: str,
-    recovery: str,
-    *,
-    repository_id: str | None = None,
-    context_id: str | None = None,
-    rule_id: str | None = None,
-    declaration_locator: str | None = None,
-) -> FunctionalPyramidFinding:
-    return FunctionalPyramidFinding(
-        reason=reason,
-        repository_id=repository_id,
-        context_id=context_id,
-        rule_id=rule_id,
-        declaration_locator=declaration_locator,
-        detail=detail,
-        recovery=recovery,
+def _governing_layer_is_valid(
+    child: FunctionalPyramidLayer, parent: FunctionalPyramidLayer
+) -> bool:
+    if child is FunctionalPyramidLayer.P0:
+        return False
+    if child is FunctionalPyramidLayer.P1:
+        return parent is FunctionalPyramidLayer.P0
+    if child is FunctionalPyramidLayer.P2S:
+        return parent in (FunctionalPyramidLayer.P0, FunctionalPyramidLayer.P1)
+    if child is FunctionalPyramidLayer.P2W:
+        return parent in (
+            FunctionalPyramidLayer.P0,
+            FunctionalPyramidLayer.P1,
+            FunctionalPyramidLayer.P2S,
+        )
+    if child is FunctionalPyramidLayer.P3:
+        return parent in (
+            FunctionalPyramidLayer.P0,
+            FunctionalPyramidLayer.P1,
+            FunctionalPyramidLayer.P2S,
+            FunctionalPyramidLayer.P2W,
+        )
+    return parent in (
+        FunctionalPyramidLayer.P0,
+        FunctionalPyramidLayer.P1,
+        FunctionalPyramidLayer.P2S,
+        FunctionalPyramidLayer.P2W,
+        FunctionalPyramidLayer.P3,
     )
 
 
-def _declaration_indexes(
+def _indexes(
     declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
 ) -> tuple[
-    dict[tuple[str, str], FunctionalContextDeclaration],
-    dict[tuple[str, str], FunctionalRuleDeclaration],
-    frozenset[str],
-    frozenset[str],
+    dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+    tuple[FunctionalPyramidFinding, ...],
 ]:
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration] = {}
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration] = {}
-    context_owner: dict[str, tuple[str, FunctionalContextDeclaration]] = {}
-    rule_owner: dict[str, tuple[str, FunctionalRuleDeclaration]] = {}
-    duplicate_contexts: set[str] = set()
-    duplicate_rules: set[str] = set()
-
+    by_placement: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration] = {}
+    findings: list[FunctionalPyramidFinding] = []
     for repository_id, declaration in declarations:
-        for context in declaration.contexts:
-            key = (repository_id, context.context_id)
-            previous_context = contexts.get(key)
-            if previous_context is not None and previous_context != context:
-                duplicate_contexts.add(context.context_id)
-            contexts.setdefault(key, context)
-            context_owner_entry = context_owner.get(context.context_id)
-            if context_owner_entry is None:
-                context_owner[context.context_id] = (repository_id, context)
-            elif context_owner_entry != (repository_id, context):
-                duplicate_contexts.add(context.context_id)
-
-        for rule in declaration.rules:
-            key = (repository_id, rule.rule_id)
-            previous_rule = rules.get(key)
-            if previous_rule is not None and previous_rule != rule:
-                duplicate_rules.add(rule.rule_id)
-            rules.setdefault(key, rule)
-            rule_owner_entry = rule_owner.get(rule.rule_id)
-            if rule_owner_entry is None:
-                rule_owner[rule.rule_id] = (repository_id, rule)
-            elif rule_owner_entry != (repository_id, rule):
-                duplicate_rules.add(rule.rule_id)
-
-    return contexts, rules, frozenset(duplicate_contexts), frozenset(duplicate_rules)
-
-
-def _semantic_atoms(
-    surface: SurfaceKey, scope: EvidenceScope
-) -> tuple[tuple[EvidenceScope, FunctionalScopeSelector], ...]:
-    if surface.kind is SurfaceKind.FILE:
-        if any(path != surface.locator for path in scope.paths) or any(
-            ref.repository_id != surface.repository_id or ref.locator != surface.locator
-            for ref in scope.evidence_refs
-        ):
-            raise ValueError("FILE semantic scope conflicts with its owning surface")
-        return (
-            (
-                EvidenceScope(paths=(surface.locator,)),
-                FunctionalScopeSelector(
-                    FunctionalScopeSelectorKind.PATH, path=surface.locator
-                ),
-            ),
-        )
-
-    if surface.kind is SurfaceKind.SYMBOL:
-        path = _containment.surface_file_locator(surface.locator)
-        if path is None:
-            raise ValueError("SYMBOL surface has no canonical owning path")
-        if any(value != path for value in scope.paths) or any(
-            ref.repository_id != surface.repository_id
-            or ref.locator not in (surface.locator, path)
-            for ref in scope.evidence_refs
-        ):
-            raise ValueError("SYMBOL semantic scope conflicts with its owning surface")
-        return (
-            (
-                EvidenceScope(paths=(path,)),
-                FunctionalScopeSelector(
-                    FunctionalScopeSelectorKind.SYMBOL,
-                    path=path,
-                    locator=surface.locator,
-                ),
-            ),
-        )
-
-    if not scope.paths and not scope.evidence_refs:
-        return (
-            (
-                EvidenceScope(),
-                FunctionalScopeSelector(FunctionalScopeSelectorKind.REPOSITORY),
-            ),
-        )
-
-    atoms: list[tuple[EvidenceScope, FunctionalScopeSelector]] = []
-    for path in scope.paths:
-        symbol_path = _containment.surface_file_locator(path)
-        selector = (
-            FunctionalScopeSelector(
-                FunctionalScopeSelectorKind.SYMBOL,
-                path=symbol_path,
-                locator=path,
-            )
-            if symbol_path is not None
-            else FunctionalScopeSelector(
-                FunctionalScopeSelectorKind.PREFIX,
-                path=path,
-            )
-        )
-        atoms.append((EvidenceScope(paths=(path,)), selector))
-    for ref in scope.evidence_refs:
-        if ref.repository_id != surface.repository_id:
-            raise ValueError("semantic scope crosses its owning repository")
-        symbol_path = _containment.surface_file_locator(ref.locator)
-        selector = (
-            FunctionalScopeSelector(
-                FunctionalScopeSelectorKind.SYMBOL,
-                path=symbol_path,
-                locator=ref.locator,
-            )
-            if symbol_path is not None
-            else FunctionalScopeSelector(
-                FunctionalScopeSelectorKind.PATH, path=ref.locator
-            )
-        )
-        atoms.append((EvidenceScope(evidence_refs=(ref,)), selector))
-    return tuple(atoms)
-
-
-def _intersection_selectors(
-    semantic: FunctionalScopeSelector, member_scope: FunctionalScope
-) -> tuple[FunctionalScopeSelector, ...]:
-    found: list[FunctionalScopeSelector] = []
-    for member in normalize_functional_scope(member_scope.selectors).selectors:
-        if not functional_scope_selector_intersects(semantic, member):
-            continue
-        found.append(
-            semantic if functional_scope_selector_contains(member, semantic) else member
-        )
-    if not found:
-        return ()
-    return normalize_functional_scope(found).selectors
-
-
-def _semantic_has_outside_remainder(
-    semantic: FunctionalScopeSelector, member_scope: FunctionalScope
-) -> bool:
-    return not any(
-        functional_scope_selector_contains(member, semantic)
-        for member in normalize_functional_scope(member_scope.selectors).selectors
-    )
-
-
-def _ref_finding(
-    ref: FunctionalGraphRef,
-    *,
-    member_repositories: frozenset[str],
-    available_repositories: frozenset[str],
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    context: bool,
-) -> FunctionalPyramidFinding | None:
-    if ref.repository_id not in member_repositories:
-        return _finding(
-            FunctionalPyramidFindingReason.INVALID_DECLARATION,
-            "graph reference targets a repository outside the active pyramid",
-            "correct the repository-qualified declaration edge",
-            repository_id=ref.repository_id,
-            context_id=ref.identity if context else None,
-            rule_id=None if context else ref.identity,
-        )
-    if ref.repository_id not in available_repositories:
-        return _finding(
-            FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
-            "referenced Functional Pyramid member is unavailable",
-            "restore the named member repository and retry",
-            repository_id=ref.repository_id,
-            context_id=ref.identity if context else None,
-            rule_id=None if context else ref.identity,
-        )
-    key = (ref.repository_id, ref.identity)
-    if context and key not in contexts:
-        return _finding(
-            FunctionalPyramidFindingReason.UNKNOWN_CONTEXT,
-            "referenced context does not exist in the named available member",
-            "correct the context reference or declaration",
-            repository_id=ref.repository_id,
-            context_id=ref.identity,
-        )
-    if not context and key not in rules:
-        return _finding(
-            FunctionalPyramidFindingReason.UNKNOWN_RULE,
-            "referenced rule does not exist in the named available member",
-            "correct the rule reference or declaration",
-            repository_id=ref.repository_id,
-            rule_id=ref.identity,
-        )
-    return None
-
-
-def _availability_findings(
-    members: tuple[FunctionalPyramidMemberView, ...],
-    available_repositories: frozenset[str],
-) -> list[FunctionalPyramidFinding]:
-    return [
-        _finding(
-            FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
-            "active Functional Pyramid member is unavailable",
-            "restore the member repository and its declarations",
-            repository_id=member.repository_id,
-        )
-        for member in members
-        if member.repository_id not in available_repositories
-    ]
-
-
-def _duplicate_identity_findings(
-    duplicate_contexts: frozenset[str],
-    duplicate_rules: frozenset[str],
-) -> list[FunctionalPyramidFinding]:
-    findings = [
-        _finding(
-            FunctionalPyramidFindingReason.DUPLICATE_CONTEXT_OWNER,
-            "context identity has more than one declaration owner",
-            "retain exactly one canonical context declaration",
-            context_id=identity,
-        )
-        for identity in sorted(duplicate_contexts)
-    ]
-    findings.extend(
-        _finding(
-            FunctionalPyramidFindingReason.DUPLICATE_RULE_OWNER,
-            "rule identity has more than one declaration owner",
-            "retain exactly one canonical rule declaration",
-            rule_id=identity,
-        )
-        for identity in sorted(duplicate_rules)
-    )
-    return findings
-
-
-def _context_reference_findings(
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    member_repositories: frozenset[str],
-    available_repositories: frozenset[str],
-) -> list[FunctionalPyramidFinding]:
-    findings: list[FunctionalPyramidFinding] = []
-    for context in contexts.values():
-        for ref in context.inherits:
-            found = _ref_finding(
-                ref,
-                member_repositories=member_repositories,
-                available_repositories=available_repositories,
-                contexts=contexts,
-                rules=rules,
-                context=True,
-            )
-            if found is not None:
-                findings.append(found)
-        for ref in context.rules:
-            found = _ref_finding(
-                ref,
-                member_repositories=member_repositories,
-                available_repositories=available_repositories,
-                contexts=contexts,
-                rules=rules,
-                context=False,
-            )
-            if found is not None:
-                findings.append(found)
-    return findings
-
-
-def _context_cycle_findings(
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    member_repositories: frozenset[str],
-    available_repositories: frozenset[str],
-) -> list[FunctionalPyramidFinding]:
-    findings: list[FunctionalPyramidFinding] = []
-    complete: set[tuple[str, str]] = set()
-
-    def walk(key: tuple[str, str], stack: tuple[tuple[str, str], ...]) -> None:
-        if key in stack:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.CONTEXT_CYCLE,
-                    "context inheritance contains a cycle",
-                    "remove the cyclic inheritance edge",
-                    repository_id=key[0],
-                    context_id=key[1],
+        for entry in declaration.placements:
+            placement = entry.placement
+            if placement.declaring_repository_id != repository_id:
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                        "placement owner does not match the repository-owned declaration",
+                        "correct the declaration placement owner",
+                        repository_id=repository_id,
+                        placement=placement,
+                    )
                 )
-            )
-            return
-        if key in complete:
-            return
-        current = contexts.get(key)
-        if current is None:
-            return
-        next_stack = stack + (key,)
-        for ref in current.inherits:
-            target = (ref.repository_id, ref.identity)
-            if (
-                ref.repository_id in member_repositories
-                and ref.repository_id in available_repositories
-                and target in contexts
-            ):
-                walk(target, next_stack)
-        complete.add(key)
-
-    for key in contexts:
-        walk(key, ())
-    return findings
-
-
-def _rule_edge_findings(
-    repository_id: str,
-    rule_id: str,
-    rule: FunctionalRuleDeclaration,
-    *,
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    member_repositories: frozenset[str],
-    available_repositories: frozenset[str],
-) -> list[FunctionalPyramidFinding]:
-    if rule.layer is FunctionalPyramidLayer.P0:
-        if rule.governing_rule_ids == ("ROOT",):
-            return []
-        return [
-            _finding(
-                FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                "P0 rule must be governed by ROOT exactly",
-                "declare ROOT as the sole P0 governing terminal",
-                repository_id=repository_id,
-                rule_id=rule_id,
-            )
-        ]
-
-    if not rule.governing_rule_ids:
-        return [
-            _finding(
-                FunctionalPyramidFindingReason.UNRESOLVED_RULE_PARENT,
-                "non-P0 rule has no governing rule",
-                "declare at least one valid higher governing rule",
-                repository_id=repository_id,
-                rule_id=rule_id,
-            )
-        ]
-
-    findings: list[FunctionalPyramidFinding] = []
-    for parent in rule.governing_rule_ids:
-        if isinstance(parent, str):
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                    "ROOT may govern only a P0 rule",
-                    "replace ROOT with a valid higher governing rule",
-                    repository_id=repository_id,
-                    rule_id=rule_id,
-                )
-            )
-            continue
-        found = _ref_finding(
-            parent,
-            member_repositories=member_repositories,
-            available_repositories=available_repositories,
-            contexts=contexts,
-            rules=rules,
-            context=False,
-        )
-        if found is not None:
-            findings.append(found)
-            continue
-        target = rules[(parent.repository_id, parent.identity)]
-        if not _governing_edge_is_valid(rule.layer, target.layer):
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                    "governing edge violates the Functional Pyramid layer relation",
-                    "point the edge to a valid higher governing rule",
-                    repository_id=repository_id,
-                    rule_id=rule_id,
-                )
-            )
-    return findings
-
-
-def _rule_cycle_findings(
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    member_repositories: frozenset[str],
-    available_repositories: frozenset[str],
-) -> list[FunctionalPyramidFinding]:
-    findings: list[FunctionalPyramidFinding] = []
-    complete: set[tuple[str, str]] = set()
-
-    def walk(key: tuple[str, str], stack: tuple[tuple[str, str], ...]) -> None:
-        if key in stack:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.RULE_CYCLE,
-                    "governing rules contain a cycle",
-                    "remove the cyclic governing edge",
-                    repository_id=key[0],
-                    rule_id=key[1],
-                )
-            )
-            return
-        if key in complete:
-            return
-        current = rules.get(key)
-        if current is None:
-            return
-        next_stack = stack + (key,)
-        for parent in current.governing_rule_ids:
-            if not isinstance(parent, FunctionalGraphRef):
                 continue
-            target = (parent.repository_id, parent.identity)
-            if (
-                parent.repository_id in member_repositories
-                and parent.repository_id in available_repositories
-                and target in rules
-            ):
-                walk(target, next_stack)
-        complete.add(key)
-
-    for key in rules:
-        walk(key, ())
-    return findings
-
-
-def _complete_coverage_findings(
-    members: tuple[FunctionalPyramidMemberView, ...],
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-) -> list[FunctionalPyramidFinding]:
-    findings: list[FunctionalPyramidFinding] = []
-    for member in members:
-        if member.coverage is not FunctionalPyramidCoverage.COMPLETE:
-            continue
-        coverage = tuple(
-            context.coverage
-            for (repository_id, _), context in contexts.items()
-            if repository_id == member.repository_id
-        )
-        if not functional_scope_uncovered(member.functional_scope, coverage):
-            continue
-        findings.append(
-            _finding(
-                FunctionalPyramidFindingReason.UNCOVERED_PATH,
-                "COMPLETE member FunctionalScope has uncovered selectors",
-                "add applicable Functional Context coverage or revise coverage mode",
-                repository_id=member.repository_id,
-            )
-        )
-    return findings
+            previous = by_placement.get(placement)
+            if previous is not None and previous != entry:
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_PLACEMENT,
+                        "one placement identity has conflicting governing relationships",
+                        "retain one canonical declaration for the placement identity",
+                        repository_id=repository_id,
+                        placement=placement,
+                    )
+                )
+                continue
+            by_placement.setdefault(placement, entry)
+    return by_placement, _ordered_findings(findings)
 
 
-def _graph_structural_findings(
+def _graph_findings(
     members: tuple[FunctionalPyramidMemberView, ...],
     declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
     available_repositories: frozenset[str],
     declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
-) -> tuple[FunctionalPyramidFinding, ...]:
-    contexts, rules, duplicate_contexts, duplicate_rules = _declaration_indexes(
-        declarations
-    )
-    member_repositories = frozenset(member.repository_id for member in members)
-    findings: list[FunctionalPyramidFinding] = list(declaration_findings)
-    findings.extend(_availability_findings(members, available_repositories))
-    findings.extend(_duplicate_identity_findings(duplicate_contexts, duplicate_rules))
-    findings.extend(
-        _context_reference_findings(
-            contexts, rules, member_repositories, available_repositories
-        )
-    )
-    findings.extend(
-        _context_cycle_findings(contexts, member_repositories, available_repositories)
-    )
-    for (repository_id, rule_id), rule in rules.items():
-        findings.extend(
-            _rule_edge_findings(
-                repository_id,
-                rule_id,
-                rule,
-                contexts=contexts,
-                rules=rules,
-                member_repositories=member_repositories,
-                available_repositories=available_repositories,
+) -> tuple[
+    dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+    tuple[FunctionalPyramidFinding, ...],
+]:
+    member_ids = frozenset(member.repository_id for member in members)
+    index, duplicate_findings = _indexes(declarations)
+    findings: list[FunctionalPyramidFinding] = [
+        *declaration_findings,
+        *duplicate_findings,
+    ]
+
+    for member in members:
+        if member.repository_id not in available_repositories:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+                    "active Functional Pyramid member is unavailable",
+                    "restore the named member repository",
+                    repository_id=member.repository_id,
+                )
+            )
+
+    for placement, declaration in index.items():
+        document_repository = placement.document.repository_id
+        if document_repository not in member_ids:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
+                    "document reference targets a repository outside the Functional Pyramid instance",
+                    "reference a canonical document owned by an instance member",
+                    repository_id=document_repository,
+                    placement=placement,
+                )
+            )
+        elif document_repository not in available_repositories:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+                    "document owner repository is unavailable",
+                    "restore the named member repository",
+                    repository_id=document_repository,
+                    placement=placement,
+                )
+            )
+
+        if placement.document.layer is FunctionalPyramidLayer.P0:
+            if declaration.governing_placements != ("ROOT",):
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+                        "P0 placement must have exactly ROOT as its governing relationship",
+                        "declare exactly ROOT for the P0 placement",
+                        repository_id=placement.declaring_repository_id,
+                        placement=placement,
+                    )
+                )
+        elif "ROOT" in declaration.governing_placements:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+                    "only P0 placements may be governed directly by ROOT",
+                    "declare a permitted governing placement under FD-67",
+                    repository_id=placement.declaring_repository_id,
+                    placement=placement,
+                )
+            )
+
+        for parent in declaration.governing_placements:
+            if isinstance(parent, str):
+                continue
+            if parent.declaring_repository_id not in member_ids:
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
+                        "governing placement targets a repository outside the instance",
+                        "correct the repository-qualified governing placement",
+                        repository_id=parent.declaring_repository_id,
+                        placement=placement,
+                    )
+                )
+                continue
+            if parent.declaring_repository_id not in available_repositories:
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+                        "governing placement member repository is unavailable",
+                        "restore the named member repository",
+                        repository_id=parent.declaring_repository_id,
+                        placement=placement,
+                    )
+                )
+                continue
+            if parent not in index:
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.UNKNOWN_DOCUMENT,
+                        "governing placement does not exist in the named available member",
+                        "correct or declare the exact governing placement",
+                        repository_id=parent.declaring_repository_id,
+                        placement=placement,
+                    )
+                )
+                continue
+            if not _governing_layer_is_valid(
+                placement.document.layer, parent.document.layer
+            ):
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+                        "governing placement layer is not admissible for the governed placement",
+                        "declare a governing edge permitted by FD-67",
+                        repository_id=placement.declaring_repository_id,
+                        placement=placement,
+                    )
+                )
+            if (
+                parent.declaring_repository_id == placement.declaring_repository_id
+                and not directory_scope_contains(parent.scope, placement.scope)
+            ):
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
+                        "same-repository governing placement has narrower scope than the governed placement",
+                        "widen the governing placement scope or narrow the governed placement",
+                        repository_id=placement.declaring_repository_id,
+                        placement=placement,
+                    )
+                )
+
+    cycle_nodes: set[FunctionalDocumentPlacement] = set()
+    visiting: set[FunctionalDocumentPlacement] = set()
+    visited: set[FunctionalDocumentPlacement] = set()
+
+    def visit(
+        node: FunctionalDocumentPlacement,
+        stack: tuple[FunctionalDocumentPlacement, ...],
+    ) -> None:
+        if node in visiting:
+            start = stack.index(node) if node in stack else 0
+            cycle_nodes.update(stack[start:])
+            cycle_nodes.add(node)
+            return
+        if node in visited:
+            return
+        visiting.add(node)
+        entry = index.get(node)
+        if entry is not None:
+            for parent in entry.governing_placements:
+                if not isinstance(parent, str) and parent in index:
+                    visit(parent, stack + (node,))
+        visiting.remove(node)
+        visited.add(node)
+
+    for placement in sorted(index, key=_placement_sort_key):
+        visit(placement, ())
+    for placement in sorted(cycle_nodes, key=_placement_sort_key):
+        findings.append(
+            _finding(
+                FunctionalPyramidFindingReason.DOCUMENT_CYCLE,
+                "governing document placements form a cycle",
+                "remove the cycle from the declaration graph",
+                repository_id=placement.declaring_repository_id,
+                placement=placement,
             )
         )
-    findings.extend(
-        _rule_cycle_findings(rules, member_repositories, available_repositories)
-    )
-    findings.extend(_complete_coverage_findings(members, contexts))
-    return _ordered_findings(findings)
+
+    invalid_scope_repositories = {
+        finding.repository_id
+        for finding in findings
+        if finding.reason is FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE
+        and finding.repository_id is not None
+    }
+    for member in members:
+        if member.repository_id in invalid_scope_repositories:
+            continue
+        root_ok = any(
+            placement.declaring_repository_id == member.repository_id
+            and placement.scope == "."
+            and placement.document.layer is FunctionalPyramidLayer.P0
+            and declaration.governing_placements == ("ROOT",)
+            for placement, declaration in index.items()
+        )
+        if not root_ok:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.MISSING_ROOT_PLACEMENT,
+                    "member declaration graph has no root-scoped P0 placement governed by ROOT",
+                    "declare at least one scope='.' P0 placement governed exactly by ROOT",
+                    repository_id=member.repository_id,
+                    directory=".",
+                )
+            )
+
+    return index, _ordered_findings(findings)
 
 
 def evaluate_functional_pyramid_health(
@@ -992,663 +605,310 @@ def evaluate_functional_pyramid_health(
     available_repositories: frozenset[str],
     declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
 ) -> tuple[FunctionalPyramidHealth, tuple[FunctionalPyramidFinding, ...]]:
-    """Compute FD-83 live structural health without persisting it."""
-    findings = _graph_structural_findings(
-        members,
-        declarations,
-        available_repositories,
-        declaration_findings,
+    """Evaluate current structural graph health without authority/support currency."""
+    _, findings = _graph_findings(
+        members, declarations, available_repositories, declaration_findings
     )
-    health = (
+    return (
         FunctionalPyramidHealth.VALID
         if not findings
-        else FunctionalPyramidHealth.DEGRADED
+        else FunctionalPyramidHealth.DEGRADED,
+        findings,
     )
-    return health, findings
 
 
-def _context_direct_refs(
+def _directory_for_file(path: str) -> str:
+    parent = _posixpath.dirname(path)
+    return "." if parent in ("", ".") else normalize_directory_scope(parent)
+
+
+def _semantic_seeds(
+    surface: SurfaceKey, semantic_scope: EvidenceScope
+) -> tuple[tuple[str | None, EvidenceScope], ...]:
+    if surface.kind is SurfaceKind.FILE:
+        return ((_directory_for_file(surface.locator), semantic_scope),)
+    if surface.kind is SurfaceKind.SYMBOL:
+        owner = _containment.surface_file_locator(surface.locator)
+        if owner is None:
+            raise ValueError("SYMBOL surface has no canonical owning file")
+        return ((_directory_for_file(owner), semantic_scope),)
+    if not semantic_scope.paths and not semantic_scope.evidence_refs:
+        return ((None, semantic_scope),)
+
+    seeds: list[tuple[str | None, EvidenceScope]] = []
+    for path in semantic_scope.paths:
+        owner = _containment.surface_file_locator(path)
+        directory = (
+            _directory_for_file(owner)
+            if owner is not None
+            else normalize_directory_scope(path)
+        )
+        seeds.append((directory, EvidenceScope(paths=(path,))))
+    for ref in semantic_scope.evidence_refs:
+        if ref.repository_id != surface.repository_id:
+            raise ValueError("semantic scope crosses its owning repository")
+        owner = _containment.surface_file_locator(ref.locator)
+        locator = owner if owner is not None else ref.locator
+        seeds.append(
+            (
+                _directory_for_file(locator),
+                EvidenceScope(evidence_refs=(ref,)),
+            )
+        )
+    return tuple(seeds)
+
+
+def _direct_selection(
+    *,
     repository_id: str,
-    selector: FunctionalScopeSelector,
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    duplicate_contexts: frozenset[str],
-) -> tuple[FunctionalGraphRef, ...]:
-    refs: list[FunctionalGraphRef] = []
-    for (owner_repository, context_id), context in contexts.items():
-        if owner_repository != repository_id:
+    directory: str | None,
+    index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+) -> tuple[FunctionalDocumentPlacement, ...]:
+    selected = [
+        placement
+        for placement in index
+        if placement.declaring_repository_id == repository_id
+        and (
+            directory is None
+            or directory_scope_contains(placement.scope, directory)
+        )
+    ]
+    return tuple(sorted(selected, key=_placement_sort_key))
+
+
+def _closure(
+    initial: _collections.Iterable[FunctionalDocumentPlacement],
+    index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+) -> tuple[FunctionalDocumentPlacement, ...]:
+    seen: set[FunctionalDocumentPlacement] = set()
+    stack = list(initial)
+    while stack:
+        placement = stack.pop()
+        if placement in seen:
             continue
-        if any(
-            functional_scope_selector_intersects(selector, coverage)
-            for coverage in context.coverage.selectors
+        seen.add(placement)
+        declaration = index.get(placement)
+        if declaration is None:
+            continue
+        for parent in declaration.governing_placements:
+            if not isinstance(parent, str) and parent in index:
+                stack.append(parent)
+    return tuple(sorted(seen, key=_placement_sort_key))
+
+
+def _downstream(
+    placement: FunctionalDocumentPlacement,
+    index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+) -> tuple[FunctionalDocumentPlacement, ...]:
+    return tuple(
+        sorted(
+            (
+                child
+                for child, declaration in index.items()
+                if placement in declaration.governing_placements
+            ),
+            key=_placement_sort_key,
+        )
+    )
+
+
+def _relevant_findings(
+    findings: tuple[FunctionalPyramidFinding, ...],
+    *,
+    repository_id: str,
+    closure: tuple[FunctionalDocumentPlacement, ...],
+) -> tuple[FunctionalPyramidFinding, ...]:
+    closure_set = set(closure)
+    relevant_repositories = {repository_id}
+    for placement in closure:
+        relevant_repositories.add(placement.declaring_repository_id)
+        relevant_repositories.add(placement.document.repository_id)
+    selected: list[FunctionalPyramidFinding] = []
+    for finding in findings:
+        if finding.placement is not None:
+            if finding.placement in closure_set:
+                selected.append(finding)
+            continue
+        if finding.reason is FunctionalPyramidFindingReason.MISSING_ROOT_PLACEMENT:
+            if finding.repository_id == repository_id:
+                selected.append(finding)
+            continue
+        if finding.repository_id in relevant_repositories and finding.reason in (
+            FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+            FunctionalPyramidFindingReason.INVALID_DECLARATION,
+            FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE,
         ):
-            refs.append(FunctionalGraphRef(owner_repository, context_id))
-    return tuple(refs)
-
-
-def _resolve_context_refs(
-    direct_refs: tuple[FunctionalGraphRef, ...],
-    *,
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    duplicate_contexts: frozenset[str],
-    member_repositories: frozenset[str],
-    available_repositories: frozenset[str],
-) -> tuple[
-    tuple[tuple[FunctionalGraphRef, bool], ...],
-    tuple[FunctionalPyramidFinding, ...],
-]:
-    ordered: list[tuple[FunctionalGraphRef, bool]] = []
-    emitted: set[tuple[str, str]] = set()
-    valid_direct: list[FunctionalGraphRef] = []
-    findings: list[FunctionalPyramidFinding] = []
-
-    def validate(ref: FunctionalGraphRef) -> bool:
-        if ref.identity in duplicate_contexts:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.DUPLICATE_CONTEXT_OWNER,
-                    "context identity has more than one declaration owner",
-                    "retain exactly one canonical context declaration",
-                    repository_id=ref.repository_id,
-                    context_id=ref.identity,
-                )
-            )
-            return False
-        ref_finding = _ref_finding(
-            ref,
-            member_repositories=member_repositories,
-            available_repositories=available_repositories,
-            contexts=contexts,
-            rules=rules,
-            context=True,
-        )
-        if ref_finding is not None:
-            findings.append(ref_finding)
-            return False
-        return True
-
-    # FD-72: every direct context precedes every inherited context.
-    for ref in direct_refs:
-        key = (ref.repository_id, ref.identity)
-        if key in emitted or not validate(ref):
-            continue
-        emitted.add(key)
-        valid_direct.append(ref)
-        ordered.append((ref, True))
-
-    def visit_inherited(
-        ref: FunctionalGraphRef, stack: tuple[tuple[str, str], ...]
-    ) -> None:
-        key = (ref.repository_id, ref.identity)
-        if key in stack:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.CONTEXT_CYCLE,
-                    "context inheritance contains a cycle",
-                    "remove the cyclic inheritance edge",
-                    repository_id=ref.repository_id,
-                    context_id=ref.identity,
-                )
-            )
-            return
-        if not validate(ref):
-            return
-        if key not in emitted:
-            emitted.add(key)
-            ordered.append((ref, False))
-        context = contexts[key]
-        for inherited in context.inherits:
-            visit_inherited(inherited, stack + (key,))
-
-    for ref in valid_direct:
-        key = (ref.repository_id, ref.identity)
-        for inherited in contexts[key].inherits:
-            visit_inherited(inherited, (key,))
-
-    return tuple(ordered), _ordered_findings(findings)
-
-
-def _resolve_rule_refs(
-    initial_refs: tuple[FunctionalGraphRef, ...],
-    *,
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    duplicate_rules: frozenset[str],
-    member_repositories: frozenset[str],
-    available_repositories: frozenset[str],
-) -> tuple[
-    tuple[FunctionalGraphRef, ...],
-    tuple[FunctionalPyramidFinding, ...],
-]:
-    emitted: list[FunctionalGraphRef] = []
-    seen: set[tuple[str, str]] = set()
-    active: set[tuple[str, str]] = set()
-    findings: list[FunctionalPyramidFinding] = []
-
-    def visit(ref: FunctionalGraphRef) -> None:
-        key = (ref.repository_id, ref.identity)
-        if ref.identity in duplicate_rules:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.DUPLICATE_RULE_OWNER,
-                    "rule identity has more than one declaration owner",
-                    "retain exactly one canonical rule declaration",
-                    repository_id=ref.repository_id,
-                    rule_id=ref.identity,
-                )
-            )
-            return
-        ref_finding = _ref_finding(
-            ref,
-            member_repositories=member_repositories,
-            available_repositories=available_repositories,
-            contexts=contexts,
-            rules=rules,
-            context=False,
-        )
-        if ref_finding is not None:
-            findings.append(ref_finding)
-            return
-        if key in active:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.RULE_CYCLE,
-                    "governing rules contain a cycle",
-                    "remove the cyclic governing edge",
-                    repository_id=ref.repository_id,
-                    rule_id=ref.identity,
-                )
-            )
-            return
-        if key in seen:
-            return
-        seen.add(key)
-        active.add(key)
-        emitted.append(ref)
-        rule = rules[key]
-        if rule.layer is FunctionalPyramidLayer.P0:
-            if rule.governing_rule_ids != ("ROOT",):
-                findings.append(
-                    _finding(
-                        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                        "P0 rule must be governed by ROOT exactly",
-                        "declare ROOT as the sole P0 governing terminal",
-                        repository_id=ref.repository_id,
-                        rule_id=ref.identity,
-                    )
-                )
-        elif not rule.governing_rule_ids:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.UNRESOLVED_RULE_PARENT,
-                    "non-P0 rule has no governing rule",
-                    "declare at least one valid higher governing rule",
-                    repository_id=ref.repository_id,
-                    rule_id=ref.identity,
-                )
-            )
-        for parent in rule.governing_rule_ids:
-            if isinstance(parent, str):
-                if rule.layer is not FunctionalPyramidLayer.P0:
-                    findings.append(
-                        _finding(
-                            FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                            "ROOT may govern only a P0 rule",
-                            "replace ROOT with a valid higher governing rule",
-                            repository_id=ref.repository_id,
-                            rule_id=ref.identity,
-                        )
-                    )
-                continue
-            parent_finding = _ref_finding(
-                parent,
-                member_repositories=member_repositories,
-                available_repositories=available_repositories,
-                contexts=contexts,
-                rules=rules,
-                context=False,
-            )
-            if parent_finding is not None:
-                findings.append(parent_finding)
-                continue
-            target = rules[(parent.repository_id, parent.identity)]
-            if not _governing_edge_is_valid(rule.layer, target.layer):
-                findings.append(
-                    _finding(
-                        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                        "governing edge violates the Functional Pyramid layer relation",
-                        "point the edge to a valid higher governing rule",
-                        repository_id=ref.repository_id,
-                        rule_id=ref.identity,
-                    )
-                )
-                continue
-            visit(parent)
-        active.remove(key)
-
-    for ref in initial_refs:
-        visit(ref)
-    return tuple(emitted), _ordered_findings(findings)
-
-
-def _downstream_rule_ids(
-    key: tuple[str, str],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-) -> tuple[str, ...]:
-    found: set[tuple[str, str]] = set()
-    frontier = [key]
-    while frontier:
-        current = frontier.pop()
-        for candidate_key, rule in rules.items():
-            if candidate_key in found or candidate_key == key:
-                continue
-            if any(
-                isinstance(parent, FunctionalGraphRef)
-                and (parent.repository_id, parent.identity) == current
-                for parent in rule.governing_rule_ids
-            ):
-                found.add(candidate_key)
-                frontier.append(candidate_key)
-    return tuple(sorted(identity for _, identity in found))
-
-
-def _downstream_context_ids(
-    rule_ids: frozenset[str],
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-) -> tuple[str, ...]:
-    found: set[tuple[str, str]] = {
-        key
-        for key, context in contexts.items()
-        if any(ref.identity in rule_ids for ref in context.rules)
-    }
-    frontier = list(found)
-    while frontier:
-        current = frontier.pop()
-        for candidate_key, context in contexts.items():
-            if candidate_key in found:
-                continue
-            if any(
-                (inherited.repository_id, inherited.identity) == current
-                for inherited in context.inherits
-            ):
-                found.add(candidate_key)
-                frontier.append(candidate_key)
-    return tuple(sorted(identity for _, identity in found))
+            selected.append(finding)
+    return _ordered_findings(selected)
 
 
 def _route_identity(
-    surface: SurfaceKey,
-    semantic_scope: EvidenceScope,
-    contexts: tuple[FunctionalContextRoute, ...],
-    rule_refs: tuple[FunctionalGraphRef, ...],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
+    *,
+    repository_id: str,
+    selection: object,
+    closure: tuple[FunctionalDocumentPlacement, ...],
+    index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+    members: tuple[FunctionalPyramidMemberView, ...],
 ) -> FunctionalRouteIdentity:
     payload = {
-        "scope": {
-            "paths": tuple(semantic_scope.paths),
-            "refs": [
-                (
-                    ref.repository_id,
-                    ref.locator,
-                    ref.section_or_span,
-                )
-                for ref in semantic_scope.evidence_refs
-            ],
-        },
-        "contexts": [
-            (
-                context.repository_id,
-                context.context_id,
-                context.direct,
-                [
-                    (selector.kind.value, selector.path, selector.locator)
-                    for selector in context.coverage.selectors
-                ],
-                tuple(context.inherits),
-                tuple(context.rule_ids),
-            )
-            for context in contexts
-        ],
-        "rules": [
-            (
-                ref.repository_id,
-                ref.identity,
-                rules[(ref.repository_id, ref.identity)].layer.value,
-                rules[(ref.repository_id, ref.identity)].owner.repository_id,
-                rules[(ref.repository_id, ref.identity)].owner.authority_ref,
-                [
-                    (
-                        parent
-                        if isinstance(parent, str)
-                        else (parent.repository_id, parent.identity)
-                    )
-                    for parent in rules[
-                        (ref.repository_id, ref.identity)
-                    ].governing_rule_ids
-                ],
-            )
-            for ref in rule_refs
-            if (ref.repository_id, ref.identity) in rules
-        ],
-        "members": sorted(
-            {surface.repository_id}
-            | {context.repository_id for context in contexts}
-            | {ref.repository_id for ref in rule_refs}
-            | {
-                rules[(ref.repository_id, ref.identity)].owner.repository_id
-                for ref in rule_refs
-                if (ref.repository_id, ref.identity) in rules
+        "repository_id": repository_id,
+        "selection": selection,
+        "placements": [
+            {
+                "declaring_repository_id": placement.declaring_repository_id,
+                "document_repository_id": placement.document.repository_id,
+                "document_ref": placement.document.document_ref,
+                "layer": placement.document.layer.value,
+                "scope": placement.scope,
+                "parents": [
+                    "ROOT"
+                    if isinstance(parent, str)
+                    else {
+                        "declaring_repository_id": parent.declaring_repository_id,
+                        "document_repository_id": parent.document.repository_id,
+                        "document_ref": parent.document.document_ref,
+                        "layer": parent.document.layer.value,
+                        "scope": parent.scope,
+                    }
+                    for parent in index[placement].governing_placements
+                ]
+                if placement in index
+                else [],
             }
-        ),
+            for placement in closure
+        ],
+        "members": [
+            member.repository_id
+            for member in sorted(members, key=lambda value: value.repository_id)
+        ],
     }
-    encoded = _json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return FunctionalRouteIdentity(_hashlib.sha256(encoded).hexdigest())
+    digest = _hashlib.sha256(
+        _json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return FunctionalRouteIdentity(digest)
 
 
-def _unique_graph_refs(
-    refs: _collections.Iterable[FunctionalGraphRef],
-) -> tuple[FunctionalGraphRef, ...]:
-    result: list[FunctionalGraphRef] = []
-    seen: set[tuple[str, str]] = set()
-    for ref in refs:
-        key = (ref.repository_id, ref.identity)
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append(ref)
-    return tuple(result)
-
-
-def _semantic_portions(
-    surface: SurfaceKey,
-    semantic_scope: EvidenceScope,
-    member_scope: FunctionalScope,
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    duplicate_contexts: frozenset[str],
-) -> tuple[
-    tuple[
-        tuple[
-            EvidenceScope,
-            FunctionalScopeSelector | None,
-            FunctionalScopeRelation,
-            tuple[FunctionalGraphRef, ...],
-        ],
-        ...,
-    ],
-    tuple[FunctionalGraphRef, ...],
-    tuple[FunctionalPyramidFinding, ...],
-]:
-    portions: list[
-        tuple[
-            EvidenceScope,
-            FunctionalScopeSelector | None,
-            FunctionalScopeRelation,
-            tuple[FunctionalGraphRef, ...],
-        ]
-    ] = []
-    direct_refs: list[FunctionalGraphRef] = []
-    findings: list[FunctionalPyramidFinding] = []
-
-    for atom_scope, semantic_selector in _semantic_atoms(surface, semantic_scope):
-        intersections = _intersection_selectors(semantic_selector, member_scope)
-        if not intersections:
-            portions.append(
-                (
-                    atom_scope,
-                    None,
-                    FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE,
-                    (),
-                )
-            )
-            continue
-
-        if _semantic_has_outside_remainder(semantic_selector, member_scope):
-            portions.append(
-                (
-                    atom_scope,
-                    None,
-                    FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE,
-                    (),
-                )
-            )
-
-        for intersection in intersections:
-            direct = _context_direct_refs(
-                surface.repository_id,
-                intersection,
-                contexts,
-                duplicate_contexts,
-            )
-            relation = (
-                FunctionalScopeRelation.COVERED
-                if direct
-                else FunctionalScopeRelation.UNCOVERED
-            )
-            portions.append((atom_scope, intersection, relation, direct))
-            direct_refs.extend(direct)
-            if direct:
-                continue
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.UNCOVERED_PATH,
-                    "functional semantic scope has no applicable context",
-                    "declare applicable Functional Context coverage",
-                    repository_id=surface.repository_id,
-                )
-            )
-
-    return tuple(portions), _unique_graph_refs(direct_refs), _ordered_findings(findings)
-
-
-def _context_projection(
-    resolved_contexts: tuple[tuple[FunctionalGraphRef, bool], ...],
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-) -> tuple[
-    tuple[FunctionalContextRoute, ...],
-    tuple[FunctionalGraphRef, ...],
-    frozenset[tuple[str, str]],
-]:
-    routes: list[FunctionalContextRoute] = []
-    rule_refs: list[FunctionalGraphRef] = []
-    keys: set[tuple[str, str]] = set()
-    for ref, direct in resolved_contexts:
-        key = (ref.repository_id, ref.identity)
-        keys.add(key)
-        context = contexts[key]
-        routes.append(
-            FunctionalContextRoute(
-                context_id=ref.identity,
-                repository_id=ref.repository_id,
-                direct=direct,
-                coverage=context.coverage,
-                inherits=tuple(value.identity for value in context.inherits),
-                rule_ids=tuple(value.identity for value in context.rules),
-            )
-        )
-        rule_refs.extend(context.rules)
-    return tuple(routes), _unique_graph_refs(rule_refs), frozenset(keys)
-
-
-def _canonical_owner_rule_refs(
+def _resolve(
     *,
-    surface: SurfaceKey,
-    semantic_scope: EvidenceScope,
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    authority_bindings: _collections.Mapping[tuple[str, str], AuthorityBinding],
-) -> tuple[FunctionalGraphRef, ...]:
-    """Seed FD-88 reverse navigation from an exact canonical owner selection."""
-    exact_locators = set(semantic_scope.paths)
-    exact_locators.update(ref.locator for ref in semantic_scope.evidence_refs)
-    if not exact_locators:
-        return ()
-
-    refs: list[FunctionalGraphRef] = []
-    for (repository_id, rule_id), rule in rules.items():
-        if rule.owner.repository_id != surface.repository_id:
-            continue
-        authority = authority_bindings.get(
-            (rule.owner.repository_id, rule.owner.authority_ref)
-        )
-        if authority is None:
-            continue
-        if authority.evidence_ref.locator not in exact_locators:
-            continue
-        refs.append(
-            FunctionalGraphRef(
-                repository_id=repository_id,
-                identity=rule_id,
-            )
-        )
-    return _unique_graph_refs(refs)
-
-
-def _rule_projection(
-    resolved_rules: tuple[FunctionalGraphRef, ...],
-    *,
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    authority_bindings: _collections.Mapping[tuple[str, str], AuthorityBinding],
-) -> tuple[
-    tuple[FunctionalRuleRoute, ...],
-    tuple[FunctionalGraphRef, ...],
-    tuple[FunctionalPyramidFinding, ...],
-]:
-    routes: list[FunctionalRuleRoute] = []
-    valid_refs: list[FunctionalGraphRef] = []
-    findings: list[FunctionalPyramidFinding] = []
-
-    for ref in resolved_rules:
-        key = (ref.repository_id, ref.identity)
-        rule = rules[key]
-        authority = authority_bindings.get(
-            (rule.owner.repository_id, rule.owner.authority_ref)
-        )
-        if authority is None:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                    "functional rule owner does not resolve to a declared authority binding",
-                    "declare the exact canonical authority binding or correct the owner",
-                    repository_id=rule.owner.repository_id,
-                    rule_id=rule.rule_id,
-                )
-            )
-            continue
-        if authority.evidence_ref.repository_id != rule.owner.repository_id:
-            findings.append(
-                _finding(
-                    FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                    "functional rule authority binding belongs to another repository",
-                    "correct the rule owner or canonical authority binding",
-                    repository_id=rule.owner.repository_id,
-                    rule_id=rule.rule_id,
-                )
-            )
-            continue
-
-        valid_refs.append(ref)
-        downstream = frozenset(_downstream_rule_ids(key, rules))
-        routes.append(
-            FunctionalRuleRoute(
-                rule_id=rule.rule_id,
-                layer=rule.layer,
-                authority=authority,
-                governing_rule_ids=tuple(
-                    value if isinstance(value, str) else value.identity
-                    for value in rule.governing_rule_ids
-                ),
-                downstream_rule_ids=tuple(sorted(downstream)),
-                downstream_context_ids=_downstream_context_ids(
-                    downstream | frozenset({rule.rule_id}), contexts
-                ),
-            )
-        )
-
-    routes.sort(key=lambda item: (_layer_rank(item.layer), item.rule_id))
-    return tuple(routes), tuple(valid_refs), _ordered_findings(findings)
-
-
-def _provenance_projection(
-    portions: tuple[
-        tuple[
-            EvidenceScope,
-            FunctionalScopeSelector | None,
-            FunctionalScopeRelation,
-            tuple[FunctionalGraphRef, ...],
-        ],
-        ...,
-    ],
-    *,
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    duplicate_contexts: frozenset[str],
-    duplicate_rules: frozenset[str],
-    member_repositories: frozenset[str],
+    pyramid_id: FunctionalPyramidId,
+    version: FunctionalPyramidVersion,
+    members: tuple[FunctionalPyramidMemberView, ...],
+    repository_id: str,
+    seeds: tuple[tuple[str | None, EvidenceScope | None], ...],
+    directory_selection: str | None,
+    semantic_selection: EvidenceScope | None,
+    declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
     available_repositories: frozenset[str],
-    resolved_context_keys: frozenset[tuple[str, str]],
-    resolved_rule_keys: frozenset[tuple[str, str]],
-) -> tuple[FunctionalRouteProvenance, ...]:
-    projection: list[FunctionalRouteProvenance] = []
-    for atom_scope, _, relation, direct_refs in portions:
-        if relation is FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE:
-            projection.append(
-                FunctionalRouteProvenance(
-                    semantic_scope=atom_scope,
-                    relation=relation,
-                )
-            )
-            continue
+    authority_bindings: dict[tuple[str, str], AuthorityBinding],
+    declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
+) -> tuple[FunctionalPyramidView, FunctionalRouteIdentity]:
+    index, structural = _graph_findings(
+        members, declarations, available_repositories, declaration_findings
+    )
+    health = (
+        FunctionalPyramidHealth.VALID
+        if not structural
+        else FunctionalPyramidHealth.DEGRADED
+    )
 
-        portion_contexts, _ = _resolve_context_refs(
-            direct_refs,
-            contexts=contexts,
-            rules=rules,
-            duplicate_contexts=duplicate_contexts,
-            member_repositories=member_repositories,
-            available_repositories=available_repositories,
+    provenance: list[FunctionalRouteProvenance] = []
+    direct: set[FunctionalDocumentPlacement] = set()
+    for directory, semantic_portion in seeds:
+        selected = _direct_selection(
+            repository_id=repository_id,
+            directory=directory,
+            index=index,
         )
-        context_keys = tuple(
-            (ref.repository_id, ref.identity)
-            for ref, _ in portion_contexts
-            if (ref.repository_id, ref.identity) in resolved_context_keys
-        )
-        initial_rules = (ref for key in context_keys for ref in contexts[key].rules)
-        portion_rules, _ = _resolve_rule_refs(
-            _unique_graph_refs(initial_rules),
-            contexts=contexts,
-            rules=rules,
-            duplicate_rules=duplicate_rules,
-            member_repositories=member_repositories,
-            available_repositories=available_repositories,
-        )
-        projection.append(
+        direct.update(selected)
+        provenance.append(
             FunctionalRouteProvenance(
-                semantic_scope=atom_scope,
-                relation=relation,
-                context_ids=tuple(identity for _, identity in context_keys),
-                rule_ids=tuple(
-                    ref.identity
-                    for ref in portion_rules
-                    if (ref.repository_id, ref.identity) in resolved_rule_keys
-                ),
+                directory="." if directory is None else directory,
+                semantic_scope=semantic_portion,
+                placements=selected,
             )
         )
-    return tuple(projection)
+    closure = _closure(direct, index)
+    unresolved = _relevant_findings(
+        structural,
+        repository_id=repository_id,
+        closure=closure,
+    )
 
+    routes: list[FunctionalDocumentRoute] = []
+    for placement in closure:
+        declaration = index.get(placement)
+        if declaration is None:
+            continue
+        authority = authority_bindings.get(
+            (placement.document.repository_id, placement.document.document_ref)
+        )
+        if authority is None:
+            continue
+        routes.append(
+            FunctionalDocumentRoute(
+                placement=placement,
+                authority=authority,
+                governing_placements=declaration.governing_placements,
+                downstream_placements=_downstream(placement, index),
+            )
+        )
 
-def _scope_relation(
-    provenance: tuple[FunctionalRouteProvenance, ...],
-) -> FunctionalScopeRelation:
-    relations = frozenset(item.relation for item in provenance)
-    if relations == frozenset({FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE}):
-        return FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE
-    if relations == frozenset({FunctionalScopeRelation.COVERED}):
-        return FunctionalScopeRelation.COVERED
-    if relations == frozenset({FunctionalScopeRelation.UNCOVERED}):
-        return FunctionalScopeRelation.UNCOVERED
-    return FunctionalScopeRelation.MIXED
+    declared = tuple(
+        layer
+        for layer in _LAYER_ORDER
+        if any(placement.document.layer is layer for placement in closure)
+    )
+    absent = tuple(layer for layer in _LAYER_ORDER if layer not in declared)
+    status = (
+        FunctionalPyramidRouteStatus.RESOLVED
+        if not unresolved
+        else FunctionalPyramidRouteStatus.UNRESOLVED
+    )
+
+    if directory_selection is not None:
+        selection_identity: object = {"directory": directory_selection}
+    else:
+        selection_identity = {
+            "semantic_scope": {
+                "paths": list(
+                    semantic_selection.paths if semantic_selection is not None else ()
+                ),
+                "evidence": [
+                    (
+                        ref.repository_id,
+                        ref.locator,
+                        ref.revision_or_fingerprint,
+                    )
+                    for ref in (
+                        semantic_selection.evidence_refs
+                        if semantic_selection is not None
+                        else ()
+                    )
+                ],
+            }
+        }
+    identity = _route_identity(
+        repository_id=repository_id,
+        selection=selection_identity,
+        closure=closure,
+        index=index,
+        members=members,
+    )
+    view = FunctionalPyramidView(
+        pyramid_id=pyramid_id,
+        version=version,
+        health=health,
+        status=status,
+        directory=directory_selection,
+        semantic_scope=semantic_selection,
+        placements=closure,
+        routes=tuple(routes),
+        provenance=tuple(provenance),
+        unresolved=unresolved,
+        declared_layers=declared,
+        absent_layers=absent,
+    )
+    return view, identity
 
 
 def resolve_functional_pyramid_route(
@@ -1660,118 +920,53 @@ def resolve_functional_pyramid_route(
     semantic_scope: EvidenceScope,
     declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
     available_repositories: frozenset[str],
-    authority_bindings: _collections.Mapping[tuple[str, str], AuthorityBinding],
+    authority_bindings: dict[tuple[str, str], AuthorityBinding],
     declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
 ) -> tuple[FunctionalPyramidView, FunctionalRouteIdentity]:
-    """Resolve one governing route from explicit declarations only."""
-    selected = next(
-        (member for member in members if member.repository_id == surface.repository_id),
-        None,
+    """Resolve the exact effective semantic scope through document placements."""
+    seeds = tuple(
+        (directory, portion)
+        for directory, portion in _semantic_seeds(surface, semantic_scope)
     )
-    if selected is None:
-        raise ValueError("selected surface repository is not an active pyramid member")
-
-    health, _ = evaluate_functional_pyramid_health(
-        members, declarations, available_repositories, declaration_findings
-    )
-    contexts, rules, duplicate_contexts, duplicate_rules = _declaration_indexes(
-        declarations
-    )
-    member_repositories = frozenset(member.repository_id for member in members)
-    route_findings: list[FunctionalPyramidFinding] = [
-        finding
-        for finding in declaration_findings
-        if finding.repository_id in (None, surface.repository_id)
-    ]
-
-    portions, direct_refs, scope_findings = _semantic_portions(
-        surface,
-        semantic_scope,
-        selected.functional_scope,
-        contexts,
-        duplicate_contexts,
-    )
-    route_findings.extend(scope_findings)
-
-    resolved_contexts, context_findings = _resolve_context_refs(
-        direct_refs,
-        contexts=contexts,
-        rules=rules,
-        duplicate_contexts=duplicate_contexts,
-        member_repositories=member_repositories,
+    return _resolve(
+        pyramid_id=pyramid_id,
+        version=version,
+        members=members,
+        repository_id=surface.repository_id,
+        seeds=seeds,
+        directory_selection=None,
+        semantic_selection=semantic_scope,
+        declarations=declarations,
         available_repositories=available_repositories,
-    )
-    route_findings.extend(context_findings)
-    context_routes, initial_rules, context_keys = _context_projection(
-        resolved_contexts, contexts
-    )
-    owner_rules = _canonical_owner_rule_refs(
-        surface=surface,
-        semantic_scope=semantic_scope,
-        rules=rules,
         authority_bindings=authority_bindings,
+        declaration_findings=declaration_findings,
     )
 
-    resolved_rules, rule_findings = _resolve_rule_refs(
-        _unique_graph_refs((*initial_rules, *owner_rules)),
-        contexts=contexts,
-        rules=rules,
-        duplicate_rules=duplicate_rules,
-        member_repositories=member_repositories,
+
+def resolve_functional_pyramid_directory_route(
+    *,
+    pyramid_id: FunctionalPyramidId,
+    version: FunctionalPyramidVersion,
+    members: tuple[FunctionalPyramidMemberView, ...],
+    repository_id: str,
+    directory: str,
+    declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
+    available_repositories: frozenset[str],
+    authority_bindings: dict[tuple[str, str], AuthorityBinding],
+    declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
+) -> tuple[FunctionalPyramidView, FunctionalRouteIdentity]:
+    """Resolve one exact directory as a point in the repository tree."""
+    normalized = normalize_directory_scope(directory)
+    return _resolve(
+        pyramid_id=pyramid_id,
+        version=version,
+        members=members,
+        repository_id=repository_id,
+        seeds=((normalized, None),),
+        directory_selection=normalized,
+        semantic_selection=None,
+        declarations=declarations,
         available_repositories=available_repositories,
-    )
-    route_findings.extend(rule_findings)
-    rule_routes, valid_rule_refs, authority_findings = _rule_projection(
-        resolved_rules,
-        rules=rules,
-        contexts=contexts,
         authority_bindings=authority_bindings,
-    )
-    route_findings.extend(authority_findings)
-
-    resolved_rule_keys = frozenset(
-        (ref.repository_id, ref.identity) for ref in resolved_rules
-    )
-    provenance = _provenance_projection(
-        portions,
-        contexts=contexts,
-        rules=rules,
-        duplicate_contexts=duplicate_contexts,
-        duplicate_rules=duplicate_rules,
-        member_repositories=member_repositories,
-        available_repositories=available_repositories,
-        resolved_context_keys=context_keys,
-        resolved_rule_keys=resolved_rule_keys,
-    )
-    relation = _scope_relation(provenance)
-    unresolved = _ordered_findings(route_findings)
-    status = (
-        FunctionalPyramidRouteStatus.RESOLVED
-        if not unresolved
-        else FunctionalPyramidRouteStatus.UNRESOLVED
-    )
-    if relation is FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE:
-        context_routes = ()
-        rule_routes = ()
-        unresolved = ()
-        status = FunctionalPyramidRouteStatus.RESOLVED
-
-    identity = _route_identity(
-        surface, semantic_scope, context_routes, resolved_rules, rules
-    )
-    return (
-        FunctionalPyramidView(
-            pyramid_id=pyramid_id,
-            version=version,
-            health=health,
-            coverage=selected.coverage,
-            scope_relation=relation,
-            status=status,
-            semantic_scope=semantic_scope,
-            contexts=context_routes,
-            rules=rule_routes,
-            provenance=provenance,
-            unresolved=unresolved,
-        ),
-        identity,
+        declaration_findings=declaration_findings,
     )

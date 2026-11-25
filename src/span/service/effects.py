@@ -225,6 +225,7 @@ class DependencyEffectService:
         self,
         *,
         changed_route_identities: tuple[m.FunctionalRouteIdentity, ...] = (),
+        forced_reassessment_refs: tuple[m.ConclusionRevisionRef, ...] = (),
         newly_active_repositories: tuple[str, ...] = (),
         deliberately_inactive_repositories: tuple[str, ...] = (),
     ) -> tuple[
@@ -245,6 +246,12 @@ class DependencyEffectService:
             ref: "recorded governing route changed under the accepted Functional Pyramid delta"
             for ref in route_dependents
         }
+        for ref in sorted(set(forced_reassessment_refs), key=lambda item: item.sort_key):
+            direct.append(ref)
+            forced[ref] = (
+                "Functional Pyramid route identity model changed during the "
+                "Version-2 cutover and requires re-establishment"
+            )
 
         for repository_id in sorted(set(newly_active_repositories)):
             self._store_for_repository(repository_id).require_repository(repository_id)

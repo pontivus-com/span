@@ -85,13 +85,11 @@ def _graph_finding(
     recovery: str,
     *,
     declaration_locator: str | None = None,
-    rule_id: str | None = None,
 ) -> m.FunctionalPyramidFinding:
     return m.FunctionalPyramidFinding(
         reason=reason,
         repository_id=repository_id,
         declaration_locator=declaration_locator,
-        rule_id=rule_id,
         detail=detail,
         recovery=recovery,
     )
@@ -227,6 +225,42 @@ class FunctionalPyramidService:
                 surface=surface,
                 semantic_scope=semantic_scope,
             )
+        except (OSError, FunctionalPyramidRepositoryUnavailable):
+            return m.FunctionalPyramidUnavailable(
+                failure="Functional Pyramid governance cannot be evaluated",
+                recovery="restore the registered member repository and retry",
+            )
+
+    def directory(
+        self, selector: m.FunctionalPyramidDirectorySelector
+    ) -> m.FunctionalPyramidParticipation | m.FunctionalPyramidUnavailable | m.FunctionalPyramidView:
+        """Resolve one exact repository-relative directory through current state."""
+        status = self.status(
+            m.FunctionalPyramidSelector(repository_id=selector.repository_id)
+        )
+        if status.state is not m.FunctionalPyramidParticipationState.ACTIVE:
+            return m.FunctionalPyramidParticipation(status.state)
+        assert status.pyramid_id is not None
+        assert status.version is not None
+        try:
+            current_members, declarations, available, source_findings = (
+                self._load_active_members(status.members)
+            )
+            authorities, authority_findings = self._authority_bindings(
+                current_members, declarations, available
+            )
+            view, _ = _fp.resolve_functional_pyramid_directory_route(
+                pyramid_id=status.pyramid_id,
+                version=status.version,
+                members=current_members,
+                repository_id=selector.repository_id,
+                directory=selector.directory,
+                declarations=declarations,
+                available_repositories=available,
+                authority_bindings=authorities,
+                declaration_findings=source_findings + authority_findings,
+            )
+            return view
         except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid governance cannot be evaluated",
@@ -402,30 +436,15 @@ class FunctionalPyramidService:
             available,
             source_graph + authority_findings,
         )
-
-        graph: list[m.FunctionalPyramidFinding] = []
-        for finding in structural:
-            if finding.reason is m.FunctionalPyramidFindingReason.UNCOVERED_PATH:
-                validation.append(
-                    _validation_finding(
-                        m.FunctionalPyramidValidationReason.INCOMPLETE_COMPLETE_COVERAGE,
-                        finding.repository_id,
-                        finding.detail,
-                        finding.recovery,
-                    )
-                )
-            else:
-                graph.append(finding)
-
         ordered_validation = _ordered_validation_findings(validation)
         return m.FunctionalPyramidCandidate(
             action=selector.action,
             pyramid_id=target_id,
             version=target_version,
             members=members,
-            activation_ready=not ordered_validation and not graph,
+            activation_ready=not ordered_validation and not structural,
             validation_findings=ordered_validation,
-            graph_findings=tuple(graph),
+            graph_findings=structural,
         )
 
     def _candidate_lifecycle(
@@ -994,6 +1013,58 @@ class FunctionalPyramidService:
         ).retained_functional_pyramid_effects(receipt.dependent_effect_refs)
         return self._recorded(receipt, surfaces, contexts)
 
+    def _active_uses_version1(
+        self, members: tuple[m.FunctionalPyramidMemberView, ...]
+    ) -> bool:
+        for member in members:
+            for ref in member.declaration_refs:
+                try:
+                    self._declarations.read_declaration(
+                        member.repository_id,
+                        m.EvidenceRequest(ref.locator),
+                    )
+                except FunctionalPyramidDeclarationInvalid as exc:
+                    if exc.unsupported_version == 1:
+                        return True
+                except FunctionalPyramidRepositoryUnavailable:
+                    continue
+        return False
+
+    def _current_normative_route_refs(
+        self,
+        pyramid_id: m.FunctionalPyramidId,
+        repository_ids: tuple[str, ...],
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        refs: set[m.ConclusionRevisionRef] = set()
+        for repository_id in sorted(set(repository_ids)):
+            store = self._runtime(repository_id).store
+            for understanding in store.list_understandings(repository_id):
+                version = store.get_version(
+                    understanding.understanding_id.value,
+                    understanding.current_version.value,
+                )
+                revisions = {
+                    (revision.conclusion_id, revision.revision): revision
+                    for revision in store.get_conclusions(
+                        understanding.understanding_id.value
+                    )
+                }
+                for ref in version.conclusions:
+                    revision = revisions.get((ref.conclusion_id, ref.revision))
+                    if revision is None or not isinstance(
+                        revision.content, m.SupportedConclusion
+                    ):
+                        continue
+                    if revision.content.assertion_nature is not m.AssertionNature.NORMATIVE:
+                        continue
+                    if any(
+                        isinstance(dependency, m.FunctionalRouteSupport)
+                        and dependency.pyramid_id == pyramid_id
+                        for dependency in revision.content.support
+                    ):
+                        refs.add(ref)
+        return tuple(sorted(refs, key=lambda item: item.sort_key))
+
     def _proposed_changed_route_identities(
         self,
         *,
@@ -1064,6 +1135,7 @@ class FunctionalPyramidService:
         old = {member.repository_id for member in old_members}
         new = {member.repository_id for member in new_members}
         route_ids: tuple[m.FunctionalRouteIdentity, ...] = ()
+        forced_refs: tuple[m.ConclusionRevisionRef, ...] = ()
         if action is m.FunctionalPyramidAction.REVISE:
             current = transaction.pyramid_version(pyramid_id)
             if current is None:
@@ -1074,8 +1146,14 @@ class FunctionalPyramidService:
                 old_members=old_members,
                 new_members=new_members,
             )
+            if self._active_uses_version1(old_members):
+                forced_refs = self._current_normative_route_refs(
+                    pyramid_id,
+                    tuple(member.repository_id for member in old_members),
+                )
         return self._effect_service(transaction).functional_pyramid_change(
             changed_route_identities=route_ids,
+            forced_reassessment_refs=forced_refs,
             newly_active_repositories=tuple(sorted(new - old)),
             deliberately_inactive_repositories=tuple(sorted(old - new)),
         )
@@ -1142,6 +1220,8 @@ class FunctionalPyramidService:
         self,
         repository_id: str,
         requests: tuple[m.EvidenceRequest, ...],
+        *,
+        candidate: bool,
     ) -> tuple[
         tuple[m.EvidenceRef, ...],
         tuple[_DeclarationEntry, ...],
@@ -1157,24 +1237,26 @@ class FunctionalPyramidService:
 
         for request in requests:
             if request.ranges:
-                validation.append(
-                    _validation_finding(
-                        m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
-                        repository_id,
-                        "Functional Pyramid declaration source is ranged",
-                        "select the complete declaration document",
-                        declaration_locator=request.locator,
+                if candidate:
+                    validation.append(
+                        _validation_finding(
+                            m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
+                            repository_id,
+                            "Functional Pyramid declaration source is ranged",
+                            "select the complete declaration document",
+                            declaration_locator=request.locator,
+                        )
                     )
-                )
-                graph.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                        repository_id,
-                        "Functional Pyramid declaration source is ranged",
-                        "select the complete declaration document",
-                        declaration_locator=request.locator,
+                else:
+                    graph.append(
+                        _graph_finding(
+                            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                            repository_id,
+                            "ACTIVE Functional Pyramid declaration source is ranged",
+                            "replace the active member intent with whole-document declaration sources",
+                            declaration_locator=request.locator,
+                        )
                     )
-                )
                 continue
 
             try:
@@ -1191,56 +1273,66 @@ class FunctionalPyramidService:
                     )
                 )
                 break
-            except FunctionalPyramidDeclarationInvalid:
-                validation.append(
-                    _validation_finding(
-                        m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
-                        repository_id,
-                        "Functional Pyramid declaration violates the Version-1 contract",
-                        "correct the named declaration document",
-                        declaration_locator=request.locator,
+            except FunctionalPyramidDeclarationInvalid as exc:
+                if candidate:
+                    validation.append(
+                        _validation_finding(
+                            m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
+                            repository_id,
+                            "Functional Pyramid declaration violates the Version-2 contract",
+                            "replace the named source with a valid Version-2 declaration",
+                            declaration_locator=request.locator,
+                        )
                     )
-                )
-                graph.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                        repository_id,
-                        "Functional Pyramid declaration violates the Version-1 contract",
-                        "correct the named declaration document",
-                        declaration_locator=request.locator,
+                else:
+                    detail = (
+                        "ACTIVE Functional Pyramid declaration uses unsupported Version 1"
+                        if exc.unsupported_version == 1
+                        else "ACTIVE Functional Pyramid declaration cannot be decoded"
                     )
-                )
+                    graph.append(
+                        _graph_finding(
+                            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                            repository_id,
+                            detail,
+                            "revise the ACTIVE instance with valid Version-2 declarations",
+                            declaration_locator=request.locator,
+                        )
+                    )
                 continue
 
             if isinstance(result, m.EvidenceSourceFailure):
-                reason = (
-                    m.FunctionalPyramidValidationReason.MISSING_DECLARATION_SOURCE
-                    if result.kind is m.EvidenceSourceFailureKind.MISSING
-                    else m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE
-                )
-                validation.append(
-                    _validation_finding(
-                        reason,
-                        repository_id,
-                        "Functional Pyramid declaration source cannot be loaded",
-                        "restore or correct the named declaration document",
-                        declaration_locator=request.locator,
+                if candidate:
+                    reason = (
+                        m.FunctionalPyramidValidationReason.MISSING_DECLARATION_SOURCE
+                        if result.kind is m.EvidenceSourceFailureKind.MISSING
+                        else m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE
                     )
-                )
-                graph.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                        repository_id,
-                        "Functional Pyramid declaration source cannot be loaded",
-                        "restore or correct the named declaration document",
-                        declaration_locator=request.locator,
+                    validation.append(
+                        _validation_finding(
+                            reason,
+                            repository_id,
+                            "Functional Pyramid declaration source cannot be loaded",
+                            "restore or correct the named declaration document",
+                            declaration_locator=request.locator,
+                        )
                     )
-                )
+                else:
+                    graph.append(
+                        _graph_finding(
+                            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                            repository_id,
+                            "required ACTIVE Functional Pyramid declaration source cannot be loaded",
+                            "restore the named declaration source or revise the ACTIVE instance",
+                            declaration_locator=request.locator,
+                        )
+                    )
                 continue
 
-            evidence_ref, declaration = result
+            evidence_ref, declaration, decode_findings = result
             refs.append(evidence_ref)
             declarations.append((repository_id, declaration))
+            graph.extend(decode_findings)
 
         return (
             tuple(refs),
@@ -1268,7 +1360,11 @@ class FunctionalPyramidService:
 
         for intent in intents:
             refs, loaded, is_available, source_validation, source_graph = (
-                self._load_requests(intent.repository_id, intent.declaration_sources)
+                self._load_requests(
+                    intent.repository_id,
+                    intent.declaration_sources,
+                    candidate=True,
+                )
             )
             if is_available:
                 available.add(intent.repository_id)
@@ -1280,8 +1376,6 @@ class FunctionalPyramidService:
                     m.FunctionalPyramidMemberView(
                         repository_id=intent.repository_id,
                         declaration_refs=refs,
-                        functional_scope=intent.functional_scope,
-                        coverage=intent.coverage,
                     )
                 )
 
@@ -1311,7 +1405,9 @@ class FunctionalPyramidService:
                 m.EvidenceRequest(ref.locator) for ref in member.declaration_refs
             )
             refs, loaded, is_available, _, source_graph = self._load_requests(
-                member.repository_id, requests
+                member.repository_id,
+                requests,
+                candidate=False,
             )
             if is_available:
                 available.add(member.repository_id)
@@ -1321,8 +1417,6 @@ class FunctionalPyramidService:
                 m.FunctionalPyramidMemberView(
                     repository_id=member.repository_id,
                     declaration_refs=refs or member.declaration_refs,
-                    functional_scope=member.functional_scope,
-                    coverage=member.coverage,
                 )
             )
 
@@ -1340,49 +1434,82 @@ class FunctionalPyramidService:
         available: frozenset[str],
     ) -> tuple[_AuthorityMap, tuple[m.FunctionalPyramidFinding, ...]]:
         member_repositories = frozenset(member.repository_id for member in members)
+        documents = {
+            entry.placement.document
+            for _, declaration in declarations
+            for entry in declaration.placements
+        }
         bindings: _AuthorityMap = {}
         findings: list[m.FunctionalPyramidFinding] = []
 
-        for _, declaration in declarations:
-            for rule in declaration.rules:
-                owner = rule.owner
-                if owner.repository_id not in member_repositories:
-                    findings.append(
-                        _graph_finding(
-                            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                            owner.repository_id,
-                            "functional rule owner repository is outside the active pyramid",
-                            "move the authority owner into the instance or correct the rule owner",
-                            rule_id=rule.rule_id,
-                        )
+        for document in sorted(
+            documents,
+            key=lambda item: (item.repository_id, item.document_ref, item.layer.value),
+        ):
+            if document.repository_id not in member_repositories:
+                findings.append(
+                    _graph_finding(
+                        m.FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
+                        document.repository_id,
+                        "canonical document owner repository is outside the active pyramid",
+                        "reference a canonical document owned by an instance member",
                     )
-                    continue
-                if owner.repository_id not in available:
-                    findings.append(
-                        _graph_finding(
-                            m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
-                            owner.repository_id,
-                            "functional rule authority owner repository is unavailable",
-                            "restore the named member repository",
-                            rule_id=rule.rule_id,
-                        )
+                )
+                continue
+            if document.repository_id not in available:
+                findings.append(
+                    _graph_finding(
+                        m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+                        document.repository_id,
+                        "canonical document owner repository is unavailable",
+                        "restore the named member repository",
                     )
-                    continue
-                key = (owner.repository_id, owner.authority_ref)
-                if key in bindings:
-                    continue
-                try:
-                    bindings[key] = self._authority.resolve_authority(*key)
-                except ValueError:
-                    findings.append(
-                        _graph_finding(
-                            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                            owner.repository_id,
-                            "functional rule owner is not a declared authority binding",
-                            "declare the canonical authority binding or correct the owner reference",
-                            rule_id=rule.rule_id,
-                        )
+                )
+                continue
+
+            candidates = tuple(
+                binding
+                for binding in self._runtime(
+                    document.repository_id
+                ).store.load_authority_bindings(document.repository_id)
+                if binding.evidence_ref.locator == document.document_ref
+            )
+            canonical = tuple(
+                binding
+                for binding in candidates
+                if binding.evidence_ref.section_or_span is None
+            )
+            if not candidates:
+                findings.append(
+                    _graph_finding(
+                        m.FunctionalPyramidFindingReason.MISSING_DOCUMENT_AUTHORITY,
+                        document.repository_id,
+                        "canonical document has no declared authority binding",
+                        "declare one whole-document authority binding for the canonical document",
                     )
+                )
+                continue
+            if not canonical:
+                findings.append(
+                    _graph_finding(
+                        m.FunctionalPyramidFindingReason.NONCANONICAL_DOCUMENT_AUTHORITY,
+                        document.repository_id,
+                        "canonical document is bound only through section/span authority",
+                        "declare one whole-document authority binding",
+                    )
+                )
+                continue
+            if len(canonical) != 1:
+                findings.append(
+                    _graph_finding(
+                        m.FunctionalPyramidFindingReason.AMBIGUOUS_DOCUMENT_AUTHORITY,
+                        document.repository_id,
+                        "canonical document resolves to more than one whole-document authority binding",
+                        "retain one canonical whole-document authority binding",
+                    )
+                )
+                continue
+            bindings[(document.repository_id, document.document_ref)] = canonical[0]
 
         return bindings, tuple(findings)
 
