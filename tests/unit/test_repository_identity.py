@@ -9,10 +9,11 @@ from pathlib import Path
 from unittest import mock
 
 from span.core import model as m
-from span.shell.context import provision_repository
+from span.shell.context import close_repository_runtime, provision_repository_runtime
 from span.shell.mcp import McpAdapter
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.shell.sqlite_store.schema import SCHEMA_VERSION
 
 
 class RegistrationConflictTest(unittest.TestCase):
@@ -93,7 +94,7 @@ class BindingTest(unittest.TestCase):
             if graft_binary is None:
                 self.skipTest("structural indexer is not available")
             with mock.patch.dict("os.environ", {"SPAN_GRAFT_BIN": graft_binary}):
-                context, result = provision_repository(
+                runtime, result = provision_repository_runtime(
                     data,
                     m.InitializeRepositoryRequest(
                         repository_locator=str(root), authority_seeds=()
@@ -102,11 +103,15 @@ class BindingTest(unittest.TestCase):
             try:
                 self.assertEqual(result.canonical_root, str(root.resolve()))
                 self.assertEqual(result.repository_id, "repo")
-                self.assertEqual(result.schema_version, 12)
+                self.assertEqual(result.schema_version, SCHEMA_VERSION)
                 self.assertTrue(result.store_ready)
+                self.assertEqual(
+                    runtime.store.require_repository("repo"),
+                    str(root.resolve()),
+                )
                 self.assertEqual(list(data.glob("*.db")), [data / "repo.db"])
             finally:
-                context.store.close()
+                close_repository_runtime(runtime)
 
 
 if __name__ == "__main__":
