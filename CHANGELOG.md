@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0b5 — Unreleased
+
+- Fix a Functional Pyramid self-lock when activation first opens a member
+  store inside its atomic transaction. Opening an existing member store now
+  validates it without starting a second write transaction.
+- Exercise repository identity through the canonical provisioner in the
+  root-binding regression test.
+
 ## 1.0.0b4 — 2026-11-25
 
 ### Functional Pyramid contract-sublayer derivation

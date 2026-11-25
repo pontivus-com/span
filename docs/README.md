@@ -94,7 +94,7 @@ a requirements layer.
 These documents answer **what has been demonstrated**, not **what Span is
 required to do**.
 
-- [Acceptance and evidence](acceptance.md) — current Beta-3 candidate verdict and evidence.
+- [Acceptance and evidence](acceptance.md) — current candidate verdict and evidence.
 - [Historical acceptance evidence](acceptance-history.md) — superseded candidate and campaign evidence retained for audit.
 - [Functional acceptance matrix](functional-acceptance.md) — traceability from
   functional requirements to executable tests.
@@ -106,9 +106,9 @@ required to do**.
 Implementation plans track release campaigns. They are useful for programme
 history and audit, but they are not product documentation.
 
-The active Beta-4 programme record is:
+The active Beta-5 programme record is:
 
-- [Span 1.0.0 Beta 4 implementation plan](implementation-plans/1.0.0-beta4.md)
+- [Span 1.0.0 Beta 5 implementation plan](implementation-plans/1.0.0-beta5.md)
 
 Completed campaigns are listed in the
 [implementation-plan index](implementation-plans/README.md).

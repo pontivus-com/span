@@ -81,7 +81,9 @@ def _open_store(
             f"repository {repository_id} is not initialized; run the installer "
             "to bind it"
         )
-    store = LifecycleStore(store_path, retention=DEFAULT_LIFECYCLE_RETENTION)
+    store = LifecycleStore(
+        store_path, retention=DEFAULT_LIFECYCLE_RETENTION, initialize_schema=False
+    )
     try:
         try:
             bound_root = store.require_repository(repository_id)
@@ -95,7 +97,6 @@ def _open_store(
                 f"repository {repository_id} is bound to {bound_root!r}, "
                 f"not {root!r}; refusing to serve a different root"
             )
-        store.reap_expired()
     except BaseException:
         store.close()
         raise
@@ -140,6 +141,7 @@ def compose_context(
     """Compose one repository context from raw + installation capabilities."""
     repository_id = runtime.repository_id
     store = runtime.store
+    store.reap_expired()
     evidence = runtime.evidence
     seeds = store.load_authority_seeds(repository_id)
 

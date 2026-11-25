@@ -82,11 +82,11 @@ class FunctionalPyramidFindingReason(_enum.Enum):
     UNKNOWN_CONTEXT = "UNKNOWN_CONTEXT"
     CONTEXT_CYCLE = "CONTEXT_CYCLE"
     REPOSITORY_UNAVAILABLE = "REPOSITORY_UNAVAILABLE"
-    DUPLICATE_RULE_OWNER = "DUPLICATE_RULE_OWNER"
-    UNKNOWN_RULE = "UNKNOWN_RULE"
-    RULE_CYCLE = "RULE_CYCLE"
+    DUPLICATE_DOCUMENT_PLACEMENT = "DUPLICATE_DOCUMENT_PLACEMENT"
+    UNKNOWN_DOCUMENT = "UNKNOWN_DOCUMENT"
+    DOCUMENT_CYCLE = "DOCUMENT_CYCLE"
     INVALID_GOVERNING_EDGE = "INVALID_GOVERNING_EDGE"
-    UNRESOLVED_RULE_PARENT = "UNRESOLVED_RULE_PARENT"
+    UNRESOLVED_DOCUMENT_PARENT = "UNRESOLVED_DOCUMENT_PARENT"
 
 
 class FunctionalPyramidValidationReason(_enum.Enum):
@@ -192,7 +192,7 @@ class FunctionalScope:
 
 @_dataclass(frozen=True)
 class FunctionalGraphRef:
-    """Repository-qualified context/rule identity used by declaration edges."""
+    """Repository-qualified identity used by declaration edges."""
 
     repository_id: str
     identity: str
@@ -203,13 +203,16 @@ class FunctionalGraphRef:
 
 
 @_dataclass(frozen=True)
-class FunctionalRuleOwner:
+class FunctionalDocumentRef:
+    """Stable repository-qualified placement of one canonical document."""
+
     repository_id: str
-    authority_ref: str
+    document_ref: str
+    layer: FunctionalPyramidLayer
 
     def __post_init__(self) -> None:
-        _require_non_empty("FunctionalRuleOwner.repository_id", self.repository_id)
-        _require_non_empty("FunctionalRuleOwner.authority_ref", self.authority_ref)
+        _require_non_empty("FunctionalDocumentRef.repository_id", self.repository_id)
+        _require_non_empty("FunctionalDocumentRef.document_ref", self.document_ref)
 
 
 @_dataclass(frozen=True)
@@ -217,7 +220,7 @@ class FunctionalContextDeclaration:
     context_id: str
     coverage: FunctionalScope
     inherits: tuple[FunctionalGraphRef, ...] = ()
-    rules: tuple[FunctionalGraphRef, ...] = ()
+    documents: tuple[FunctionalDocumentRef, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty("FunctionalContextDeclaration.context_id", self.context_id)
@@ -225,25 +228,26 @@ class FunctionalContextDeclaration:
             raise ValueError(
                 "FunctionalContextDeclaration.inherits contains duplicates"
             )
-        if len(set(self.rules)) != len(self.rules):
-            raise ValueError("FunctionalContextDeclaration.rules contains duplicates")
+        if len(set(self.documents)) != len(self.documents):
+            raise ValueError(
+                "FunctionalContextDeclaration.documents contains duplicates"
+            )
 
 
 @_dataclass(frozen=True)
-class FunctionalRuleDeclaration:
-    rule_id: str
-    layer: FunctionalPyramidLayer
-    owner: FunctionalRuleOwner
-    governing_rule_ids: tuple[FunctionalGraphRef | str, ...] = ()
+class FunctionalDocumentDeclaration:
+    document: FunctionalDocumentRef
+    governing_documents: tuple[FunctionalDocumentRef | str, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_non_empty("FunctionalRuleDeclaration.rule_id", self.rule_id)
-        for rule_ref in self.governing_rule_ids:
-            if isinstance(rule_ref, str) and rule_ref != "ROOT":
-                raise ValueError("FunctionalRuleDeclaration string parent must be ROOT")
-        if len(set(self.governing_rule_ids)) != len(self.governing_rule_ids):
+        for document_ref in self.governing_documents:
+            if isinstance(document_ref, str) and document_ref != "ROOT":
+                raise ValueError(
+                    "FunctionalDocumentDeclaration string parent must be ROOT"
+                )
+        if len(set(self.governing_documents)) != len(self.governing_documents):
             raise ValueError(
-                "FunctionalRuleDeclaration.governing_rule_ids contains duplicates"
+                "FunctionalDocumentDeclaration.governing_documents contains duplicates"
             )
 
 
@@ -251,12 +255,12 @@ class FunctionalRuleDeclaration:
 class FunctionalPyramidDeclaration:
     version: int
     contexts: tuple[FunctionalContextDeclaration, ...] = ()
-    rules: tuple[FunctionalRuleDeclaration, ...] = ()
+    documents: tuple[FunctionalDocumentDeclaration, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.version != 1:
-            raise ValueError("FunctionalPyramidDeclaration.version must be 1")
-        if not (self.contexts or self.rules):
+        if self.version != 2:
+            raise ValueError("FunctionalPyramidDeclaration.version must be 2")
+        if not (self.contexts or self.documents):
             raise ValueError("a Functional Pyramid declaration cannot be empty")
 
 
@@ -341,7 +345,7 @@ class FunctionalPyramidFinding:
     repository_id: str | None = None
     declaration_locator: str | None = None
     context_id: str | None = None
-    rule_id: str | None = None
+    document: FunctionalDocumentRef | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty("FunctionalPyramidFinding.detail", self.detail)
@@ -350,7 +354,6 @@ class FunctionalPyramidFinding:
             ("repository_id", self.repository_id),
             ("declaration_locator", self.declaration_locator),
             ("context_id", self.context_id),
-            ("rule_id", self.rule_id),
         ):
             if value is not None:
                 _require_non_empty(f"FunctionalPyramidFinding.{name}", value)
@@ -428,6 +431,26 @@ class FunctionalPyramidSelector:
 
 
 @_dataclass(frozen=True)
+class FunctionalPyramidDirectorySelector:
+    """Exact directory selection for governing-document orientation."""
+
+    repository_id: str
+    directory: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty(
+            "FunctionalPyramidDirectorySelector.repository_id", self.repository_id
+        )
+        _require_non_empty(
+            "FunctionalPyramidDirectorySelector.directory", self.directory
+        )
+        if self.directory.startswith("/") or ".." in self.directory.split("/"):
+            raise ValueError(
+                "FunctionalPyramidDirectorySelector.directory must be repository-relative"
+            )
+
+
+@_dataclass(frozen=True)
 class FunctionalPyramidCandidateSelector:
     action: FunctionalPyramidAction
     members: tuple[FunctionalPyramidMemberIntent, ...]
@@ -493,63 +516,67 @@ class FunctionalContextRoute:
     direct: bool
     coverage: FunctionalScope
     inherits: tuple[str, ...] = ()
-    rule_ids: tuple[str, ...] = ()
+    documents: tuple[FunctionalDocumentRef, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty("FunctionalContextRoute.context_id", self.context_id)
         _require_non_empty("FunctionalContextRoute.repository_id", self.repository_id)
         for value in self.inherits:
             _require_non_empty("FunctionalContextRoute.inherits", value)
-        for value in self.rule_ids:
-            _require_non_empty("FunctionalContextRoute.rule_ids", value)
         if len(set(self.inherits)) != len(self.inherits):
             raise ValueError("FunctionalContextRoute.inherits contains duplicates")
-        if len(set(self.rule_ids)) != len(self.rule_ids):
-            raise ValueError("FunctionalContextRoute.rule_ids contains duplicates")
+        if len(set(self.documents)) != len(self.documents):
+            raise ValueError("FunctionalContextRoute.documents contains duplicates")
 
 
 @_dataclass(frozen=True)
-class FunctionalRuleRoute:
-    rule_id: str
-    layer: FunctionalPyramidLayer
+class FunctionalDocumentRoute:
+    document: FunctionalDocumentRef
     authority: AuthorityBinding
-    governing_rule_ids: tuple[str, ...] = ()
-    downstream_rule_ids: tuple[str, ...] = ()
+    governing_documents: tuple[FunctionalDocumentRef | str, ...] = ()
+    downstream_documents: tuple[FunctionalDocumentRef, ...] = ()
     downstream_context_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_non_empty("FunctionalRuleRoute.rule_id", self.rule_id)
         for name, values in (
-            ("governing_rule_ids", self.governing_rule_ids),
-            ("downstream_rule_ids", self.downstream_rule_ids),
+            ("governing_documents", self.governing_documents),
+            ("downstream_documents", self.downstream_documents),
             ("downstream_context_ids", self.downstream_context_ids),
         ):
             for value in values:
-                _require_non_empty(f"FunctionalRuleRoute.{name}", value)
+                if isinstance(value, str):
+                    _require_non_empty(f"FunctionalDocumentRoute.{name}", value)
             if len(set(values)) != len(values):
-                raise ValueError(f"FunctionalRuleRoute.{name} contains duplicates")
+                raise ValueError(
+                    f"FunctionalDocumentRoute.{name} contains duplicates"
+                )
 
 
 @_dataclass(frozen=True)
 class FunctionalRouteProvenance:
-    semantic_scope: EvidenceScope
+    semantic_scope: EvidenceScope | None
+    directory: str | None
     relation: FunctionalScopeRelation
     context_ids: tuple[str, ...] = ()
-    rule_ids: tuple[str, ...] = ()
+    documents: tuple[FunctionalDocumentRef, ...] = ()
 
     def __post_init__(self) -> None:
+        if (self.semantic_scope is None) == (self.directory is None):
+            raise ValueError(
+                "FunctionalRouteProvenance requires exactly one selection"
+            )
         if self.relation is FunctionalScopeRelation.MIXED:
             raise ValueError("provenance portions cannot themselves be MIXED")
         for value in self.context_ids:
             _require_non_empty("FunctionalRouteProvenance.context_ids", value)
-        for value in self.rule_ids:
-            _require_non_empty("FunctionalRouteProvenance.rule_ids", value)
         if len(set(self.context_ids)) != len(self.context_ids):
             raise ValueError(
                 "FunctionalRouteProvenance.context_ids contains duplicates"
             )
-        if len(set(self.rule_ids)) != len(self.rule_ids):
-            raise ValueError("FunctionalRouteProvenance.rule_ids contains duplicates")
+        if len(set(self.documents)) != len(self.documents):
+            raise ValueError(
+                "FunctionalRouteProvenance.documents contains duplicates"
+            )
 
 
 @_dataclass(frozen=True)
@@ -560,13 +587,16 @@ class FunctionalPyramidView:
     coverage: FunctionalPyramidCoverage
     scope_relation: FunctionalScopeRelation
     status: FunctionalPyramidRouteStatus
-    semantic_scope: EvidenceScope
+    semantic_scope: EvidenceScope | None = None
+    directory: str | None = None
     contexts: tuple[FunctionalContextRoute, ...] = ()
-    rules: tuple[FunctionalRuleRoute, ...] = ()
+    documents: tuple[FunctionalDocumentRoute, ...] = ()
     provenance: tuple[FunctionalRouteProvenance, ...] = ()
     unresolved: tuple[FunctionalPyramidFinding, ...] = ()
 
     def __post_init__(self) -> None:
+        if (self.semantic_scope is None) == (self.directory is None):
+            raise ValueError("FunctionalPyramidView requires exactly one selection")
         if self.status is FunctionalPyramidRouteStatus.RESOLVED and self.unresolved:
             raise ValueError(
                 "RESOLVED FunctionalPyramidView has no unresolved findings"
@@ -579,7 +609,7 @@ class FunctionalPyramidView:
         if self.scope_relation is FunctionalScopeRelation.OUTSIDE_FUNCTIONAL_SCOPE:
             if self.status is not FunctionalPyramidRouteStatus.RESOLVED:
                 raise ValueError("outside FunctionalScope is a resolved empty route")
-            if self.contexts or self.rules or self.unresolved:
+            if self.contexts or self.documents or self.unresolved:
                 raise ValueError(
                     "outside FunctionalScope has no governing route members"
                 )

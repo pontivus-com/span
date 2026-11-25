@@ -124,19 +124,33 @@ class LifecycleStore:
         *,
         retention: m.LifecycleRetention,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
+        initialize_schema: bool = True,
     ) -> None:
         self.path = _pathlib.Path(path)
         self.retention = retention
         self._clock = clock or _now
-        self._connection = _sqlite3.connect(str(self.path), check_same_thread=False)
+        database = (
+            str(self.path)
+            if initialize_schema
+            else f"{self.path.resolve().as_uri()}?mode=rw"
+        )
+        self._connection = _sqlite3.connect(
+            database, uri=not initialize_schema, check_same_thread=False
+        )
         self._connection.row_factory = _sqlite3.Row
-        self._connection.execute("PRAGMA foreign_keys = ON")
-        self._initialize_schema()
+        try:
+            self._connection.execute("PRAGMA foreign_keys = ON")
+            self._validate_schema(allow_empty=initialize_schema)
+            if initialize_schema:
+                self._initialize_schema()
+        except BaseException:
+            self._connection.close()
+            raise
 
     def close(self) -> None:
         self._connection.close()
 
-    def _initialize_schema(self) -> None:
+    def _validate_schema(self, *, allow_empty: bool) -> None:
         tables = {
             str(row["name"])
             for row in self._connection.execute(
@@ -144,7 +158,7 @@ class LifecycleStore:
                 " WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             )
         }
-        if "meta" not in tables and tables:
+        if "meta" not in tables and (tables or not allow_empty):
             raise SchemaVersionError(
                 "existing store has no schema version marker; refusing to open"
             )
@@ -161,6 +175,8 @@ class LifecycleStore:
                     f"unsupported lifecycle store schema {row['value']}; "
                     f"expected {SCHEMA_VERSION}"
                 )
+
+    def _initialize_schema(self) -> None:
         with _transaction(self._connection) as connection:
             for statement in _DDL:
                 connection.execute(statement)

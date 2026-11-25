@@ -1,16 +1,31 @@
 # Acceptance and evidence
 
-> **Document role: current verification evidence.** This page records only what
-> the active Beta-4 candidate has demonstrated. It does not define product
-> requirements; those remain in the Functional Pyramid and its governing
-> requirements pyramid.
-
-> **What can we currently claim about the Beta-4 candidate, based on evidence?**
+> **Document role: verification evidence.** The governing requirements live in
+> Span's requirements pyramid and its layers.
 
 Superseded Beta-3, Beta-1 and earlier campaign evidence is retained in
 [Historical acceptance evidence](acceptance-history.md).
 
-## Current Beta-4 verification state
+## Current Beta-5 verification state
+
+The generic installed-MCP regression reproduced the cold activation failure
+against the published Beta-4 behavior. The Beta-5 candidate passed the same
+journey with activation and retained-effect receipt replay each running as the
+first tool call in a fresh process. The journey checks the accepted receipt,
+both member states, resolved governance and dependent effects.
+
+The local candidate passed Ruff, Black and the zero-error typing ratchet. The
+Python suite passed with the pinned structural indexer (1,002 tests and 156
+subtests, 85% statement coverage). All 14 OpenCode plugin tests passed in an
+isolated host environment. The wheel and source distribution built for
+`1.0.0b5`, and the installed wheel exposed the MCP entrypoint and exact package
+version. The measured Python test-line count rose from 33,336 to 33,352.
+
+Independent review approved the final runtime and test changes. Exact-head CI,
+reviewed master reconciliation and release-owner authorization remain open.
+See the [Beta-5 implementation plan](implementation-plans/1.0.0-beta5.md).
+
+## Historical Beta-4 verification state
 
 The governing functional acceptance authority is
 [Functional Design §15](functional-design.md#15-version-1-beta-functional-acceptance).

@@ -10,6 +10,9 @@ from span.core import containment as _containment
 from span.core.model.functional_pyramid import (
     FunctionalContextDeclaration,
     FunctionalContextRoute,
+    FunctionalDocumentDeclaration,
+    FunctionalDocumentRef,
+    FunctionalDocumentRoute,
     FunctionalGraphRef,
     FunctionalPyramidBootstrap,
     FunctionalPyramidCoverage,
@@ -25,9 +28,6 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidView,
     FunctionalRouteIdentity,
     FunctionalRouteProvenance,
-    FunctionalRuleDeclaration,
-    FunctionalRuleOwner,
-    FunctionalRuleRoute,
     FunctionalScope,
     FunctionalScopeRelation,
     FunctionalScopeSelector,
@@ -277,6 +277,28 @@ def _decode_graph_ref(value: object) -> FunctionalGraphRef:
     )
 
 
+def _decode_document_ref(value: object) -> FunctionalDocumentRef:
+    raw = _require_json_object(
+        value,
+        frozenset({"repository_id", "document_ref", "layer"}),
+    )
+    try:
+        layer = FunctionalPyramidLayer(
+            _require_json_string(raw["layer"], "document layer")
+        )
+    except ValueError as exc:
+        raise ValueError("unknown Functional Pyramid layer") from exc
+    return FunctionalDocumentRef(
+        repository_id=_require_json_string(
+            raw["repository_id"], "document repository_id"
+        ),
+        document_ref=_require_json_string(
+            raw["document_ref"], "document reference"
+        ),
+        layer=layer,
+    )
+
+
 def _decode_evidence_request(value: object) -> EvidenceRequest:
     raw = _require_json_object(value, frozenset({"locator"}), frozenset({"ranges"}))
     ranges: list[SourceRange] = []
@@ -333,14 +355,16 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
         value = _json.loads(text)
     except _json.JSONDecodeError as exc:
         raise ValueError("Functional Pyramid declaration is not valid JSON") from exc
-    raw = _require_json_object(value, frozenset({"version", "contexts", "rules"}))
-    if raw["version"] != 1:
-        raise ValueError("Functional Pyramid declaration version must be 1")
+    raw = _require_json_object(
+        value, frozenset({"version", "contexts", "documents"})
+    )
+    if raw["version"] != 2:
+        raise ValueError("Functional Pyramid declaration version must be 2")
 
     contexts: list[FunctionalContextDeclaration] = []
     for item in _require_json_array(raw["contexts"], "declaration contexts"):
         context = _require_json_object(
-            item, frozenset({"context_id", "coverage", "inherits", "rules"})
+            item, frozenset({"context_id", "coverage", "inherits", "documents"})
         )
         contexts.append(
             FunctionalContextDeclaration(
@@ -352,56 +376,40 @@ def decode_functional_pyramid_declaration(text: str) -> FunctionalPyramidDeclara
                         context["inherits"], "context inherits"
                     )
                 ),
-                rules=tuple(
-                    _decode_graph_ref(value)
-                    for value in _require_json_array(context["rules"], "context rules")
+                documents=tuple(
+                    _decode_document_ref(value)
+                    for value in _require_json_array(
+                        context["documents"], "context documents"
+                    )
                 ),
             )
         )
 
-    rules: list[FunctionalRuleDeclaration] = []
-    for item in _require_json_array(raw["rules"], "declaration rules"):
-        rule = _require_json_object(
+    documents: list[FunctionalDocumentDeclaration] = []
+    for item in _require_json_array(raw["documents"], "declaration documents"):
+        document = _require_json_object(
             item,
-            frozenset({"rule_id", "layer", "owner", "governing_rule_ids"}),
+            frozenset({"document", "governing_documents"}),
         )
-        owner = _require_json_object(
-            rule["owner"], frozenset({"repository_id", "authority_ref"})
-        )
-        try:
-            layer = FunctionalPyramidLayer(
-                _require_json_string(rule["layer"], "rule layer")
-            )
-        except ValueError as exc:
-            raise ValueError("unknown Functional Pyramid layer") from exc
-        governing: list[FunctionalGraphRef | str] = []
+        governing: list[FunctionalDocumentRef | str] = []
         for value in _require_json_array(
-            rule["governing_rule_ids"], "rule governing_rule_ids"
+            document["governing_documents"], "document governing_documents"
         ):
             if isinstance(value, str):
                 if value != "ROOT":
                     raise ValueError("the only string governing terminal is ROOT")
                 governing.append(value)
             else:
-                governing.append(_decode_graph_ref(value))
-        rules.append(
-            FunctionalRuleDeclaration(
-                rule_id=_require_json_string(rule["rule_id"], "rule_id"),
-                layer=layer,
-                owner=FunctionalRuleOwner(
-                    repository_id=_require_json_string(
-                        owner["repository_id"], "rule owner repository_id"
-                    ),
-                    authority_ref=_require_json_string(
-                        owner["authority_ref"], "rule owner authority_ref"
-                    ),
-                ),
-                governing_rule_ids=tuple(governing),
+                governing.append(_decode_document_ref(value))
+        documents.append(
+            FunctionalDocumentDeclaration(
+                document=_decode_document_ref(document["document"]),
+                governing_documents=tuple(governing),
             )
         )
 
     return FunctionalPyramidDeclaration(
-        version=1, contexts=tuple(contexts), rules=tuple(rules)
+        version=2, contexts=tuple(contexts), documents=tuple(documents)
     )
 
 
@@ -417,6 +425,16 @@ def _layer_rank(layer: FunctionalPyramidLayer) -> int:
     if layer is FunctionalPyramidLayer.P3:
         return 4
     return 5
+
+
+def _document_sort_key(
+    document: FunctionalDocumentRef,
+) -> tuple[int, str, str]:
+    return (
+        _layer_rank(document.layer),
+        document.repository_id,
+        document.document_ref,
+    )
 
 
 def _governing_edge_is_valid(
@@ -456,12 +474,15 @@ def _governing_edge_is_valid(
 
 def _finding_sort_key(
     finding: FunctionalPyramidFinding,
-) -> tuple[str, str, str, str, str, str]:
+) -> tuple[str, str, str, str, str, str, str]:
+    document = finding.document
     return (
         finding.reason.value,
         finding.repository_id or "",
         finding.context_id or "",
-        finding.rule_id or "",
+        "" if document is None else document.repository_id,
+        "" if document is None else document.document_ref,
+        "" if document is None else document.layer.value,
         finding.declaration_locator or "",
         finding.detail,
     )
@@ -480,14 +501,14 @@ def _finding(
     *,
     repository_id: str | None = None,
     context_id: str | None = None,
-    rule_id: str | None = None,
+    document: FunctionalDocumentRef | None = None,
     declaration_locator: str | None = None,
 ) -> FunctionalPyramidFinding:
     return FunctionalPyramidFinding(
         reason=reason,
         repository_id=repository_id,
         context_id=context_id,
-        rule_id=rule_id,
+        document=document,
         declaration_locator=declaration_locator,
         detail=detail,
         recovery=recovery,
@@ -498,16 +519,15 @@ def _declaration_indexes(
     declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
 ) -> tuple[
     dict[tuple[str, str], FunctionalContextDeclaration],
-    dict[tuple[str, str], FunctionalRuleDeclaration],
+    dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
     frozenset[str],
-    frozenset[str],
+    frozenset[FunctionalDocumentRef],
 ]:
     contexts: dict[tuple[str, str], FunctionalContextDeclaration] = {}
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration] = {}
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration] = {}
     context_owner: dict[str, tuple[str, FunctionalContextDeclaration]] = {}
-    rule_owner: dict[str, tuple[str, FunctionalRuleDeclaration]] = {}
     duplicate_contexts: set[str] = set()
-    duplicate_rules: set[str] = set()
+    duplicate_documents: set[FunctionalDocumentRef] = set()
 
     for repository_id, declaration in declarations:
         for context in declaration.contexts:
@@ -522,19 +542,21 @@ def _declaration_indexes(
             elif context_owner_entry != (repository_id, context):
                 duplicate_contexts.add(context.context_id)
 
-        for rule in declaration.rules:
-            key = (repository_id, rule.rule_id)
-            previous_rule = rules.get(key)
-            if previous_rule is not None and previous_rule != rule:
-                duplicate_rules.add(rule.rule_id)
-            rules.setdefault(key, rule)
-            rule_owner_entry = rule_owner.get(rule.rule_id)
-            if rule_owner_entry is None:
-                rule_owner[rule.rule_id] = (repository_id, rule)
-            elif rule_owner_entry != (repository_id, rule):
-                duplicate_rules.add(rule.rule_id)
+        for document in declaration.documents:
+            if document.document.repository_id != repository_id:
+                duplicate_documents.add(document.document)
+                continue
+            previous = documents.get(document.document)
+            if previous is not None and previous != document:
+                duplicate_documents.add(document.document)
+            documents.setdefault(document.document, document)
 
-    return contexts, rules, frozenset(duplicate_contexts), frozenset(duplicate_rules)
+    return (
+        contexts,
+        documents,
+        frozenset(duplicate_contexts),
+        frozenset(duplicate_documents),
+    )
 
 
 def _semantic_atoms(
@@ -643,14 +665,12 @@ def _semantic_has_outside_remainder(
     )
 
 
-def _ref_finding(
+def _context_ref_finding(
     ref: FunctionalGraphRef,
     *,
     member_repositories: frozenset[str],
     available_repositories: frozenset[str],
     contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    context: bool,
 ) -> FunctionalPyramidFinding | None:
     if ref.repository_id not in member_repositories:
         return _finding(
@@ -658,8 +678,7 @@ def _ref_finding(
             "graph reference targets a repository outside the active pyramid",
             "correct the repository-qualified declaration edge",
             repository_id=ref.repository_id,
-            context_id=ref.identity if context else None,
-            rule_id=None if context else ref.identity,
+            context_id=ref.identity,
         )
     if ref.repository_id not in available_repositories:
         return _finding(
@@ -667,11 +686,10 @@ def _ref_finding(
             "referenced Functional Pyramid member is unavailable",
             "restore the named member repository and retry",
             repository_id=ref.repository_id,
-            context_id=ref.identity if context else None,
-            rule_id=None if context else ref.identity,
+            context_id=ref.identity,
         )
     key = (ref.repository_id, ref.identity)
-    if context and key not in contexts:
+    if key not in contexts:
         return _finding(
             FunctionalPyramidFindingReason.UNKNOWN_CONTEXT,
             "referenced context does not exist in the named available member",
@@ -679,13 +697,39 @@ def _ref_finding(
             repository_id=ref.repository_id,
             context_id=ref.identity,
         )
-    if not context and key not in rules:
+    return None
+
+
+def _document_ref_finding(
+    ref: FunctionalDocumentRef,
+    *,
+    member_repositories: frozenset[str],
+    available_repositories: frozenset[str],
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
+) -> FunctionalPyramidFinding | None:
+    if ref.repository_id not in member_repositories:
         return _finding(
-            FunctionalPyramidFindingReason.UNKNOWN_RULE,
-            "referenced rule does not exist in the named available member",
-            "correct the rule reference or declaration",
+            FunctionalPyramidFindingReason.INVALID_DECLARATION,
+            "document reference targets a repository outside the active pyramid",
+            "correct the repository-qualified document edge",
             repository_id=ref.repository_id,
-            rule_id=ref.identity,
+            document=ref,
+        )
+    if ref.repository_id not in available_repositories:
+        return _finding(
+            FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+            "referenced Functional Pyramid member is unavailable",
+            "restore the named member repository and retry",
+            repository_id=ref.repository_id,
+            document=ref,
+        )
+    if ref not in documents:
+        return _finding(
+            FunctionalPyramidFindingReason.UNKNOWN_DOCUMENT,
+            "referenced document placement does not exist in the named member",
+            "correct the document reference or declaration",
+            repository_id=ref.repository_id,
+            document=ref,
         )
     return None
 
@@ -708,7 +752,7 @@ def _availability_findings(
 
 def _duplicate_identity_findings(
     duplicate_contexts: frozenset[str],
-    duplicate_rules: frozenset[str],
+    duplicate_documents: frozenset[FunctionalDocumentRef],
 ) -> list[FunctionalPyramidFinding]:
     findings = [
         _finding(
@@ -721,43 +765,47 @@ def _duplicate_identity_findings(
     ]
     findings.extend(
         _finding(
-            FunctionalPyramidFindingReason.DUPLICATE_RULE_OWNER,
-            "rule identity has more than one declaration owner",
-            "retain exactly one canonical rule declaration",
-            rule_id=identity,
+            FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_PLACEMENT,
+            "document placement has conflicting declarations",
+            "retain exactly one declaration for the document placement",
+            repository_id=document.repository_id,
+            document=document,
         )
-        for identity in sorted(duplicate_rules)
+        for document in sorted(
+            duplicate_documents,
+            key=lambda item: (
+                item.repository_id,
+                item.document_ref,
+                item.layer.value,
+            ),
+        )
     )
     return findings
 
 
 def _context_reference_findings(
     contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
     member_repositories: frozenset[str],
     available_repositories: frozenset[str],
 ) -> list[FunctionalPyramidFinding]:
     findings: list[FunctionalPyramidFinding] = []
     for context in contexts.values():
         for ref in context.inherits:
-            found = _ref_finding(
+            found = _context_ref_finding(
                 ref,
                 member_repositories=member_repositories,
                 available_repositories=available_repositories,
                 contexts=contexts,
-                rules=rules,
-                context=True,
             )
             if found is not None:
                 findings.append(found)
-        for ref in context.rules:
-            found = _ref_finding(
+        for ref in context.documents:
+            found = _document_ref_finding(
                 ref,
                 member_repositories=member_repositories,
                 available_repositories=available_repositories,
-                contexts=contexts,
-                rules=rules,
-                context=False,
+                documents=documents,
             )
             if found is not None:
                 findings.append(found)
@@ -805,118 +853,116 @@ def _context_cycle_findings(
     return findings
 
 
-def _rule_edge_findings(
-    repository_id: str,
-    rule_id: str,
-    rule: FunctionalRuleDeclaration,
+def _document_edge_findings(
+    declaration: FunctionalDocumentDeclaration,
     *,
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
     member_repositories: frozenset[str],
     available_repositories: frozenset[str],
 ) -> list[FunctionalPyramidFinding]:
-    if rule.layer is FunctionalPyramidLayer.P0:
-        if rule.governing_rule_ids == ("ROOT",):
+    document = declaration.document
+    if document.layer is FunctionalPyramidLayer.P0:
+        if declaration.governing_documents == ("ROOT",):
             return []
         return [
             _finding(
                 FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                "P0 rule must be governed by ROOT exactly",
+                "P0 document placement must be governed by ROOT exactly",
                 "declare ROOT as the sole P0 governing terminal",
-                repository_id=repository_id,
-                rule_id=rule_id,
+                repository_id=document.repository_id,
+                document=document,
             )
         ]
 
-    if not rule.governing_rule_ids:
+    if not declaration.governing_documents:
         return [
             _finding(
-                FunctionalPyramidFindingReason.UNRESOLVED_RULE_PARENT,
-                "non-P0 rule has no governing rule",
-                "declare at least one valid higher governing rule",
-                repository_id=repository_id,
-                rule_id=rule_id,
+                FunctionalPyramidFindingReason.UNRESOLVED_DOCUMENT_PARENT,
+                "non-P0 document placement has no governing document",
+                "declare at least one valid higher governing document",
+                repository_id=document.repository_id,
+                document=document,
             )
         ]
 
     findings: list[FunctionalPyramidFinding] = []
-    for parent in rule.governing_rule_ids:
+    for parent in declaration.governing_documents:
         if isinstance(parent, str):
             findings.append(
                 _finding(
                     FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                    "ROOT may govern only a P0 rule",
-                    "replace ROOT with a valid higher governing rule",
-                    repository_id=repository_id,
-                    rule_id=rule_id,
+                    "ROOT may govern only a P0 document placement",
+                    "replace ROOT with a valid higher governing document",
+                    repository_id=document.repository_id,
+                    document=document,
                 )
             )
             continue
-        found = _ref_finding(
+        found = _document_ref_finding(
             parent,
             member_repositories=member_repositories,
             available_repositories=available_repositories,
-            contexts=contexts,
-            rules=rules,
-            context=False,
+            documents=documents,
         )
         if found is not None:
             findings.append(found)
             continue
-        target = rules[(parent.repository_id, parent.identity)]
-        if not _governing_edge_is_valid(rule.layer, target.layer):
+        target = documents[parent].document
+        if not _governing_edge_is_valid(document.layer, target.layer):
             findings.append(
                 _finding(
                     FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
                     "governing edge violates the Functional Pyramid layer relation",
-                    "point the edge to a valid higher governing rule",
-                    repository_id=repository_id,
-                    rule_id=rule_id,
+                    "point the edge to a valid higher governing document",
+                    repository_id=document.repository_id,
+                    document=document,
                 )
             )
     return findings
 
 
-def _rule_cycle_findings(
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
+def _document_cycle_findings(
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
     member_repositories: frozenset[str],
     available_repositories: frozenset[str],
 ) -> list[FunctionalPyramidFinding]:
     findings: list[FunctionalPyramidFinding] = []
-    complete: set[tuple[str, str]] = set()
+    complete: set[FunctionalDocumentRef] = set()
 
-    def walk(key: tuple[str, str], stack: tuple[tuple[str, str], ...]) -> None:
-        if key in stack:
+    def walk(
+        document: FunctionalDocumentRef,
+        stack: tuple[FunctionalDocumentRef, ...],
+    ) -> None:
+        if document in stack:
             findings.append(
                 _finding(
-                    FunctionalPyramidFindingReason.RULE_CYCLE,
-                    "governing rules contain a cycle",
+                    FunctionalPyramidFindingReason.DOCUMENT_CYCLE,
+                    "governing documents contain a cycle",
                     "remove the cyclic governing edge",
-                    repository_id=key[0],
-                    rule_id=key[1],
+                    repository_id=document.repository_id,
+                    document=document,
                 )
             )
             return
-        if key in complete:
+        if document in complete:
             return
-        current = rules.get(key)
+        current = documents.get(document)
         if current is None:
             return
-        next_stack = stack + (key,)
-        for parent in current.governing_rule_ids:
-            if not isinstance(parent, FunctionalGraphRef):
+        next_stack = stack + (document,)
+        for parent in current.governing_documents:
+            if not isinstance(parent, FunctionalDocumentRef):
                 continue
-            target = (parent.repository_id, parent.identity)
             if (
                 parent.repository_id in member_repositories
                 and parent.repository_id in available_repositories
-                and target in rules
+                and parent in documents
             ):
-                walk(target, next_stack)
-        complete.add(key)
+                walk(parent, next_stack)
+        complete.add(document)
 
-    for key in rules:
-        walk(key, ())
+    for document in documents:
+        walk(document, ())
     return findings
 
 
@@ -952,35 +998,36 @@ def _graph_structural_findings(
     available_repositories: frozenset[str],
     declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
 ) -> tuple[FunctionalPyramidFinding, ...]:
-    contexts, rules, duplicate_contexts, duplicate_rules = _declaration_indexes(
-        declarations
+    contexts, documents, duplicate_contexts, duplicate_documents = (
+        _declaration_indexes(declarations)
     )
     member_repositories = frozenset(member.repository_id for member in members)
     findings: list[FunctionalPyramidFinding] = list(declaration_findings)
     findings.extend(_availability_findings(members, available_repositories))
-    findings.extend(_duplicate_identity_findings(duplicate_contexts, duplicate_rules))
+    findings.extend(
+        _duplicate_identity_findings(duplicate_contexts, duplicate_documents)
+    )
     findings.extend(
         _context_reference_findings(
-            contexts, rules, member_repositories, available_repositories
+            contexts, documents, member_repositories, available_repositories
         )
     )
     findings.extend(
         _context_cycle_findings(contexts, member_repositories, available_repositories)
     )
-    for (repository_id, rule_id), rule in rules.items():
+    for declaration in documents.values():
         findings.extend(
-            _rule_edge_findings(
-                repository_id,
-                rule_id,
-                rule,
-                contexts=contexts,
-                rules=rules,
+            _document_edge_findings(
+                declaration,
+                documents=documents,
                 member_repositories=member_repositories,
                 available_repositories=available_repositories,
             )
         )
     findings.extend(
-        _rule_cycle_findings(rules, member_repositories, available_repositories)
+        _document_cycle_findings(
+            documents, member_repositories, available_repositories
+        )
     )
     findings.extend(_complete_coverage_findings(members, contexts))
     return _ordered_findings(findings)
@@ -1029,7 +1076,6 @@ def _resolve_context_refs(
     direct_refs: tuple[FunctionalGraphRef, ...],
     *,
     contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
     duplicate_contexts: frozenset[str],
     member_repositories: frozenset[str],
     available_repositories: frozenset[str],
@@ -1054,13 +1100,11 @@ def _resolve_context_refs(
                 )
             )
             return False
-        ref_finding = _ref_finding(
+        ref_finding = _context_ref_finding(
             ref,
             member_repositories=member_repositories,
             available_repositories=available_repositories,
             contexts=contexts,
-            rules=rules,
-            context=True,
         )
         if ref_finding is not None:
             findings.append(ref_finding)
@@ -1108,158 +1152,147 @@ def _resolve_context_refs(
     return tuple(ordered), _ordered_findings(findings)
 
 
-def _resolve_rule_refs(
-    initial_refs: tuple[FunctionalGraphRef, ...],
+def _resolve_document_refs(
+    initial_refs: tuple[FunctionalDocumentRef, ...],
     *,
-    contexts: dict[tuple[str, str], FunctionalContextDeclaration],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-    duplicate_rules: frozenset[str],
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
+    duplicate_documents: frozenset[FunctionalDocumentRef],
     member_repositories: frozenset[str],
     available_repositories: frozenset[str],
 ) -> tuple[
-    tuple[FunctionalGraphRef, ...],
+    tuple[FunctionalDocumentRef, ...],
     tuple[FunctionalPyramidFinding, ...],
 ]:
-    emitted: list[FunctionalGraphRef] = []
-    seen: set[tuple[str, str]] = set()
-    active: set[tuple[str, str]] = set()
+    emitted: list[FunctionalDocumentRef] = []
+    seen: set[FunctionalDocumentRef] = set()
+    active: set[FunctionalDocumentRef] = set()
     findings: list[FunctionalPyramidFinding] = []
 
-    def visit(ref: FunctionalGraphRef) -> None:
-        key = (ref.repository_id, ref.identity)
-        if ref.identity in duplicate_rules:
+    def visit(ref: FunctionalDocumentRef) -> None:
+        if ref in duplicate_documents:
             findings.append(
                 _finding(
-                    FunctionalPyramidFindingReason.DUPLICATE_RULE_OWNER,
-                    "rule identity has more than one declaration owner",
-                    "retain exactly one canonical rule declaration",
+                    FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_PLACEMENT,
+                    "document placement has conflicting declarations",
+                    "retain exactly one declaration for the document placement",
                     repository_id=ref.repository_id,
-                    rule_id=ref.identity,
+                    document=ref,
                 )
             )
             return
-        ref_finding = _ref_finding(
+        ref_finding = _document_ref_finding(
             ref,
             member_repositories=member_repositories,
             available_repositories=available_repositories,
-            contexts=contexts,
-            rules=rules,
-            context=False,
+            documents=documents,
         )
         if ref_finding is not None:
             findings.append(ref_finding)
             return
-        if key in active:
+        if ref in active:
             findings.append(
                 _finding(
-                    FunctionalPyramidFindingReason.RULE_CYCLE,
-                    "governing rules contain a cycle",
+                    FunctionalPyramidFindingReason.DOCUMENT_CYCLE,
+                    "governing documents contain a cycle",
                     "remove the cyclic governing edge",
                     repository_id=ref.repository_id,
-                    rule_id=ref.identity,
+                    document=ref,
                 )
             )
             return
-        if key in seen:
+        if ref in seen:
             return
-        seen.add(key)
-        active.add(key)
+        seen.add(ref)
+        active.add(ref)
         emitted.append(ref)
-        rule = rules[key]
-        if rule.layer is FunctionalPyramidLayer.P0:
-            if rule.governing_rule_ids != ("ROOT",):
+        declaration = documents[ref]
+        if ref.layer is FunctionalPyramidLayer.P0:
+            if declaration.governing_documents != ("ROOT",):
                 findings.append(
                     _finding(
                         FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                        "P0 rule must be governed by ROOT exactly",
+                        "P0 document placement must be governed by ROOT exactly",
                         "declare ROOT as the sole P0 governing terminal",
                         repository_id=ref.repository_id,
-                        rule_id=ref.identity,
+                        document=ref,
                     )
                 )
-        elif not rule.governing_rule_ids:
+        elif not declaration.governing_documents:
             findings.append(
                 _finding(
-                    FunctionalPyramidFindingReason.UNRESOLVED_RULE_PARENT,
-                    "non-P0 rule has no governing rule",
-                    "declare at least one valid higher governing rule",
+                    FunctionalPyramidFindingReason.UNRESOLVED_DOCUMENT_PARENT,
+                    "non-P0 document placement has no governing document",
+                    "declare at least one valid higher governing document",
                     repository_id=ref.repository_id,
-                    rule_id=ref.identity,
+                    document=ref,
                 )
             )
-        for parent in rule.governing_rule_ids:
+        for parent in declaration.governing_documents:
             if isinstance(parent, str):
-                if rule.layer is not FunctionalPyramidLayer.P0:
+                if ref.layer is not FunctionalPyramidLayer.P0:
                     findings.append(
                         _finding(
                             FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
-                            "ROOT may govern only a P0 rule",
-                            "replace ROOT with a valid higher governing rule",
+                            "ROOT may govern only a P0 document placement",
+                            "replace ROOT with a valid higher governing document",
                             repository_id=ref.repository_id,
-                            rule_id=ref.identity,
+                            document=ref,
                         )
                     )
                 continue
-            parent_finding = _ref_finding(
+            parent_finding = _document_ref_finding(
                 parent,
                 member_repositories=member_repositories,
                 available_repositories=available_repositories,
-                contexts=contexts,
-                rules=rules,
-                context=False,
+                documents=documents,
             )
             if parent_finding is not None:
                 findings.append(parent_finding)
                 continue
-            target = rules[(parent.repository_id, parent.identity)]
-            if not _governing_edge_is_valid(rule.layer, target.layer):
+            if not _governing_edge_is_valid(ref.layer, parent.layer):
                 findings.append(
                     _finding(
                         FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE,
                         "governing edge violates the Functional Pyramid layer relation",
-                        "point the edge to a valid higher governing rule",
+                        "point the edge to a valid higher governing document",
                         repository_id=ref.repository_id,
-                        rule_id=ref.identity,
+                        document=ref,
                     )
                 )
                 continue
             visit(parent)
-        active.remove(key)
+        active.remove(ref)
 
     for ref in initial_refs:
         visit(ref)
     return tuple(emitted), _ordered_findings(findings)
 
 
-def _downstream_rule_ids(
-    key: tuple[str, str],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
-) -> tuple[str, ...]:
-    found: set[tuple[str, str]] = set()
-    frontier = [key]
+def _downstream_documents(
+    document: FunctionalDocumentRef,
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
+) -> tuple[FunctionalDocumentRef, ...]:
+    found: set[FunctionalDocumentRef] = set()
+    frontier = [document]
     while frontier:
         current = frontier.pop()
-        for candidate_key, rule in rules.items():
-            if candidate_key in found or candidate_key == key:
+        for candidate, declaration in documents.items():
+            if candidate in found or candidate == document:
                 continue
-            if any(
-                isinstance(parent, FunctionalGraphRef)
-                and (parent.repository_id, parent.identity) == current
-                for parent in rule.governing_rule_ids
-            ):
-                found.add(candidate_key)
-                frontier.append(candidate_key)
-    return tuple(sorted(identity for _, identity in found))
+            if current in declaration.governing_documents:
+                found.add(candidate)
+                frontier.append(candidate)
+    return tuple(sorted(found, key=_document_sort_key))
 
 
 def _downstream_context_ids(
-    rule_ids: frozenset[str],
+    document_refs: frozenset[FunctionalDocumentRef],
     contexts: dict[tuple[str, str], FunctionalContextDeclaration],
 ) -> tuple[str, ...]:
     found: set[tuple[str, str]] = {
         key
         for key, context in contexts.items()
-        if any(ref.identity in rule_ids for ref in context.rules)
+        if any(ref in document_refs for ref in context.documents)
     }
     frontier = list(found)
     while frontier:
@@ -1277,22 +1310,24 @@ def _downstream_context_ids(
 
 
 def _route_identity(
-    surface: SurfaceKey,
-    semantic_scope: EvidenceScope,
+    repository_id: str,
+    semantic_scope: EvidenceScope | None,
+    directory: str | None,
     contexts: tuple[FunctionalContextRoute, ...],
-    rule_refs: tuple[FunctionalGraphRef, ...],
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
+    document_refs: tuple[FunctionalDocumentRef, ...],
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
 ) -> FunctionalRouteIdentity:
     payload = {
-        "scope": {
-            "paths": tuple(semantic_scope.paths),
+        "selection": {
+            "directory": directory,
+            "paths": () if semantic_scope is None else tuple(semantic_scope.paths),
             "refs": [
                 (
                     ref.repository_id,
                     ref.locator,
                     ref.section_or_span,
                 )
-                for ref in semantic_scope.evidence_refs
+                for ref in (() if semantic_scope is None else semantic_scope.evidence_refs)
             ],
         },
         "contexts": [
@@ -1305,40 +1340,38 @@ def _route_identity(
                     for selector in context.coverage.selectors
                 ],
                 tuple(context.inherits),
-                tuple(context.rule_ids),
+                [
+                    (ref.repository_id, ref.document_ref, ref.layer.value)
+                    for ref in context.documents
+                ],
             )
             for context in contexts
         ],
-        "rules": [
+        "documents": [
             (
                 ref.repository_id,
-                ref.identity,
-                rules[(ref.repository_id, ref.identity)].layer.value,
-                rules[(ref.repository_id, ref.identity)].owner.repository_id,
-                rules[(ref.repository_id, ref.identity)].owner.authority_ref,
+                ref.document_ref,
+                ref.layer.value,
                 [
                     (
                         parent
                         if isinstance(parent, str)
-                        else (parent.repository_id, parent.identity)
+                        else (
+                            parent.repository_id,
+                            parent.document_ref,
+                            parent.layer.value,
+                        )
                     )
-                    for parent in rules[
-                        (ref.repository_id, ref.identity)
-                    ].governing_rule_ids
+                    for parent in documents[ref].governing_documents
                 ],
             )
-            for ref in rule_refs
-            if (ref.repository_id, ref.identity) in rules
+            for ref in document_refs
+            if ref in documents
         ],
         "members": sorted(
-            {surface.repository_id}
+            {repository_id}
             | {context.repository_id for context in contexts}
-            | {ref.repository_id for ref in rule_refs}
-            | {
-                rules[(ref.repository_id, ref.identity)].owner.repository_id
-                for ref in rule_refs
-                if (ref.repository_id, ref.identity) in rules
-            }
+            | {ref.repository_id for ref in document_refs}
         ),
     }
     encoded = _json.dumps(
@@ -1447,11 +1480,11 @@ def _context_projection(
     contexts: dict[tuple[str, str], FunctionalContextDeclaration],
 ) -> tuple[
     tuple[FunctionalContextRoute, ...],
-    tuple[FunctionalGraphRef, ...],
+    tuple[FunctionalDocumentRef, ...],
     frozenset[tuple[str, str]],
 ]:
     routes: list[FunctionalContextRoute] = []
-    rule_refs: list[FunctionalGraphRef] = []
+    document_refs: list[FunctionalDocumentRef] = []
     keys: set[tuple[str, str]] = set()
     for ref, direct in resolved_contexts:
         key = (ref.repository_id, ref.identity)
@@ -1464,109 +1497,99 @@ def _context_projection(
                 direct=direct,
                 coverage=context.coverage,
                 inherits=tuple(value.identity for value in context.inherits),
-                rule_ids=tuple(value.identity for value in context.rules),
+                documents=context.documents,
             )
         )
-        rule_refs.extend(context.rules)
-    return tuple(routes), _unique_graph_refs(rule_refs), frozenset(keys)
+        document_refs.extend(context.documents)
+    return tuple(routes), tuple(dict.fromkeys(document_refs)), frozenset(keys)
 
 
-def _canonical_owner_rule_refs(
+def _canonical_owner_document_refs(
     *,
-    surface: SurfaceKey,
+    repository_id: str,
     semantic_scope: EvidenceScope,
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
     authority_bindings: _collections.Mapping[tuple[str, str], AuthorityBinding],
-) -> tuple[FunctionalGraphRef, ...]:
+) -> tuple[FunctionalDocumentRef, ...]:
     """Seed FD-88 reverse navigation from an exact canonical owner selection."""
     exact_locators = set(semantic_scope.paths)
     exact_locators.update(ref.locator for ref in semantic_scope.evidence_refs)
     if not exact_locators:
         return ()
 
-    refs: list[FunctionalGraphRef] = []
-    for (repository_id, rule_id), rule in rules.items():
-        if rule.owner.repository_id != surface.repository_id:
+    refs: list[FunctionalDocumentRef] = []
+    for document in documents:
+        if document.repository_id != repository_id:
             continue
         authority = authority_bindings.get(
-            (rule.owner.repository_id, rule.owner.authority_ref)
+            (document.repository_id, document.document_ref)
         )
         if authority is None:
             continue
         if authority.evidence_ref.locator not in exact_locators:
             continue
-        refs.append(
-            FunctionalGraphRef(
-                repository_id=repository_id,
-                identity=rule_id,
-            )
-        )
-    return _unique_graph_refs(refs)
+        refs.append(document)
+    return tuple(dict.fromkeys(refs))
 
 
-def _rule_projection(
-    resolved_rules: tuple[FunctionalGraphRef, ...],
+def _document_projection(
+    resolved_documents: tuple[FunctionalDocumentRef, ...],
     *,
-    rules: dict[tuple[str, str], FunctionalRuleDeclaration],
+    documents: dict[FunctionalDocumentRef, FunctionalDocumentDeclaration],
     contexts: dict[tuple[str, str], FunctionalContextDeclaration],
     authority_bindings: _collections.Mapping[tuple[str, str], AuthorityBinding],
 ) -> tuple[
-    tuple[FunctionalRuleRoute, ...],
-    tuple[FunctionalGraphRef, ...],
+    tuple[FunctionalDocumentRoute, ...],
+    tuple[FunctionalDocumentRef, ...],
     tuple[FunctionalPyramidFinding, ...],
 ]:
-    routes: list[FunctionalRuleRoute] = []
-    valid_refs: list[FunctionalGraphRef] = []
+    routes: list[FunctionalDocumentRoute] = []
+    valid_refs: list[FunctionalDocumentRef] = []
     findings: list[FunctionalPyramidFinding] = []
 
-    for ref in resolved_rules:
-        key = (ref.repository_id, ref.identity)
-        rule = rules[key]
+    for ref in resolved_documents:
+        declaration = documents[ref]
         authority = authority_bindings.get(
-            (rule.owner.repository_id, rule.owner.authority_ref)
+            (ref.repository_id, ref.document_ref)
         )
         if authority is None:
             findings.append(
                 _finding(
                     FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                    "functional rule owner does not resolve to a declared authority binding",
-                    "declare the exact canonical authority binding or correct the owner",
-                    repository_id=rule.owner.repository_id,
-                    rule_id=rule.rule_id,
+                    "canonical document does not resolve to an authority binding",
+                    "declare the canonical document authority or correct the reference",
+                    repository_id=ref.repository_id,
+                    document=ref,
                 )
             )
             continue
-        if authority.evidence_ref.repository_id != rule.owner.repository_id:
+        if authority.evidence_ref.repository_id != ref.repository_id:
             findings.append(
                 _finding(
                     FunctionalPyramidFindingReason.INVALID_DECLARATION,
-                    "functional rule authority binding belongs to another repository",
-                    "correct the rule owner or canonical authority binding",
-                    repository_id=rule.owner.repository_id,
-                    rule_id=rule.rule_id,
+                    "canonical document binding belongs to another repository",
+                    "correct the document reference or authority binding",
+                    repository_id=ref.repository_id,
+                    document=ref,
                 )
             )
             continue
 
         valid_refs.append(ref)
-        downstream = frozenset(_downstream_rule_ids(key, rules))
+        downstream = frozenset(_downstream_documents(ref, documents))
         routes.append(
-            FunctionalRuleRoute(
-                rule_id=rule.rule_id,
-                layer=rule.layer,
+            FunctionalDocumentRoute(
+                document=ref,
                 authority=authority,
-                governing_rule_ids=tuple(
-                    value if isinstance(value, str) else value.identity
-                    for value in rule.governing_rule_ids
-                ),
-                downstream_rule_ids=tuple(sorted(downstream)),
+                governing_documents=declaration.governing_documents,
+                downstream_documents=tuple(sorted(downstream, key=_document_sort_key)),
                 downstream_context_ids=_downstream_context_ids(
-                    downstream | frozenset({rule.rule_id}), contexts
+                    downstream | frozenset({ref}), contexts
                 ),
             )
         )
 
-    routes.sort(key=lambda item: (_layer_rank(item.layer), item.rule_id))
+    routes.sort(key=lambda item: _document_sort_key(item.document))
     return tuple(routes), tuple(valid_refs), _ordered_findings(findings)
 
 

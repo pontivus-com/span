@@ -257,17 +257,24 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 _value(pre_affected[0].get("conclusion_id")) if pre_affected else None
             )
 
-            activated, activated_error = await _call(
-                session,
-                "record",
-                {
-                    "request_id": "governed-activate",
-                    "kind": "functional_pyramid",
-                    "action": "activate",
-                    "members": members,
-                },
-            )
+            # Exercise activation with no repository handles cached by an ask.
+            async with stdio_client(params) as (activate_read, activate_write):
+                async with ClientSession(
+                    activate_read, activate_write
+                ) as activate_session:
+                    await activate_session.initialize()
+                    activated, activated_error = await _call(
+                        activate_session,
+                        "record",
+                        {
+                            "request_id": "governed-activate",
+                            "kind": "functional_pyramid",
+                            "action": "activate",
+                            "members": members,
+                        },
+                    )
 
+            assert activated.get("$type") == "FunctionalPyramidRecorded", activated
             activation_receipt_before, activation_receipt_before_error = await _call(
                 session,
                 "ask",
@@ -278,16 +285,21 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                     }
                 },
             )
-            activation_replay_before, activation_replay_before_error = await _call(
-                session,
-                "record",
-                {
-                    "request_id": "governed-activate",
-                    "kind": "functional_pyramid",
-                    "action": "activate",
-                    "members": members,
-                },
-            )
+            async with stdio_client(params) as (replay_read, replay_write):
+                async with ClientSession(replay_read, replay_write) as replay_session:
+                    await replay_session.initialize()
+                    activation_replay_before, activation_replay_before_error = (
+                        await _call(
+                            replay_session,
+                            "record",
+                            {
+                                "request_id": "governed-activate",
+                                "kind": "functional_pyramid",
+                                "action": "activate",
+                                "members": members,
+                            },
+                        )
+                    )
             activation_context_a = _context_for(activated, repo_a_id)
             pre_reestablished, pre_reestablished_error = await _call(
                 session,
