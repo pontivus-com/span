@@ -409,6 +409,8 @@ def _call_functional_pyramid(
         selector = request.selector
         if isinstance(selector, m.FunctionalPyramidSelector):
             return service.status(selector)
+        if isinstance(selector, m.FunctionalPyramidDirectorySelector):
+            return service.directory(selector)
         if isinstance(selector, m.FunctionalPyramidCandidateSelector):
             return service.candidate(selector)
         if isinstance(selector, m.FunctionalPyramidReceiptSelector):
