@@ -173,10 +173,6 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                                         "ranges": [],
                                     }
                                 ],
-                                "functional_scope": {
-                                    "selectors": [{"kind": "PREFIX", "path": "src"}]
-                                },
-                                "coverage": "PARTIAL",
                             },
                             {
                                 "repository_id": "repo-not-registered",
@@ -186,10 +182,6 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                                         "ranges": [],
                                     }
                                 ],
-                                "functional_scope": {
-                                    "selectors": [{"kind": "PREFIX", "path": "src"}]
-                                },
-                                "coverage": "PARTIAL",
                             },
                         ],
                     }
@@ -202,26 +194,12 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                     "declaration_sources": [
                         {"locator": "docs/functional-pyramid.json", "ranges": []}
                     ],
-                    "functional_scope": {
-                        "selectors": [{"kind": "PREFIX", "path": "src"}]
-                    },
-                    "coverage": "COMPLETE",
                 },
                 {
                     "repository_id": repo_b_id,
                     "declaration_sources": [
                         {"locator": "docs/functional-pyramid.json", "ranges": []}
                     ],
-                    "functional_scope": {
-                        "selectors": [
-                            {"kind": "PATH", "path": "rules/p0-v1.md"},
-                            {"kind": "PATH", "path": "rules/p0-v2.md"},
-                            {"kind": "PATH", "path": "rules/p1.md"},
-                            {"kind": "PATH", "path": "rules/p2s.md"},
-                            {"kind": "PATH", "path": "rules/p2w.md"},
-                        ]
-                    },
-                    "coverage": "PARTIAL",
                 },
             ]
             candidate, candidate_error = await _call(
@@ -346,6 +324,29 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 },
             )
 
+            directory_src, directory_src_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidDirectorySelector",
+                        "repository_id": repo_a_id,
+                        "directory": "src",
+                    }
+                },
+            )
+            directory_root, directory_root_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidDirectorySelector",
+                        "repository_id": repo_a_id,
+                        "directory": ".",
+                    }
+                },
+            )
+
             created, created_error = await _call(
                 session,
                 "record",
@@ -443,9 +444,18 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 },
             )
 
-            declaration_path = pathlib.Path(repo_b) / "docs/functional-pyramid.json"
+            declaration_path = pathlib.Path(repo_a) / "docs/functional-pyramid.json"
             declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
-            declaration["rules"][0]["owner"]["authority_ref"] = "authority-p0-v2"
+            for placement in declaration["placements"]:
+                document = placement["document"]
+                if document["document_ref"] == "rules/p0-v1.md":
+                    document["document_ref"] = "rules/p0-v2.md"
+                for governing in placement["governing_placements"]:
+                    if not isinstance(governing, dict):
+                        continue
+                    governing_document = governing["document"]
+                    if governing_document["document_ref"] == "rules/p0-v1.md":
+                        governing_document["document_ref"] = "rules/p0-v2.md"
             declaration_path.write_text(
                 json.dumps(declaration, sort_keys=True) + "\n",
                 encoding="utf-8",
@@ -455,7 +465,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 session,
                 "reconsider",
                 {
-                    "repository_id": repo_b_id,
+                    "repository_id": repo_a_id,
                     "changed_paths": ["docs/functional-pyramid.json"],
                 },
             )
@@ -592,21 +602,17 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
 
             fp_a = ask_a.get("functional_pyramid", {})
             owner_fp = owner_ask.get("functional_pyramid", {})
-            owner_rules = owner_fp.get("rules", [])
-            downstream_rules = sorted(
+            owner_routes = owner_fp.get("routes", [])
+            owner_downstream_documents = sorted(
                 {
-                    rule_id
-                    for rule in owner_rules
-                    for rule_id in rule.get("downstream_rule_ids", [])
+                    placement.get("document", {}).get("document_ref")
+                    for route in owner_routes
+                    for placement in route.get("downstream_placements", [])
+                    if placement.get("document", {}).get("document_ref")
                 }
             )
-            downstream_contexts = sorted(
-                {
-                    context_id
-                    for rule in owner_rules
-                    for context_id in rule.get("downstream_context_ids", [])
-                }
-            )
+            directory_src_fp = directory_src
+            directory_root_fp = directory_root
             return {
                 "unknown_repository_error": unknown_repository_error,
                 "unknown_repository_kind": unknown_repository.get("$type"),
@@ -653,15 +659,25 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 ),
                 "ask_a_error": ask_a_error,
                 "ask_a_route_status": fp_a.get("status"),
-                "ask_a_rule_ids": [
-                    rule.get("rule_id") for rule in fp_a.get("rules", [])
+                "ask_a_documents": [
+                    route.get("placement", {}).get("document", {}).get("document_ref")
+                    for route in fp_a.get("routes", [])
+                ],
+                "directory_src_error": directory_src_error,
+                "directory_src_route_status": directory_src_fp.get("status"),
+                "directory_src_documents": [
+                    route.get("placement", {}).get("document", {}).get("document_ref")
+                    for route in directory_src_fp.get("routes", [])
+                ],
+                "directory_root_error": directory_root_error,
+                "directory_root_documents": [
+                    route.get("placement", {}).get("document", {}).get("document_ref")
+                    for route in directory_root_fp.get("routes", [])
                 ],
                 "ask_a_rule_authority_ids": _authority_ids(fp_a, repo_b_id),
                 "owner_ask_error": owner_ask_error,
-                "owner_scope_relation": owner_fp.get("scope_relation"),
                 "owner_route_status": owner_fp.get("status"),
-                "owner_downstream_rules": downstream_rules,
-                "owner_downstream_contexts": downstream_contexts,
+                "owner_downstream_documents": owner_downstream_documents,
                 "created_error": created_error,
                 "created_qualification": created.get("qualification", {}).get("state"),
                 "captured_ask_error": captured_ask_error,

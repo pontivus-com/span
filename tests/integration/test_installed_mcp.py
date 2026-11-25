@@ -24,21 +24,105 @@ _REPO_FILES = {
     "README.md": "# synth\n\nSynthetic repository.\n",
     "src/alpha.py": "VALUE = 1\n",
     "src/beta.py": "OTHER = 2\n",
-    "docs/functional-pyramid.json": (
-        '{"version":1,"contexts":[{"context_id":"ctx-runtime",'
-        '"coverage":[{"kind":"PREFIX","path":"src"}],"inherits":[],"rules":[]}],'
-        '"rules":[]}\n'
-    ),
+    "docs/foundation.md": "# Foundation\n",
+    "docs/functional-pyramid.json": _json.dumps(
+        {
+            "version": 2,
+            "placements": [
+                {
+                    "document": {
+                        "repository_id": "repo",
+                        "document_ref": "docs/foundation.md",
+                        "layer": "P0",
+                    },
+                    "scope": ".",
+                    "governing_placements": ["ROOT"],
+                }
+            ],
+        },
+        sort_keys=True,
+    )
+    + "\n",
 }
 
 _GOVERNED_A_FILES = {
     "README.md": "# governed A\n",
     "src/alpha.py": "VALUE = 1\n",
-    "docs/functional-pyramid.json": (
-        '{"version":1,"contexts":[{"context_id":"ctx-a",'
-        '"coverage":[{"kind":"PREFIX","path":"src"}],"inherits":[],'
-        '"rules":[{"repository_id":"repo-b","identity":"rule-p2w"}]}],"rules":[]}\n'
-    ),
+    "docs/functional-pyramid.json": _json.dumps(
+        {
+            "version": 2,
+            "placements": [
+                {
+                    "document": {
+                        "repository_id": "repo-b",
+                        "document_ref": "rules/p0-v1.md",
+                        "layer": "P0",
+                    },
+                    "scope": ".",
+                    "governing_placements": ["ROOT"],
+                },
+                {
+                    "document": {
+                        "repository_id": "repo-b",
+                        "document_ref": "rules/p1.md",
+                        "layer": "P1",
+                    },
+                    "scope": ".",
+                    "governing_placements": [
+                        {
+                            "declaring_repository_id": "repo-a",
+                            "document": {
+                                "repository_id": "repo-b",
+                                "document_ref": "rules/p0-v1.md",
+                                "layer": "P0",
+                            },
+                            "scope": ".",
+                        }
+                    ],
+                },
+                {
+                    "document": {
+                        "repository_id": "repo-b",
+                        "document_ref": "rules/p2s.md",
+                        "layer": "P2S",
+                    },
+                    "scope": "src",
+                    "governing_placements": [
+                        {
+                            "declaring_repository_id": "repo-a",
+                            "document": {
+                                "repository_id": "repo-b",
+                                "document_ref": "rules/p1.md",
+                                "layer": "P1",
+                            },
+                            "scope": ".",
+                        }
+                    ],
+                },
+                {
+                    "document": {
+                        "repository_id": "repo-b",
+                        "document_ref": "rules/p2w.md",
+                        "layer": "P2W",
+                    },
+                    "scope": "src",
+                    "governing_placements": [
+                        {
+                            "declaring_repository_id": "repo-a",
+                            "document": {
+                                "repository_id": "repo-b",
+                                "document_ref": "rules/p2s.md",
+                                "layer": "P2S",
+                            },
+                            "scope": "src",
+                        }
+                    ],
+                },
+            ],
+        },
+        sort_keys=True,
+    )
+    + "\n",
     "docs/invalid-functional-pyramid.json": "{not-json\n",
 }
 
@@ -49,21 +133,81 @@ _GOVERNED_B_FILES = {
     "rules/p1.md": "P1 authority.\n",
     "rules/p2s.md": "Shared P2 contract authority.\n",
     "rules/p2w.md": "Workflow P2 contract authority.\n",
-    "docs/functional-pyramid.json": (
-        '{"version":1,"contexts":[],"rules":['
-        '{"rule_id":"rule-p0","layer":"P0",'
-        '"owner":{"repository_id":"repo-b","authority_ref":"authority-p0-v1"},'
-        '"governing_rule_ids":["ROOT"]},'
-        '{"rule_id":"rule-p1","layer":"P1",'
-        '"owner":{"repository_id":"repo-b","authority_ref":"authority-p1"},'
-        '"governing_rule_ids":[{"repository_id":"repo-b","identity":"rule-p0"}]},'
-        '{"rule_id":"rule-p2s","layer":"P2S",'
-        '"owner":{"repository_id":"repo-b","authority_ref":"authority-p2s"},'
-        '"governing_rule_ids":[{"repository_id":"repo-b","identity":"rule-p1"}]},'
-        '{"rule_id":"rule-p2w","layer":"P2W",'
-        '"owner":{"repository_id":"repo-b","authority_ref":"authority-p2w"},'
-        '"governing_rule_ids":[{"repository_id":"repo-b","identity":"rule-p2s"}]}]}\n'
-    ),
+    "docs/functional-pyramid.json": _json.dumps(
+        {
+            "version": 2,
+            "placements": [
+                {
+                    "document": {
+                        "repository_id": "repo-b",
+                        "document_ref": "rules/p0-v1.md",
+                        "layer": "P0",
+                    },
+                    "scope": ".",
+                    "governing_placements": ["ROOT"],
+                },
+                {
+                    "document": {
+                        "repository_id": "repo-b",
+                        "document_ref": "rules/p1.md",
+                        "layer": "P1",
+                    },
+                    "scope": ".",
+                    "governing_placements": [
+                        {
+                            "declaring_repository_id": "repo-b",
+                            "document": {
+                                "repository_id": "repo-b",
+                                "document_ref": "rules/p0-v1.md",
+                                "layer": "P0",
+                            },
+                            "scope": ".",
+                        }
+                    ],
+                },
+                {
+                    "document": {
+                        "repository_id": "repo-b",
+                        "document_ref": "rules/p2s.md",
+                        "layer": "P2S",
+                    },
+                    "scope": "rules",
+                    "governing_placements": [
+                        {
+                            "declaring_repository_id": "repo-b",
+                            "document": {
+                                "repository_id": "repo-b",
+                                "document_ref": "rules/p1.md",
+                                "layer": "P1",
+                            },
+                            "scope": ".",
+                        }
+                    ],
+                },
+                {
+                    "document": {
+                        "repository_id": "repo-b",
+                        "document_ref": "rules/p2w.md",
+                        "layer": "P2W",
+                    },
+                    "scope": "rules",
+                    "governing_placements": [
+                        {
+                            "declaring_repository_id": "repo-b",
+                            "document": {
+                                "repository_id": "repo-b",
+                                "document_ref": "rules/p2s.md",
+                                "layer": "P2S",
+                            },
+                            "scope": "rules",
+                        }
+                    ],
+                },
+            ],
+        },
+        sort_keys=True,
+    )
+    + "\n",
 }
 
 _SOURCE_SET = ("src", "pyproject.toml", "README.md")
@@ -360,6 +504,19 @@ dispose();
         runtime_root = self.tmp / "governed-runtime"
         runtime_root.mkdir(parents=True, exist_ok=True)
         bindings_path = runtime_root / "repo-b-authority-bindings.json"
+        bootstrap_a = runtime_root / "repo-a-functional-pyramid-bootstrap.json"
+        bootstrap_b = runtime_root / "repo-b-functional-pyramid-bootstrap.json"
+        bootstrap_payload = _json.dumps(
+            {
+                "version": 2,
+                "declaration_sources": [
+                    {"locator": "docs/functional-pyramid.json", "ranges": []}
+                ],
+            },
+            sort_keys=True,
+        )
+        bootstrap_a.write_text(bootstrap_payload + "\n", encoding="utf-8")
+        bootstrap_b.write_text(bootstrap_payload + "\n", encoding="utf-8")
         code = (
             "import hashlib, json\n"
             "from pathlib import Path\n"
@@ -419,6 +576,12 @@ dispose();
                 "--authority-bindings-file",
                 repo_b.name,
                 str(bindings_path),
+                "--functional-pyramid-bootstrap-file",
+                repo_a.name,
+                str(bootstrap_a),
+                "--functional-pyramid-bootstrap-file",
+                repo_b.name,
+                str(bootstrap_b),
                 "--data-dir",
                 str(data_dir),
                 "--venv-dir",
@@ -447,6 +610,8 @@ dispose();
         self.assertTrue(runtime_exe.is_file())
         self.assertTrue((data_dir / f"{repo_a.name}.db").is_file())
         self.assertTrue((data_dir / f"{repo_b.name}.db").is_file())
+        self.assertTrue((repo_a / ".span" / "functional-pyramid.json").is_file())
+        self.assertTrue((repo_b / ".span" / "functional-pyramid.json").is_file())
         return str(runtime_exe)
 
     def test_installed_cross_repository_governance_journey(self):
@@ -490,7 +655,7 @@ dispose();
         self.assertIn(
             "INVALID_DECLARATION_SOURCE", observed["mixed_validation_reasons"]
         )
-        self.assertIn("INVALID_DECLARATION", observed["mixed_graph_reasons"])
+        self.assertEqual(observed["mixed_graph_reasons"], [])
 
         self.assertFalse(observed["pre_status_error"])
         self.assertEqual(observed["pre_status_state"], "UNCONFIGURED")
@@ -521,18 +686,30 @@ dispose();
         self.assertFalse(observed["ask_a_error"])
         self.assertEqual(observed["ask_a_route_status"], "RESOLVED")
         self.assertEqual(
-            observed["ask_a_rule_ids"],
-            ["rule-p0", "rule-p1", "rule-p2s", "rule-p2w"],
+            observed["ask_a_documents"],
+            [
+                "rules/p0-v1.md",
+                "rules/p1.md",
+                "rules/p2s.md",
+                "rules/p2w.md",
+            ],
+        )
+        self.assertEqual(observed["directory_src_route_status"], "RESOLVED")
+        self.assertEqual(
+            observed["directory_src_documents"],
+            observed["ask_a_documents"],
+        )
+        self.assertEqual(
+            observed["directory_root_documents"],
+            ["rules/p0-v1.md", "rules/p1.md"],
         )
         self.assertIn("authority-p0-v1", observed["ask_a_rule_authority_ids"])
         self.assertIn("authority-p2s", observed["ask_a_rule_authority_ids"])
         self.assertIn("authority-p2w", observed["ask_a_rule_authority_ids"])
 
         self.assertFalse(observed["owner_ask_error"])
-        self.assertEqual(observed["owner_scope_relation"], "UNCOVERED")
-        self.assertEqual(observed["owner_route_status"], "UNRESOLVED")
-        self.assertIn("rule-p2w", observed["owner_downstream_rules"])
-        self.assertIn("ctx-a", observed["owner_downstream_contexts"])
+        self.assertEqual(observed["owner_route_status"], "RESOLVED")
+        self.assertIn("rules/p2w.md", observed["owner_downstream_documents"])
 
         self.assertFalse(observed["created_error"])
         self.assertEqual(observed["created_qualification"], "CURRENT")
