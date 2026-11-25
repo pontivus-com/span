@@ -86,6 +86,7 @@ not authority; it is debt, and it never decides what work may proceed.
   explicit. Never coerce it into certainty.
 - One canonical typed carrier per boundary. Do not add ad-hoc DTOs,
   compatibility bridges, fallback parsing, or parallel semantic writers.
+- Release branch topology is governed by [the release procedure](docs/contributing.md#release-branch-identity): each release version has exactly one release-specific branch, `release/<version>`. Never create or retain a parallel work/fix/candidate branch for the same release; if one exists, consolidate it into the canonical release branch and delete the duplicate before continuing release work.
 - Do not edit generated artifacts or `BUILD_IDENTITY`.
 - Keep raw acceptance captures, transcripts, receipts and manifests out of Git
   and distributions. Exception: the deployable per-repository artifact under
