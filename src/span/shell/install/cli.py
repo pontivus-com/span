@@ -61,7 +61,11 @@ from span.shell.install.paths import (
     opencode_plugin_path,
     platform_paths,
 )
-from span.shell.install.preflight import load_authority_files, preflight_facts
+from span.shell.install.preflight import (
+    load_authority_files,
+    load_functional_pyramid_bootstraps,
+    preflight_facts,
+)
 from span.shell.install.receipt import read_receipt, write_receipt
 from span.shell.install.recovery import (
     create_backup,
@@ -316,6 +320,7 @@ def _initialize_repositories(
     env: _Environment,
     authority_seeds: dict[str, tuple[m.EvidenceRef, ...]],
     authority_bindings: dict[str, tuple[m.AuthorityBinding, ...]],
+    functional_pyramid_bootstraps: dict[str, bytes],
 ) -> tuple[m.InitializeRepositoryResult, ...]:
     """Initialize selected repositories through the canonical setup owner."""
     if env.dry:
@@ -344,7 +349,18 @@ def _initialize_repositories(
                 f"repository initialization failed for {repository_id!r}: {exc}"
             ) from None
         try:
+            bootstrap = functional_pyramid_bootstraps.get(repository_id)
+            if bootstrap is not None:
+                destination = target / ".span" / "functional-pyramid.json"
+                if not destination.exists():
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    destination.write_bytes(bootstrap)
             results.append(result)
+        except OSError as exc:
+            raise SystemExit(
+                f"Functional Pyramid bootstrap installation failed for "
+                f"{repository_id!r}: {exc}"
+            ) from None
         finally:
             close_repository_runtime(runtime)
     return tuple(results)
@@ -417,6 +433,11 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
         args.authority_bindings_file,
         dry_run=env.dry,
     )
+    functional_pyramid_bootstraps = load_functional_pyramid_bootstraps(
+        env.targets,
+        args.functional_pyramid_bootstrap_file,
+        dry_run=env.dry,
+    )
     preflight = preflight_facts(env.targets)
     print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
 
@@ -438,6 +459,7 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
         env,
         authority_seeds,
         authority_bindings,
+        functional_pyramid_bootstraps,
     )
     return _RuntimeState(
         target_census=target_census,

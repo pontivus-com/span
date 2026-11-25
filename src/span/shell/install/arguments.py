@@ -152,7 +152,7 @@ def _add_repository_recovery_arguments(parser) -> None:
 
 
 def _add_authority_arguments(parser) -> None:
-    """Repository-qualified canonical authority configuration ingress."""
+    """Repository-qualified canonical authority/configuration ingress."""
     parser.add_argument(
         "--authority-seeds-file",
         action="append",
@@ -172,6 +172,16 @@ def _add_authority_arguments(parser) -> None:
         help="Repository-qualified JSON list of canonical AuthorityBinding items "
         "(repeatable). Omitted for a repository preserves configured bindings; "
         "an explicit empty list clears them.",
+    )
+    parser.add_argument(
+        "--functional-pyramid-bootstrap-file",
+        action="append",
+        nargs=2,
+        default=[],
+        metavar=("REPOSITORY_ID", "PATH"),
+        help="Repository-qualified explicit Version-2 Functional Pyramid bootstrap "
+        "(repeatable). The file is validated before mutation and installed only "
+        "as <repo>/.span/functional-pyramid.json; Span never generates one.",
     )
 
 

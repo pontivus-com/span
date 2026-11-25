@@ -172,6 +172,102 @@ def load_authority_files(
     return seeds, bindings
 
 
+
+def load_functional_pyramid_bootstraps(
+    targets: _typing.Iterable[str | Path],
+    bootstrap_files: _typing.Iterable[_typing.Sequence[str]],
+    *,
+    dry_run: bool = False,
+) -> dict[str, bytes]:
+    """Validate explicit Version-2 bootstrap/declaration files before mutation."""
+    try:
+        from span.core import functional_pyramid as _fp
+        from span.shell.structural import repository_id_from_config
+    except ImportError as exc:
+        raise SystemExit(
+            "cannot validate Functional Pyramid bootstrap configuration: "
+            f"{exc}; refusing to install unchecked governance"
+        ) from None
+
+    targets_by_id = {
+        repository_id_from_config(str(target)): Path(target).resolve()
+        for target in targets
+    }
+    mapped = _repository_mapping(
+        bootstrap_files,
+        selected_repository_ids=set(targets_by_id),
+        label="Functional Pyramid bootstrap",
+    )
+    payloads: dict[str, bytes] = {}
+    for repository_id, source_path in mapped.items():
+        print(f"+ read Functional Pyramid bootstrap file: {source_path}")
+        if dry_run:
+            payloads[repository_id] = b""
+            continue
+        try:
+            payload = Path(source_path).read_bytes()
+            text = payload.decode("utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise SystemExit(
+                f"cannot read Functional Pyramid bootstrap file {source_path}: {exc}"
+            ) from None
+        try:
+            bootstrap = _fp.decode_functional_pyramid_bootstrap(text)
+        except ValueError as exc:
+            raise SystemExit(
+                f"Functional Pyramid bootstrap file {source_path} is invalid: {exc}"
+            ) from None
+
+        root = targets_by_id[repository_id]
+        for request in bootstrap.declaration_sources:
+            if request.ranges:
+                raise SystemExit(
+                    "Functional Pyramid bootstrap declaration sources must be "
+                    f"whole documents: {repository_id!r}:{request.locator}"
+                )
+            declaration_path = (root / request.locator).resolve()
+            try:
+                declaration_path.relative_to(root)
+            except ValueError:
+                raise SystemExit(
+                    "Functional Pyramid declaration source escapes repository root: "
+                    f"{repository_id!r}:{request.locator}"
+                ) from None
+            if not declaration_path.is_file():
+                raise SystemExit(
+                    "Functional Pyramid declaration source is not repository-owned "
+                    f"and present: {repository_id!r}:{request.locator}"
+                )
+            try:
+                declaration_text = declaration_path.read_text()
+                _fp.decode_functional_pyramid_declaration(
+                    declaration_text,
+                    repository_id=repository_id,
+                    declaration_locator=request.locator,
+                )
+            except (OSError, UnicodeError, ValueError) as exc:
+                raise SystemExit(
+                    "Functional Pyramid declaration source is not valid Version-2 "
+                    f"content: {repository_id!r}:{request.locator}: {exc}"
+                ) from None
+
+        destination = root / ".span" / "functional-pyramid.json"
+        if destination.exists():
+            try:
+                existing = destination.read_bytes()
+            except OSError as exc:
+                raise SystemExit(
+                    f"cannot read existing Functional Pyramid bootstrap {destination}: {exc}"
+                ) from None
+            if existing != payload:
+                raise SystemExit(
+                    "existing Functional Pyramid bootstrap differs from explicit "
+                    f"input: {destination}; refusing mutation"
+                )
+        payloads[repository_id] = payload
+    return payloads
+
+
 def load_seeds(
     path: str | Path | None,
     dry_run: bool = False,
