@@ -2,7 +2,7 @@
 
 > **Document role: historical verification evidence.** This page preserves
 > acceptance records for superseded candidates and campaigns. It is not the
-> current Beta-4 release verdict and it does not create product authority.
+> current Beta-5 release verdict and it does not create product authority.
 > Start with [current acceptance](acceptance.md) for the active candidate.
 
 The material below is retained for provenance and audit. Version- and
@@ -528,3 +528,46 @@ defined repository-portable backup artifact.
 
 Historical candidate evidence is retained in
 [Historical acceptance evidence](acceptance-history.md).
+
+
+## Historical Version 1 Beta 4 candidate acceptance
+
+The Beta-4 campaign corrected the released P2W-to-P2S classifier and assembled
+the `1.0.0b4` identity on repository lifecycle schema 15 and installation
+Functional Pyramid schema 1.
+
+The corrected semantic/runtime candidate
+`e711ba96e95f267aa46c483cbb5638504b15c39c` passed GitHub Actions run
+`45513630593`: build/distribution, Ruff/Black, zero-error typing and
+**1000 passed, 1 skipped, 156 subtests**. The only failure at that point was the
+deliberately unreconciled measured test-line ratchet.
+
+Exact pre-review candidate
+`7d49a52f6c9f649d6663aa40bd78fb7ebb623bc4` then passed push run
+`45515508530` and pull-request run `45515522062`; pytest reported
+**1001 passed, 1 skipped, 156 subtests**, aggregate coverage was **85%**, the
+installed-MCP journey passed, plugin-notice delivery was **14/14**, and coverage
+upload passed.
+
+The assembled Beta-4 branch candidate
+`c7e4d45e06ec3411f6c8558a02f7503b27cd7ac4` also passed run
+`45514424797` with build/distribution, Ruff/Black, zero-error typing,
+**1001 passed, 1 skipped, 156 subtests**, **85%** coverage, plugin notice
+delivery and coverage upload. Subsequent candidate movement meant that run
+remained supporting evidence rather than an automatically transferable
+exact-head release receipt.
+
+The assembled Beta-4 identity was:
+
+| Surface | Identity |
+| --- | --- |
+| Package/PyPI | `1.0.0b4` |
+| Git tag | `v1.0.0b4` |
+| GitHub Release | `Span 1.0.0 Beta 4` |
+| MCP Registry | `1.0.0-beta.4` |
+| Repository lifecycle schema | **15** |
+| Installation Functional Pyramid schema | **1** |
+
+At the recorded acceptance snapshot, publication remained a separately
+authorized release-owner action. These historical runs do not establish the
+Beta-5 document-placement implementation or its release readiness.
