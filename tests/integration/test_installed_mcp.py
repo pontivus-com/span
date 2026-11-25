@@ -31,7 +31,7 @@ _REPO_FILES = {
             "placements": [
                 {
                     "document": {
-                        "repository_id": "repo",
+                        "repository_id": "__REPOSITORY_ID__",
                         "document_ref": "docs/foundation.md",
                         "layer": "P0",
                     },
@@ -320,7 +320,10 @@ def _write_repo(work):
     for rel, content in _REPO_FILES.items():
         path = work / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        path.write_text(
+            content.replace("__REPOSITORY_ID__", work.name),
+            encoding="utf-8",
+        )
 
 
 def _write_files(root, files):
@@ -368,13 +371,35 @@ class InstalledMcpDriverTest(_unittest.TestCase):
     def _create_store(self, repo: _pathlib.Path, data_dir: _pathlib.Path) -> None:
         data_dir.mkdir(parents=True, exist_ok=True)
         code = (
+            "import hashlib\n"
+            "from pathlib import Path\n"
+            "from span.core import model as m\n"
             "from span.shell.sqlite_store.lifecycle import LifecycleStore\n"
             "from span.shell.sqlite_store.functional_pyramid import "
             "ensure_functional_pyramid_installation_store\n"
             "from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION\n"
+            f"root = Path({str(repo.resolve())!r})\n"
+            f"repository_id = {repo.name!r}\n"
+            "bindings = ()\n"
+            "foundation = root / 'docs/foundation.md'\n"
+            "if foundation.is_file():\n"
+            "    digest = hashlib.sha256(foundation.read_bytes()).hexdigest()\n"
+            "    bindings = (m.AuthorityBinding(\n"
+            "        evidence_ref=m.EvidenceRef(\n"
+            "            evidence_id=m.EvidenceId('authority-foundation'),\n"
+            "            repository_id=repository_id,\n"
+            "            source_kind=m.EvidenceSourceKind.DOCUMENTATION,\n"
+            "            locator='docs/foundation.md',\n"
+            "            revision_or_fingerprint=f'sha256:{digest}',\n"
+            "        ),\n"
+            "        authority_kind=m.AuthorityKind.REPOSITORY_RULE,\n"
+            "        status=m.AuthorityStatus.ACCEPTED,\n"
+            "    ),)\n"
             f"store = LifecycleStore({str(data_dir / (repo.name + '.db'))!r},"
             " retention=DEFAULT_LIFECYCLE_RETENTION)\n"
-            f"store.register_repository({repo.name!r}, {str(repo.resolve())!r})\n"
+            "store.register_repository(\n"
+            "    repository_id, str(root), authority_bindings=bindings\n"
+            ")\n"
             "store.close()\n"
             f"fp = ensure_functional_pyramid_installation_store({str(data_dir)!r}, "
             "retention=DEFAULT_LIFECYCLE_RETENTION)\n"

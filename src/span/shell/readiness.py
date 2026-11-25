@@ -238,19 +238,10 @@ def _functional_pyramid_participation(
     }
 
 
-def probe_functional_pyramid_repository(
-    data_dir: str | _pathlib.Path,
+def _functional_pyramid_declaration_report(
     repository_id: str,
-    root: str | _pathlib.Path,
+    canonical_root: str,
 ) -> dict[str, object]:
-    """Validate local Functional Pyramid configuration without activating it.
-
-    The optional bootstrap is navigation/configuration only. This probe validates
-    it and every exact declaration source it names, then reports durable
-    participation independently. Full activation readiness remains the pure
-    FunctionalPyramidCandidateSelector contract because only the caller owns the
-    complete multi-repository member intent.
-    """
     from span.core import model as m
     from span.ports.functional_pyramid import (
         FunctionalPyramidDeclarationInvalid,
@@ -258,7 +249,6 @@ def probe_functional_pyramid_repository(
     )
     from span.shell.functional_pyramid import FilesystemFunctionalPyramidDeclarations
 
-    canonical_root = str(_pathlib.Path(root).resolve())
     declarations = FilesystemFunctionalPyramidDeclarations(
         lambda requested: (
             canonical_root
@@ -268,12 +258,10 @@ def probe_functional_pyramid_repository(
             )
         )
     )
-    participation = _functional_pyramid_participation(data_dir, repository_id)
-
     try:
         bootstrap_result = declarations.read_bootstrap(repository_id)
     except FunctionalPyramidRepositoryUnavailable:
-        declaration_report: dict[str, object] = {
+        return {
             "status": "unavailable",
             "configured": False,
             "valid": False,
@@ -281,100 +269,108 @@ def probe_functional_pyramid_repository(
             "action": "restore the registered repository root",
         }
     except FunctionalPyramidDeclarationInvalid:
-        declaration_report = {
+        return {
             "status": "invalid",
             "configured": True,
             "valid": False,
             "sources": [],
             "action": "correct .span/functional-pyramid.json",
         }
-    else:
-        if bootstrap_result is None:
-            declaration_report = {
-                "status": "absent",
-                "configured": False,
-                "valid": True,
-                "sources": [],
-                "action": None,
-            }
-        else:
-            bootstrap_ref, bootstrap = bootstrap_result
-            source_reports: list[dict[str, object]] = []
-            valid = True
-            for request in bootstrap.declaration_sources:
-                if request.ranges:
-                    source_reports.append(
-                        {
-                            "locator": request.locator,
-                            "status": "invalid",
-                            "reason": "declaration source must be a whole document",
-                        }
-                    )
-                    valid = False
-                    continue
-                try:
-                    result = declarations.read_declaration(repository_id, request)
-                except FunctionalPyramidRepositoryUnavailable:
-                    source_reports.append(
-                        {
-                            "locator": request.locator,
-                            "status": "unavailable",
-                            "reason": "repository cannot be read",
-                        }
-                    )
-                    valid = False
-                    continue
-                except FunctionalPyramidDeclarationInvalid:
-                    source_reports.append(
-                        {
-                            "locator": request.locator,
-                            "status": "invalid",
-                            "reason": "declaration violates the Version-2 contract",
-                        }
-                    )
-                    valid = False
-                    continue
-                if isinstance(result, m.EvidenceSourceFailure):
-                    source_reports.append(
-                        {
-                            "locator": request.locator,
-                            "status": result.kind.value.lower(),
-                            "reason": result.reason,
-                        }
-                    )
-                    valid = False
-                    continue
-                declaration_ref, _, graph_findings = result
-                source_reports.append(
-                    {
-                        "locator": request.locator,
-                        "status": "valid" if not graph_findings else "invalid",
-                        "evidence_id": declaration_ref.evidence_id.value,
-                        "findings": [
-                            finding.reason.value for finding in graph_findings
-                        ],
-                    }
-                )
-                if graph_findings:
-                    valid = False
+    if bootstrap_result is None:
+        return {
+            "status": "absent",
+            "configured": False,
+            "valid": True,
+            "sources": [],
+            "action": None,
+        }
 
-            declaration_report = {
-                "status": "ready" if valid else "invalid",
-                "configured": True,
-                "valid": valid,
-                "bootstrap_locator": bootstrap_ref.locator,
-                "sources": source_reports,
-                "action": (
-                    None
-                    if valid
-                    else "correct the named Functional Pyramid declaration sources"
-                ),
+    bootstrap_ref, bootstrap = bootstrap_result
+    source_reports: list[dict[str, object]] = []
+    valid = True
+    for request in bootstrap.declaration_sources:
+        if request.ranges:
+            source_reports.append(
+                {
+                    "locator": request.locator,
+                    "status": "invalid",
+                    "reason": "declaration source must be a whole document",
+                }
+            )
+            valid = False
+            continue
+        try:
+            result = declarations.read_declaration(repository_id, request)
+        except FunctionalPyramidRepositoryUnavailable:
+            source_reports.append(
+                {
+                    "locator": request.locator,
+                    "status": "unavailable",
+                    "reason": "repository cannot be read",
+                }
+            )
+            valid = False
+            continue
+        except FunctionalPyramidDeclarationInvalid:
+            source_reports.append(
+                {
+                    "locator": request.locator,
+                    "status": "invalid",
+                    "reason": "declaration violates the Version-2 contract",
+                }
+            )
+            valid = False
+            continue
+        if isinstance(result, m.EvidenceSourceFailure):
+            source_reports.append(
+                {
+                    "locator": request.locator,
+                    "status": result.kind.value.lower(),
+                    "reason": result.reason,
+                }
+            )
+            valid = False
+            continue
+        declaration_ref, _, graph_findings = result
+        source_reports.append(
+            {
+                "locator": request.locator,
+                "status": "valid" if not graph_findings else "invalid",
+                "evidence_id": declaration_ref.evidence_id.value,
+                "findings": [finding.reason.value for finding in graph_findings],
             }
+        )
+        if graph_findings:
+            valid = False
 
     return {
+        "status": "ready" if valid else "invalid",
+        "configured": True,
+        "valid": valid,
+        "bootstrap_locator": bootstrap_ref.locator,
+        "sources": source_reports,
+        "action": (
+            None
+            if valid
+            else "correct the named Functional Pyramid declaration sources"
+        ),
+    }
+
+
+def probe_functional_pyramid_repository(
+    data_dir: str | _pathlib.Path,
+    repository_id: str,
+    root: str | _pathlib.Path,
+) -> dict[str, object]:
+    """Validate local Functional Pyramid configuration without activating it."""
+    canonical_root = str(_pathlib.Path(root).resolve())
+    return {
         "repository_id": repository_id,
-        "declarations": declaration_report,
-        "participation": participation,
+        "declarations": _functional_pyramid_declaration_report(
+            repository_id,
+            canonical_root,
+        ),
+        "participation": _functional_pyramid_participation(data_dir, repository_id),
         "activation_readiness": {
             "status": "requires_candidate",
             "action": (

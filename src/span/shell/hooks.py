@@ -49,8 +49,11 @@ ADOPTION_PRIMER = (
     "Span lifecycle is active for this repository. Before ordinary governed "
     "work, use the direct tool ending in `_ask` with FunctionalPyramidSelector "
     "to resolve participation and health; follow the span-functional-pyramid "
-    "skill for UNCONFIGURED or ACTIVE/DEGRADED state. For ACTIVE/VALID or "
-    "descriptive-only EXCLUDED work, ask the relevant surface before source "
+    "skill for UNCONFIGURED or ACTIVE/DEGRADED state. For exact directory "
+    "governance in ACTIVE state, use FunctionalPyramidDirectorySelector through "
+    "the same ask tool; never infer applicability from filenames or proximity. "
+    "For ACTIVE/VALID or descriptive-only EXCLUDED work, ask the relevant surface "
+    "before source "
     "access used to derive understanding, with no question or request identity. "
     "Use exact recorded-question selection only when that metadata is known."
 )

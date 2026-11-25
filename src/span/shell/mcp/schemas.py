@@ -54,8 +54,10 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "surface/reference form with non-empty evidence and a request_id. "
         "Continuation and exact selectors carry their own namespace and therefore "
         "take no repository override. FunctionalPyramidSelector, "
-        "FunctionalPyramidCandidateSelector and FunctionalPyramidReceiptSelector "
-        "use the same ask tool for installation-scoped governance lifecycle state. "
+        "FunctionalPyramidDirectorySelector, FunctionalPyramidCandidateSelector "
+        "and FunctionalPyramidReceiptSelector use the same ask tool for "
+        "installation-scoped governance lifecycle state. Use the directory selector "
+        "for one exact existing repository-relative directory; '.' selects root. "
         "ASK TEMPLATE: "
         '{"repository_id":"<id>","surface":{"kind":"FILE","locator":"<path>"}}',
         m.AskRequest,
@@ -217,6 +219,13 @@ TOOL_EXAMPLES: dict[str, list[dict]] = {
             "selector": {
                 "$type": "FunctionalPyramidSelector",
                 "repository_id": "repo-1",
+            }
+        },
+        {
+            "selector": {
+                "$type": "FunctionalPyramidDirectorySelector",
+                "repository_id": "repo-1",
+                "directory": ".",
             }
         },
     ],
