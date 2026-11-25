@@ -152,6 +152,60 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         self.assertEqual(src.placements, (self.p0, self.p1))
         self.assertNotIn(self.p3, src.placements)
 
+
+    def test_directory_without_own_placement_inherits_all_ancestors(self) -> None:
+        leaf, _ = self._directory("src/service/leaf")
+        self.assertEqual(leaf.placements, (self.p0, self.p1, self.p3))
+        self.assertEqual(leaf.status, m.FunctionalPyramidRouteStatus.RESOLVED)
+
+    def test_disconnected_placements_apply_only_at_their_declared_scopes(self) -> None:
+        service, _ = self._directory("src/service")
+        ui, _ = self._directory("ui")
+        self.assertNotIn(self.sibling, service.placements)
+        self.assertEqual(ui.placements, (self.p0, self.sibling))
+
+    def test_document_locator_never_infers_applicability(self) -> None:
+        deceptive = _placement(
+            "repo-a",
+            "repo-a",
+            "src/service/looks-governing.md",
+            m.FunctionalPyramidLayer.P3,
+            "ui",
+        )
+        declaration = m.FunctionalPyramidDeclaration(
+            version=2,
+            placements=(
+                _declaration(self.p0, "ROOT"),
+                _declaration(deceptive, self.p0),
+            ),
+        )
+        authorities = {
+            ("repo-a", "docs/foundation.md"): self.authorities[
+                ("repo-a", "docs/foundation.md")
+            ],
+            ("repo-a", "src/service/looks-governing.md"): _authority(
+                "repo-a",
+                "src/service/looks-governing.md",
+                "deceptive",
+            ),
+        }
+        view, _ = fp.resolve_functional_pyramid_route(
+            pyramid_id=m.FunctionalPyramidId("pyramid"),
+            version=m.FunctionalPyramidVersion(1),
+            members=(_member("repo-a"),),
+            surface=m.SurfaceKey(
+                repository_id="repo-a",
+                kind=m.SurfaceKind.FILE,
+                locator="src/service/app.py",
+            ),
+            semantic_scope=m.EvidenceScope(paths=("src/service/app.py",)),
+            declarations=(("repo-a", declaration),),
+            available_repositories=frozenset({"repo-a"}),
+            authority_bindings=authorities,
+        )
+        self.assertEqual(view.placements, (self.p0,))
+        self.assertNotIn(deceptive, view.placements)
+
     def test_narrower_governing_scope_is_invalid(self) -> None:
         broad = _placement(
             "repo-a",

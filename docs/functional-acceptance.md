@@ -40,7 +40,7 @@ rather than translated into compatibility behavior.
 | FA-07 | Degraded-health recovery | `test_status_keeps_active_v1_instance_active_but_degraded`; `test_unaffected_route_can_resolve_while_health_is_degraded` |
 | FA-08 | Cold governed path | `test_cold_governed_path_returns_gap_with_governing_view` |
 | FA-09 | Directory obtain | `test_directory_lookup_returns_document_placements`; `test_directory_lookup_rejects_non_directory`; `test_installed_cross_repository_governance_journey` |
-| FA-10 | Same semantic scope | `test_exact_question_selector_does_not_paraphrase_match`; `test_surface_kind_prevents_filename_heuristic_scope_inference`; `test_declared_symbol_boundary_is_exact_functional_pyramid_scope` |
+| FA-10 | Same semantic scope | `test_exact_question_selector_does_not_paraphrase_match`; `test_declared_symbol_boundary_is_exact_functional_pyramid_scope`; `test_document_locator_never_infers_applicability` |
 | FA-11 | Additive composition | `test_root_totality_and_additive_ancestor_composition`; `test_directory_without_own_placement_inherits_all_ancestors` |
 | FA-12 | Sibling and descendant exclusion | `test_descendant_placement_does_not_apply_to_ancestor`; `test_root_totality_and_additive_ancestor_composition` |
 | FA-13 | Disconnected applicability | `test_disconnected_placements_apply_only_at_their_declared_scopes` |
@@ -74,7 +74,7 @@ rather than translated into compatibility behavior.
 | FA-41 | Pyramid-write replay projection | `test_activation_replay_is_idempotent_and_conflict_is_rejected`; `test_installed_cross_repository_governance_journey` |
 | FA-42 | Pyramid concurrency | `test_concurrent_overlapping_activation_serializes_to_one_active_instance`; `test_revision_compare_and_set_and_deactivate` |
 | FA-43 | Initialization declaration edits use ordinary re-alignment | `test_functional_pyramid_skill_covers_result_driven_lifecycle`; `test_governance_only_change_crosses_physical_repository_boundary` |
-| FA-44 | Conformance uses the normative input contract | `test_conformance_uses_existing_normative_assertion_contract`; `test_normative_create_derives_route_and_all_applicable_authorities` |
+| FA-44 | Conformance uses the normative input contract | `test_normative_create_derives_route_and_all_applicable_authorities`; `test_governed_normative_record_never_uses_empty_uncovered_route` |
 | FA-45 | Acceptance is not runtime completion | `test_unresolved_governance_is_retained_but_qualified_unverifiable`; `test_owner_read_failure_reports_unavailable_without_rejecting_acceptance`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
 | FA-46 | Participation-write acceptance is not initialization completion | `test_installed_cross_repository_governance_journey`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
 | FA-47 | New capture is not shared reuse | `test_current_capture_is_pending_until_curated` |
