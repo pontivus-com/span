@@ -4,6 +4,9 @@
 
 ### Total document-placement Functional Pyramid
 
+- Fix cold activation self-lock by opening existing member lifecycle stores in
+  schema-validation-only mode while installation transactions hold write
+  reservations; expiry cleanup remains at ordinary service-context composition.
 - Replace the Version-1 rule/context/coverage graph with Version-2 whole-document
   placements carrying explicit repository-relative directory scopes.
 - Make directory resolution total through a mandatory root-scoped P0 placement;
