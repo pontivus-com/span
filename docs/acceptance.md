@@ -66,6 +66,22 @@ release-identity reconciliation. Exact-head release readiness is governed by
 the Beta-4 implementation plan; an earlier branch run is not substituted for
 the exact reviewed master check.
 
+### Final pre-review branch verification
+
+Exact Beta-4 candidate `7d49a52f6c9f649d6663aa40bd78fb7ebb623bc4`
+passed both push CI run `45515508530` and pull-request CI run
+`45515522062`. The PR run executed `git diff --check` over the complete
+campaign delta. The build lane created and inspected one sdist and one wheel for
+safe paths and required package content, installed the wheel, and verified the
+CLI and imported Beta-4 version. Ruff/Black and zero-error typing passed; pytest
+reported **1001 passed, 1 skipped, 156 subtests**, aggregate coverage was
+**85%**, the installed-MCP Beta-4 journey passed, plugin notice delivery was
+**14/14**, and coverage upload passed.
+
+This closes T07. T08 remains open until an independent reviewer who did not
+author the implementation reviews the exact candidate and leaves no unresolved
+release-blocking finding.
+
 ### Assembled branch verification
 
 The assembled Beta-4 branch candidate
