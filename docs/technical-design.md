@@ -673,13 +673,17 @@ deterministic and symbolic:
 
 - `.` contains every scope;
 - a scope contains itself;
-- scope `a` contains scope `b` iff `b` equals `a` or begins with `a` followed by
-  `/`;
-- otherwise the scopes do not intersect.
+- scope `a` contains scope `b` iff `a == "."`, `b == a`, or `b` begins
+  with `a` followed by `/`;
+- two scopes intersect iff either contains the other;
+- otherwise they are disjoint.
 
 There is no PATH, PREFIX, SYMBOL, REPOSITORY, glob, regex, negation, suffix
-match or free-form selector kind. Normalization rejects empty values, absolute
-paths, `.`/`..` traversal segments, trailing separators and non-POSIX separators.
+match or free-form selector kind. The exact string `.` is the sole root
+sentinel and is valid. Every non-root value must already be canonical POSIX
+relative-directory form: non-empty, not absolute, no empty segment, no `.` or
+`..` segment, no trailing separator and no non-POSIX separator. Invalid input
+is rejected rather than rewritten into another scope.
 A scope is always relative to the declaring repository. It is explicit
 declaration input and is never inferred from the document's location, file
 name, directory placement, genre or similarity. A canonical document may carry
@@ -775,11 +779,22 @@ structural findings. A reference whose repository is not an instance member is
 `UNKNOWN_DOCUMENT`. Declarations contain no rule IDs, rule anchors, section
 placements or copied canonical document content.
 
-Version-1 rule declarations are rejected as `INVALID_DECLARATION_SOURCE` with
-detail identifying unsupported declaration version 1. There is no grouping or
-compatibility adapter from rule owners to placements. Such an adapter would omit
-applicable documents that have no rule entry and would preserve the wrong
-identity model.
+Version-1 rule declarations proposed as Version-2 candidate input are rejected
+as `INVALID_DECLARATION_SOURCE` with detail identifying unsupported declaration
+version 1. There is no grouping or compatibility adapter from rule owners to
+placements. Such an adapter would omit applicable documents that have no rule
+entry and would preserve the wrong identity model.
+
+Strict declaration decoding is two-stage without introducing a second carrier.
+The source-level decoder first establishes valid JSON/version and structurally
+recoverable placement entries using local parsed values only. A source that
+cannot reach that point yields candidate `INVALID_DECLARATION_SOURCE`. For each
+recoverable entry, the canonical `FunctionalDirectoryScope` constructor then
+validates the raw scope. Failure emits
+`FunctionalPyramidFinding(reason=INVALID_PLACEMENT_SCOPE)` with the available
+repository/declaration coordinates and does not construct a
+`FunctionalDocumentPlacement`. Only successfully normalized entries become
+canonical placements. The shell does not own this classification.
 
 The `FunctionalPyramidDeclarationPort` reads only the exact bootstrap/declaration
 sources named by member intent across registered repositories. Version-2
@@ -890,22 +905,21 @@ order is exactly FD-62/FD-68:
    terminal;
 6. report `declared_layers` and `absent_layers` for the selection.
 
-For exact directory selection, the resolver checks that the directory is inside
-the registered repository root, selects every containing scope, and returns the
-document branches from P0 through the deepest applicable placement.
-Repository-wide and ancestor placements apply. Sibling-only and
-descendant-only placements do not apply. This selection does not require a
-declared semantic surface and does not enumerate repository contents.
+Implement exact-directory selection with one canonical scope constructor plus
+one `contains(placement.scope, selected_directory)` filter over declarations;
+no repository inventory capability is injected. Implement semantic selection by
+asking the existing semantic-containment owner for the directory seed(s) defined
+by FD-62/FD-90, invoking that same placement filter for each seed, and unioning
+by placement identity while retaining the seed-to-placement provenance. The
+repository-wide semantic case uses a direct all-placement seed rather than
+materializing a file list.
 
-For a semantic scope, each FILE or SYMBOL member maps to the directory
-containing its locator; each SERVICE or DOMAIN boundary member maps its declared
-path to that directory boundary unless the existing canonical
-semantic-containment owner classifies the member as an exact file or symbol
-locator, in which case its containing directory is used; an explicitly
-repository-wide selection uses every placement. The route is the union of the per-directory selections, with
-provenance retained per path or boundary. A directory with no narrower
-placement still returns its ancestor placements, including the mandatory
-repository-root P0 placement. There is no empty-governance branch.
+After route closure and deduplication, one layer-summary helper computes
+`declared_layers` from the layers present in the complete unioned closure in
+FD-72 presentation order and computes `absent_layers` as the fixed-layer
+complement. It receives the resolved selection, not individual path summaries,
+so a multi-path semantic scope cannot accidentally use last-path or
+intersection semantics.
 
 **Governing-edge admissibility.** Implement FD-67 with one pure closed relation
 owned by `src/span/core/functional_pyramid.py`. The core structural validator
@@ -944,9 +958,11 @@ state and returns `VALID` when the FD-83 structural finding set is empty,
 otherwise `DEGRADED` with exactly those findings. The structural set includes a
 missing repository-root P0 placement, an illegal governing edge including scope
 containment, duplicate placement ownership, a document cycle, an unknown or
-unavailable required member/document, and an invalid declaration source. Do not
-persist health. Do not include authority currency, absent documentation layers
-or semantic support in health.
+unavailable required member/document, and FD-71 `INVALID_DECLARATION` when a
+required ACTIVE declaration cannot be decoded. Candidate-only
+`INVALID_DECLARATION_SOURCE` is never inserted into
+`FunctionalPyramidStatus.findings`. Do not persist health. Do not include
+authority currency, absent documentation layers or semantic support in health.
 
 **Support.** Extend the existing support evaluator rather than creating a
 Functional-Pyramid evaluator. Its dependency dispatch gains
@@ -1391,23 +1407,41 @@ curation approval. Repository registration and Functional Pyramid participation
 remain separate. Repository-portable backups carry repository lifecycle state,
 not installation-level participation state.
 
-The Beta-5 declaration cutover is explicit. Existing Version-1 rule
-declarations are not accepted by the Version-2 decoder and are never grouped
-into synthetic documents. Before revising an ACTIVE instance, the operator
-creates Version-2 placements with explicit directory scopes from the
-repository's approved canonical document corpus, assigns at least one
-root-scoped P0 placement, validates the complete candidate in isolation and
-takes the ordinary verified backup required for an existing installation. The
-accepted revision retains historical receipts and semantic conclusions. Existing
-`FunctionalRouteSupport` whose rule-based route identity cannot equal the new
-document route becomes `REASSESSMENT_REQUIRED`; the accepted revision returns
-those exact dependent effects for ordinary evidence-near re-establishment.
+The Beta-5 declaration cutover is explicit. Version-1 rule declarations are
+never decoded into, grouped into or adapted as Version-2 document placements.
+Before revising an ACTIVE instance, the operator creates Version-2 placements
+with explicit directory scopes from the repository's approved canonical
+document corpus, assigns at least one root-scoped P0 placement, validates the
+complete candidate in isolation and takes the ordinary verified backup required
+for an existing installation.
 
-No schema transition may invent placement scope, document placement or a
-governing-document relationship. If a stored support payload cannot be decoded
-without the removed Version-1 carrier, the offline transition preserves the
-owning conclusion and records the dependency as requiring reassessment. Runtime
-open never silently rewrites it.
+Opening an installation that still has an ACTIVE Version-1 member intent does
+not rewrite participation. The member remains ACTIVE; current health represents
+the undecodable declaration as FD-71 `INVALID_DECLARATION`, and route
+orientation that depends on it is structurally UNRESOLVED. A proposed Version-1
+source remains candidate `INVALID_DECLARATION_SOURCE`.
+
+The Version-2 REVISE cutover does not need an old declaration adapter. After the
+replacement candidate passes ordinary Version-2 validation, service composition
+enumerates the old-side route-dependent set from retained canonical support:
+every normative conclusion revision whose `FunctionalRouteSupport` references
+the target pyramid and current version is an affected route dependency. The
+write combines that exact set with ordinary participation effects, commits the
+new Version-2 member intent atomically, retains historical receipts and semantic
+conclusions, and returns those dependent effects for evidence-near
+re-establishment. Because the route identity model changes from rule routes to
+document routes, none of those old route dependencies is assumed equal to a new
+route without re-establishment. This path never parses Version-1 rule semantics
+and never fabricates an old placement graph.
+
+If an old stored support payload itself cannot be decoded after the carrier
+removal, the schema-15 transition preserves the owning conclusion and records
+that dependency as requiring reassessment while retaining enough canonical
+conclusion/pyramid coordinates for the cutover enumeration. Runtime open never
+silently rewrites support. No schema transition may invent placement scope,
+document placement or a governing-document relationship. Declaration defects
+other than the explicitly unsupported Version-1 format remain ordinary blockers
+and cannot use this cutover path.
 
 The former Beta-1 package/release identity and schema-13→14 transition are
 historical and are retained in the

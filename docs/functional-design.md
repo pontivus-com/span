@@ -135,13 +135,11 @@ its parent. The selection is a point selection; it never enumerates descendant
 files, never uses the file inventory to decide relevance, and never requires a
 semantic surface declaration.
 
-Every directory in an ACTIVE repository resolves. A directory without a narrower
-placement receives its declared ancestor placements, always including the
-mandatory repository-root P0 placement under FD-86. There is no
-`OUTSIDE_FUNCTIONAL_SCOPE`, `COVERED`, `UNCOVERED`, `MIXED` or `UNCOVERED_PATH`
-outcome: a participating directory either resolves to the placements whose scope
-contains it or reports a typed structural or operational defect. Absent layers
-are reported by FD-86 and never converted into an absence of governance.
+After selection, the resolver continues through FD-68 without a coverage
+classification branch. Root-totality is validated independently by FD-86;
+structural and operational defects remain typed under FD-71 and FD-91. Layer
+summaries are derived from the resolved selection under FD-86 rather than from
+directory inventory or a coverage state.
 
 For a semantic scope, each member path is mapped deterministically to a
 directory: a FILE or SYMBOL member uses the directory containing its locator,
@@ -406,13 +404,18 @@ Durable participation follows lifecycle §7.1 and changes only through accepted
 Functional Pyramid record actions. No source, filesystem, installer, model,
 `ask`, `reconsider` or hook event performs a hidden participation write.
 
-For an ACTIVE instance, live health is computed from current structural state:
+For an ACTIVE instance, live health is computed from current structural state.
+A declaration source that exists but cannot be decoded into the current
+declaration model contributes the FD-71 graph reason `INVALID_DECLARATION`; in
+particular, an ACTIVE member that still names a Version-1 rule declaration
+remains ACTIVE but is structurally degraded until an accepted Version-2 revision.
+This ACTIVE-state classification is distinct from candidate validation of a
+proposed unsupported source, which uses `INVALID_DECLARATION_SOURCE`.
 
 - `VALID` iff there is no current structural finding for required member
-  availability, declaration-source validity, placement/document identity
-  ownership, document cycles, governing-edge legality including scope
-  containment, cross-member resolution, or the required repository-root P0
-  placement;
+  availability, declaration validity, placement/document identity ownership,
+  document cycles, governing-edge legality including scope containment,
+  cross-member resolution, or the required repository-root P0 placement;
 - `DEGRADED` iff at least one such structural finding exists.
 
 `FunctionalPyramidStatus.findings` is exactly the current set that causes
@@ -436,6 +439,15 @@ Validation has two distinct finding sets.
    `INVALID_DECLARATION_SOURCE`.
 2. Graph findings use FD-71's closed vocabulary for declaration, placement and
    document defects, including `MISSING_ROOT_PLACEMENT`.
+
+Candidate validation classifies declaration-source failure separately from
+placement-scope failure. Invalid JSON, an unsupported declaration version, or a
+source whose required placement structure cannot be recovered is
+`INVALID_DECLARATION_SOURCE`. Once a placement entry's non-scope coordinates are
+structurally recoverable, a scope string that fails canonical directory-scope
+normalization is instead `INVALID_PLACEMENT_SCOPE` in `graph_findings`; it is
+never coerced into a canonical placement and never duplicated as a validation
+finding.
 
 Validation requires, for every member, at least one placement with scope `.`
 and layer `P0` governed by `ROOT` (FD-86). It validates placement identities,
@@ -464,7 +476,17 @@ unchanged.
 
 Before ACTIVATE/REVISE/DEACTIVATE commits, Span computes the deterministic
 participation changes and FD-79 semantic dependent effects against the same
-transaction decision. The immutable receipt retains the durable participation
+transaction decision. For the Beta-5 Version-1 → Version-2 cutover, a REVISE
+whose current ACTIVE declarations are undecodable solely because they are
+Version-1 rule declarations validates the replacement Version-2 candidate
+without translating or reconstructing the old graph. Its old-side route effect
+root is every retained normative revision whose existing FunctionalRouteSupport
+is bound to the target pyramid/current version; those revisions require
+re-establishment because a Version-1 rule-route identity cannot be proven equal
+to the Version-2 document-route identity. No other declaration defect receives
+this cutover treatment, and no Version-1 placement/document graph is fabricated.
+
+The immutable receipt retains the durable participation
 and dependent-effect coordinates; the public result projects them through the
 same `ChangedSurface`/affected-conclusion carriers used by `reconsider`.
 Exactly one repository-bound live re-establishment context is issued for each
@@ -483,30 +505,28 @@ compare-and-set on the target pyramid version, and activation/revision atomicall
 enforce one ACTIVE pyramid per repository. *(G3, G6, G8, A2, A3, F1, F4, F12,
 L4, L14–L15)*
 
-**FD-86 — The repository root is the totality invariant; layer gaps are
-reported.**
-Every ACTIVE member declares at least one placement whose scope is `.`, whose
-layer is `P0`, and whose governing relationship is `ROOT`. This is the only
-totality invariant: because every directory resolves through its ancestor scopes,
-every directory in the repository therefore receives at least that foundational
-placement. No directory needs its own declaration to receive an answer.
+**FD-86 — Root-totality validation and layer-summary derivation are
+deterministic.**
+Candidate validation and ACTIVE health evaluate one root-totality predicate per
+member: the declaration graph contains at least one placement with scope `.`,
+layer `P0` and governing relationship `ROOT`. Failure contributes exactly
+`MISSING_ROOT_PLACEMENT`. The check inspects declarations only and never
+enumerates repository directories.
 
-A directory with no own placement is normal declaration practice. It resolves
-through its nearest declared ancestor scopes, including the repository root. It
-is not `UNCOVERED_PATH`, not an expected incompleteness state and not a health
-finding.
+For any returned Functional Pyramid selection, first resolve the complete
+placement closure under FD-68. Let `declared_layers` be the ordered unique set
+of layers present in that complete closure, using FD-72's fixed presentation
+order. Let `absent_layers` be the complement against
+`P0, P1, P2S, P2W, P3, P4`. For a multi-path semantic scope, both summaries are
+computed over the unioned closure after placement deduplication; they are
+aggregate selection summaries, not a claim that every provenance path contains
+every declared layer. Per-path applicability remains represented by route
+provenance.
 
-The view reports `declared_layers` and `absent_layers` for the selected location.
-An absent layer is a declaration fact, not a route error, not a support failure
-by itself and not a DEGRADED health cause. Documentation existence and quality
-remain the declaring owner's responsibility.
-
-A declaration change that breaks the root placement, a placement identity or a
-governing edge produces a typed structural finding and DEGRADED health; the
-query still returns every placement that remains resolvable, with the finding
-carried in the route. A new directory under a covered ancestor scope is covered
-by inheritance and does not degrade health merely because it has no own
-placement. *(G1, G4, G7, G8, F11, F12, L13)*
+An absent layer contributes no unresolved reason, support failure or health
+finding by itself. A malformed placement scope is classified by FD-84 before
+root-totality evaluation and is not coerced into a missing-root result.
+*(G1, G4, G7, G8, F11, F12, L13)*
 
 **FD-87 — Membership is resolution reachability, never applicability.**
 Adding a repository to an instance makes its stable declared identities
@@ -1271,10 +1291,12 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     unrelated directory scopes; each directory receives it only where its own
     declared scope contains that directory.
 14. **Multi-path and broad semantic scope.** Resolution unions placements across
-    path-derived directories while preserving per-path provenance. A
-    repository-wide semantic selection returns every placement rather than an
-    invented file list. This case is distinct from the exact directory selector
-    in cases 9, 11 and 12.
+    path-derived directories while preserving per-path provenance. The view's
+    `declared_layers` is the ordered union of layers in that complete route
+    closure and `absent_layers` is its fixed-layer complement; neither summary
+    is interpreted as per-path completeness. A repository-wide semantic
+    selection returns every placement rather than an invented file list. This
+    case is distinct from the exact directory selector in cases 9, 11 and 12.
 15. **Membership is not applicability.** Adding another repository to the
     pyramid changes no route unless a placement declared by the queried
     repository or an explicit governing relationship makes that member relevant.
@@ -1284,13 +1306,16 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     `UNKNOWN_DOCUMENT` and not silently discarded. Applicability scope remains
     local to the declaring repository.
 17. **Document and placement defects.** Unknown documents, duplicate placements,
-    document cycles, invalid governing edges and missing required parents are
-    explicit unresolved states. A same-repository governing edge whose scope is
-    narrower than the governed placement's scope is `INVALID_GOVERNING_EDGE`. An
-    unresolved parent is never accepted as a valid derivation edge. The
-    acceptance surface proves FD-67's permitted contract-sublayer derivation and
-    rejects its reverse and same-sublayer prohibited cases as
-    `INVALID_GOVERNING_EDGE`.
+    document cycles, invalid governing edges, invalid placement scopes and
+    missing required parents are explicit unresolved states. A placement entry
+    whose non-scope coordinates are structurally recoverable but whose scope
+    fails canonical normalization appears exactly once in candidate
+    `graph_findings` as `INVALID_PLACEMENT_SCOPE`, never as a validation
+    finding. A same-repository governing edge whose scope is narrower than the
+    governed placement's scope is `INVALID_GOVERNING_EDGE`. An unresolved parent
+    is never accepted as a valid derivation edge. The acceptance surface proves
+    FD-67's permitted contract-sublayer derivation and rejects its reverse and
+    same-sublayer prohibited cases as `INVALID_GOVERNING_EDGE`.
 18. **Route versus authority currency.** A structurally complete route can remain
     RESOLVED while an applicable authority is DRAFT/SUPERSEDED/changed and
     normative support becomes non-current through authority support.
