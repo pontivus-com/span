@@ -139,15 +139,20 @@ a Functional Pyramid. The durable participation states are
 `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`. Registration alone does not mean
 participation.
 
-**Functional Scope** — The explicitly declared portion of an ACTIVE repository
-to which Functional Pyramid governance may apply.
+**Placement scope** — One explicit repository-relative directory scope on a
+declared document placement, with `.` as the repository root and widest scope.
+Scopes are declared, never inferred from document location.
 
-**Functional Context** — A declared governance context whose coverage and
-inheritance determine which rules apply to a software scope. Applicable contexts
-compose rather than following a most-specific-wins rule.
+**Functional Scope** — Retired term. The prior model used it for a member-wide
+portion of a repository; the current model declares a directory scope on each
+placement.
 
-**Functional Rule** — A stable rule identity in the Functional Pyramid graph.
-The canonical rule content remains at its declared owner.
+**Functional Context** — Retired term. The current model declares document
+placements with explicit directory scopes; applicable placements compose rather
+than following a most-specific-wins rule.
+
+**Functional Rule** — Retired term. The Functional Pyramid references whole
+canonical documents, not individual rule identities.
 
 **Functional route support** — Server-derived support identifying the exact
 Functional Pyramid route that governed a normative conclusion when it was

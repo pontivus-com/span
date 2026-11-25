@@ -21,22 +21,30 @@ clean-completion handoff, no session eviction, stale-notice invalidation with
 full-union retry, and a wheel-bundled OpenCode -> installed span-hooks ->
 temporary-store path. Exact-head release closure remains owned by T14-H7.
 
+**Total-resolution amendment (2026-11-25).** The Functional Design now retires
+member functional scope, PARTIAL/COMPLETE coverage, context applicability and the
+outside/covered/uncovered/mixed relation. Rows FA-05, FA-06, FA-10, FA-11,
+FA-12, FA-14, FA-32, FA-33 and FA-34 below still name their pre-amendment tests
+so the matrix stays traceable, but those tests exercise retired behavior and are
+not evidence for the current acceptance cases. Replacement tests are pending with
+the implementation change; until they exist, those rows are pending, not passing.
+
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
 | FA-01 | Unconfigured versus excluded | `test_status_projects_inactive_and_live_active_health`; `test_record_exclude_has_no_semantic_effect_projection`; `test_descriptive_recording_does_not_gain_route_support` |
 | FA-02 | Pure action-aware candidate validation | `test_valid_activate_candidate_is_ready`; `test_candidate_accepts_explicit_p2w_to_p2s_edge`; `test_revision_candidate_reports_unknown_and_stale_target`; `test_candidate_reports_duplicate_unregistered_and_other_active_members` |
-| FA-03 | Activation and replay | `test_record_activate_commits_members_effects_and_receipt`; `test_invalid_activation_leaves_participation_state_unchanged`; `test_record_replay_preserves_receipt_without_new_effect_discovery`; `test_installed_lifecycle_over_stdio` |
+| FA-03 | Activation and replay | `test_record_activate_commits_members_effects_and_receipt`; `test_invalid_activation_leaves_participation_state_unchanged`; `test_record_replay_preserves_receipt_without_new_effect_discovery`; `test_installed_lifecycle_over_stdio`; `test_installed_cross_repository_governance_journey` (fresh processes for activation and retained-effect replay) |
 | FA-04 | Revision and removal | `test_record_revise_only_reports_actual_participation_changes`; `test_record_revise_enforces_version_cas`; `test_revision_candidate_reports_unknown_and_stale_target` |
-| FA-05 | Partial coverage | `test_partial_uncovered_path_is_route_unresolved_but_health_valid`; `test_wholly_outside_scope_is_resolved_empty_governance` |
-| FA-06 | Complete coverage | `test_complete_coverage_remainder_is_candidate_validation_finding`; `test_complete_uncovered_scope_degrades_health` |
+| FA-05 | Root totality | Pending replacement; the prior `test_partial_uncovered_path_is_route_unresolved_but_health_valid` and `test_wholly_outside_scope_is_resolved_empty_governance` exercise retired behavior |
+| FA-06 | Inheritance without per-directory declaration | Pending replacement; the prior `test_complete_coverage_remainder_is_candidate_validation_finding` and `test_complete_uncovered_scope_degrades_health` exercise retired behavior |
 | FA-07 | Degraded-health recovery | `test_degraded_health_recovers_without_participation_change`; `test_degraded_instance_can_resolve_unaffected_local_route` |
 | FA-08 | Cold governed path | `test_cold_governed_path_returns_gap_with_governing_view` |
 | FA-09 | Same semantic scope | `test_exact_question_selector_does_not_paraphrase_match`; `test_surface_kind_prevents_filename_heuristic_scope_inference`; `test_declared_symbol_boundary_is_exact_functional_pyramid_scope` |
-| FA-10 | Overlapping contexts | `test_overlapping_direct_contexts_precede_inherited_contexts` |
-| FA-11 | Distributed context | `test_one_context_can_cover_disconnected_paths` |
-| FA-12 | Multi-path and broad semantic scope | `test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered`; `test_overlapping_direct_contexts_precede_inherited_contexts` |
+| FA-10 | Additive composition | Pending replacement; the prior `test_overlapping_direct_contexts_precede_inherited_contexts` exercises retired context ordering |
+| FA-11 | Disconnected applicability | Pending replacement; the prior `test_one_context_can_cover_disconnected_paths` exercises retired context membership |
+| FA-12 | Multi-path and broad semantic scope | Pending replacement; the prior `test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered` and `test_overlapping_direct_contexts_precede_inherited_contexts` exercise retired behavior |
 | FA-13 | Membership is not applicability | `test_route_identity_ignores_instance_version_and_unrelated_member` |
-| FA-14 | Cross-repository authority | `test_unavailable_member_is_distinct_from_unknown_context`; `test_rule_owner_uses_existing_authority_resolver` |
+| FA-14 | Cross-repository authority | Pending replacement; the prior `test_unavailable_member_is_distinct_from_unknown_context` names the retired context identity; `test_rule_owner_uses_existing_authority_resolver` remains conceptually applicable |
 | FA-15 | Authority graph defects | `test_authority_graph_defects_are_explicit`; `test_explicit_p2w_to_p2s_governing_edge_is_valid`; `test_reverse_p2s_to_p2w_governing_edge_is_invalid`; `test_same_p2s_governing_edge_is_invalid`; `test_same_p2w_governing_edge_is_invalid`; `test_joint_p2_applicability_does_not_create_governing_edge` |
 | FA-16 | Route versus authority currency | `test_authority_currency_does_not_change_route_identity_or_health`; `test_authority_support_status_and_presence` |
 | FA-17 | Normative create | `test_normative_create_derives_route_and_all_applicable_authorities`; `test_unresolved_governance_is_retained_but_qualified_unverifiable`; `test_mixed_answer_excludes_noncurrent_normative_conclusion` |
@@ -54,9 +62,9 @@ temporary-store path. Exact-head release closure remains owned by T14-H7.
 | FA-29 | Initialization handoff | `test_activation_handoff_status_matches_committed_result`; `test_record_revise_only_reports_actual_participation_changes`; `test_installed_lifecycle_over_stdio` |
 | FA-30 | One active instance per repository | `test_candidate_reports_duplicate_unregistered_and_other_active_members`; `test_concurrent_overlapping_activation_serializes_to_one_active_instance` |
 | FA-31 | Three-tool host surface | `test_only_the_three_core_tools_are_registered`; `test_installed_lifecycle_over_stdio` |
-| FA-32 | Outside FunctionalScope | `test_wholly_outside_scope_is_resolved_empty_governance`; `test_outside_functional_scope_records_resolved_empty_route_only` |
-| FA-33 | Broad scope crossing the functional boundary | `test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered`; `test_mixed_scope_preserves_covered_uncovered_and_outside_provenance` |
-| FA-34 | Health iff structural findings | `test_status_keeps_participation_and_health_distinct`; `test_partial_uncovered_path_is_route_unresolved_but_health_valid`; `test_degraded_health_recovers_without_participation_change`; `test_authority_currency_does_not_change_route_identity_or_health` |
+| FA-32 | No uncovered answer | Pending replacement; the prior `test_wholly_outside_scope_is_resolved_empty_governance` and `test_outside_functional_scope_records_resolved_empty_route_only` exercise retired behavior |
+| FA-33 | Explicit scope, no placement inference | Pending replacement; the prior `test_broad_scope_crossing_boundary_is_mixed_and_resolved_when_covered` and `test_mixed_scope_preserves_covered_uncovered_and_outside_provenance` exercise retired behavior |
+| FA-34 | Health iff structural findings | Pending replacement; `test_status_keeps_participation_and_health_distinct` and `test_degraded_health_recovers_without_participation_change` remain applicable; `test_partial_uncovered_path_is_route_unresolved_but_health_valid` and `test_authority_currency_does_not_change_route_identity_or_health` require review against the retired uncovered state |
 | FA-35 | Activation of pre-existing normative understanding | `test_newly_active_repository_reassesses_pre_route_normative_revision`; `test_retained_activation_effect_stays_actionable_without_route_support`; `test_installed_cross_repository_governance_journey` |
 | FA-36 | Functional Pyramid write propagation | `test_installation_effect_engine_uses_repository_runtime`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_installed_cross_repository_governance_journey` |
 | FA-37 | Deactivation/removal route state | `test_deliberately_inactive_repository_reassesses_recorded_route`; `test_functional_route_support_distinguishes_route_states`; `test_record_deactivate_moves_all_members_to_excluded` |

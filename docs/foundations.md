@@ -26,17 +26,18 @@ applicability and derivation, not from execution.
 A **surface** remains the semantic unit of retained understanding: a file, symbol,
 service or domain boundary. One conclusion belongs to exactly one surface.
 
-A **functional context** is different. It is a declared responsibility or
-applicability context used to determine which governing rules apply to one or
-more repository paths. Several functional contexts may apply to one path and one
-functional context may cover several unrelated paths. Context overlap is normal;
-it is not semantic-surface ownership.
+A **document placement** is different. It is a declared canonical document at
+one pyramid layer together with the explicit repository-relative directory scope
+where it applies. Several placements may apply to one directory, a placement
+applies to every descendant of its scope, and one document may be placed at
+several layers or scopes. Placement overlap is normal; it is not semantic-surface
+ownership.
 
-The **Functional Pyramid** is the declared graph from repository paths through
-functional contexts to canonical governing rules and their higher-layer
-dependencies. Span resolves that graph deterministically and keeps unresolved,
-unavailable or conflicted relationships explicit. It never infers a functional
-context or governing rule from topology, names, similarity or model judgment.
+The **Functional Pyramid** is the declared graph from repository directories
+through document placements to their higher-layer dependencies. Span resolves
+that graph deterministically and keeps unresolved, unavailable or conflicted
+relationships explicit. It never infers a placement, scope, document or
+relationship from topology, names, similarity or model judgment.
 
 Span is a local MCP server. It never selects a model, calls a model provider,
 edits a target repository, runs application tests, or originates repository or
@@ -194,7 +195,7 @@ understanding. A change has distinct effects, and they must not be conflated:
   conclusion lose support transitively.
 
 Governance effects follow the Functional Pyramid instance rather than stopping
-at a repository boundary. A changed authority, context, governing edge or
+at a repository boundary. A changed authority, placement, governing edge or
 repository availability in one member repository can therefore directly affect
 normative understanding retained in another member repository when the declared
 graph connects them.
@@ -281,8 +282,8 @@ stamp. A larger surface may contain both current and stale understanding, and
 that is expected rather than a defect. Span always reports a surface's status.
 
 Functional Pyramid applicability is reported separately from semantic ownership.
-A path can match several functional contexts without causing surface ambiguity,
-and a functional context can cover several disconnected paths.
+A path can match several document placements without causing surface ambiguity,
+and one placement can cover every directory in its scope.
 
 Status is not an optional feature. If the product's job is to distinguish current
 from stale, it must report which is which, or the reader cannot determine it. If
@@ -307,23 +308,35 @@ registration is not the product.
 
 ### F11 — Governing applicability is explicit and mechanically composable
 
-An ACTIVE Functional Pyramid repository declares Functional Pyramid contexts, canonical rule
-identities, rule layers and governing relationships. Span resolves every
-applicable context for the same effective semantic scope used by the semantic
-lifecycle, including narrower contexts that intersect a broader directory,
-service, domain or repository-wide scope, expands context inheritance and rule
-derivation, and returns the resulting route with provenance.
+An ACTIVE Functional Pyramid repository declares applicability, canonical
+document references, their places in the pyramid and the relationships between
+them. Each declared document placement carries an explicit repository-relative
+directory scope; the repository root is the widest scope. Span resolves every
+placement whose scope contains the requested directory or the effective
+semantic scope, follows the declared relationships between documents, and
+returns the resulting branches with provenance. A directory lookup includes
+documents that apply to that directory through their own declared scope or a
+declared ancestor scope. A placement confined to a descendant directory does
+not, by that fact alone, apply to its parent.
+
+Applicability is a total function for a participating repository. A valid
+activation requires at least one repository-root-scoped P0 placement, so every
+directory resolves to at least the foundational documents and never to an
+absence of governance. The resolved set is bounded by the declarations that
+exist; Span reports declared and absent layers but never invents a placement,
+and documentation completeness remains the declaring owner's responsibility.
 
 The Functional Pyramid view is the governing projection of that semantic scope:
-it exposes stable rule identities, layers, canonical owner references,
-relationships, provenance and unresolved state. It does not ingest, summarize or
-copy the substantive governing content. When the agent needs the meaning of a
-governing rule, it follows the canonical reference and reads that source through
-the ordinary evidence lifecycle.
+it exposes canonical document references, their applicable layers and
+relationships, provenance and unresolved state. A relevant document can
+participate without enumerating its statements or assigning identities to
+individual rules. When the agent needs substantive content, it follows the
+canonical reference and reads that source through the ordinary evidence
+lifecycle. The view does not ingest, summarize or copy that content.
 
-Matching is additive: a more specific context adds obligations and never
-silently replaces a broader applicable context. Missing repositories, unknown
-rules, cycles, invalid declarations and unresolved governing relationships remain
+Matching is additive: a more specific placement adds obligations and never
+silently replaces a broader applicable placement. Missing repositories, unknown
+documents, cycles, invalid declarations and unresolved governing relationships remain
 explicit. Cross-repository authority is followed only through declared stable
 identities and configured repository bindings.
 
@@ -335,8 +348,8 @@ For a normative conclusion in an ACTIVE Functional Pyramid repository, Span deri
 applicable Functional Pyramid route and authority dependencies from the
 conclusion's semantic scope. The caller cannot omit or override them.
 
-*Demonstration:* the same path may return several applicable contexts and one
-complete deduplicated authority route; changing a context or governing edge
+*Demonstration:* the same directory may return several branches of relevant
+documents with shared ancestors; changing a placement or governing relationship
 makes an affected normative conclusion require reassessment even when its source
 bytes did not change.
 
@@ -348,8 +361,7 @@ names the registered repositories whose declared governance may resolve together
 A repository may belong to at most one ACTIVE Functional Pyramid instance at a
 time so repository-scoped lifecycle operations have one governing instance.
 Membership supplies resolution reachability only: it never makes a member's
-rules applicable to another member without an explicit functional-context or
-rule relationship.
+documents applicable to another member without an explicit placement or document relationship.
 
 Durable participation state is exactly `UNCONFIGURED`, `EXCLUDED`, or
 `ACTIVE`. Only an accepted Functional Pyramid `record` changes that durable
@@ -358,24 +370,32 @@ and member availability: `VALID` or `DEGRADED`. Health is qualification of
 the active graph, not another durable participation state and never requires a
 hidden write during `ask`, `reconsider`, or hook delivery.
 
-Each ACTIVE member declares an explicit repository-relative functional coverage
-boundary using the same scope model that Functional Context applicability uses.
-Coverage mode is evaluated only against that declared boundary; Span never
-infers functional scope from the repository tree. PARTIAL permits uncovered
-scope inside the declared boundary and keeps it explicit. COMPLETE asserts that
-the complete declared functional boundary is covered by applicable Functional
-Contexts; an uncovered part of that boundary contradicts the COMPLETE claim.
-Repository scope outside the declared functional boundary is not made functional
-merely because files exist there. Participation, health and route state remain
-distinct: an ACTIVE pyramid may be DEGRADED while an unaffected route still
-resolves, and an ACTIVE/PARTIAL pyramid may legitimately return
-`UNCOVERED_PATH` for a functional portion inside its declared FunctionalScope
-that has no applicable Functional Context. Scope outside FunctionalScope is
-outside the claimed governing boundary rather than uncovered governance.
+Participation is whole-repository. An ACTIVE member governs every directory in
+its repository; there is no member functional boundary that can exclude a
+directory from resolution. Each member declares its canonical document
+placements and the exact directory scope of each placement. The repository root
+placement is mandatory: activation requires at least one root-scoped P0
+placement whose governing relationship is `ROOT`. That invariant is what makes
+directory resolution total.
+
+A directory with no placement of its own resolves through every declared
+ancestor scope and therefore receives the foundational documents and any
+applicable intermediate documents. Span never returns an uncovered-path
+outcome for a participating repository: a directory either resolves to the
+declared placements that contain it or reports an explicit structural or
+operational defect. Documentation coverage and quality are the declaring
+owner's responsibility; Span reports which layers are declared for a location
+and which are absent, and it never manufactures a missing document or
+relationship.
+
+Participation, health and route state remain distinct: an ACTIVE pyramid may be
+DEGRADED while an unaffected route still resolves. A DEGRADED health state
+reports a structural defect in the declared graph, not a directory without
+governance.
 
 Activation or revision is based only on explicit repository-owned declarations.
 Canonical governing content remains at its owner. Span retains the instance
-membership, references, relationships, coverage and identities required to
+membership, references, relationships, placement scopes and identities required to
 resolve and maintain the graph; it does not turn the graph into a second
 documentation corpus.
 

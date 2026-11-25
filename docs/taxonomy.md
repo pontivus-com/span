@@ -87,7 +87,8 @@ Verification outcomes are `PASS`, `FAIL`, and `INCONCLUSIVE`.
 | `FunctionalPyramidParticipation` | Repository participation outside an active instance: UNCONFIGURED/EXCLUDED state. |
 | `FunctionalPyramidStatus` | Exact participation or ACTIVE pyramid/version/member projection with live health. |
 | `FunctionalPyramidCandidate` | Read-only validation/findings for a proposed activation or revision. |
-| `FunctionalPyramidView` | Governing projection for the exact semantic scope of an ordinary ask. |
+| `FunctionalPyramidView` | Governing projection for the exact semantic scope or directory of an ordinary ask, including declared and absent layers. |
+| `FunctionalDocumentPlacement` | Canonical document reference declared at one layer for one repository-relative directory scope in one declaring repository. |
 | `FunctionalRouteSupport` | Server-derived dependency on the resolved governing route for a normative conclusion. |
 | `FunctionalPyramidRecorded` | Accepted participation lifecycle result with immutable receipt selector and affected projection. |
 | `RetrievedFunctionalPyramidReceipt` | Exact installation-scoped accepted participation/effect identities. |

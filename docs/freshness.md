@@ -70,11 +70,12 @@ For repositories using the Functional Pyramid, a conclusion can also depend on
 the declared path that connects its software scope to applicable project
 guidance.
 
-Changing coverage, relationships, repository bindings, or applicability can
-change that route even when the text of the governing rule is unchanged.
+Changing a placement's declared scope, relationships, repository bindings, or
+applicability can change that route even when the text of the governing document
+is unchanged.
 
-The governing route and the governing rule's own content are therefore checked
-as separate dependencies.
+The governing route and the governing document's own content are therefore
+checked as separate dependencies.
 
 ## What happens after change?
 

@@ -72,6 +72,11 @@ same tool:
 
 - `FunctionalPyramidSelector` names exactly one `repository_id` or `pyramid_id`
   and returns exact UNCONFIGURED/EXCLUDED/ACTIVE status.
+- `FunctionalPyramidDirectorySelector` returns the governing projection for one
+  existing repository-relative directory, including `.` for the root. It
+  returns every declared document placement whose scope contains that
+  directory, including ancestor and root placements; no directory in an ACTIVE
+  repository returns an uncovered or empty governing result.
 - `FunctionalPyramidCandidateSelector` validates an ACTIVATE or REVISE proposal
   without persisting participation.
 - `FunctionalPyramidReceiptSelector` retrieves the exact installation-scoped

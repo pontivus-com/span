@@ -19,7 +19,9 @@ semantic interpretation or every host. Execution receipts are separate.
 The invariant table below remains the cross-version architectural matrix.
 Version-1 Functional Pyramid behavior is additionally traced case-by-case in
 `docs/functional-acceptance.md` (FA-01–FA-64), and the invariant test suite
-requires every FA row to name live boundary tests. Static architecture guards
+requires every FA row to name the tests that currently evidence it. A row whose
+behaviour is retired by a governing amendment is marked pending replacement and
+is not reported as passing. Static architecture guards
 also reject shell semantic coordination, optional production Functional
 Pyramid dependencies, repository-local effect-engine construction, skipped
 route-impact traversal, external-authority local fallback, and semantic hooks

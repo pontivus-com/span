@@ -78,8 +78,7 @@ generated documentation corpus.
 The Functional Pyramid is based on explicit project-owned declarations.
 
 Structural layout, filename similarity, search relevance, or graph adjacency do
-not create Functional Contexts, Functional Rules, authority owners, or
-applicability.
+not create document placements, authority owners, or applicability.
 
 The reverse is also true: a repository participating in the Functional Pyramid
 does not make its structural provider an authority source.

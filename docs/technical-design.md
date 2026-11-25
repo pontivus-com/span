@@ -591,7 +591,7 @@ owner.
 | Functional authority | Primary technical mechanism | Verification owner |
 | --- | --- | --- |
 | FD-61 | §19 participation persistence + §20.1 projection | lifecycle store/service + ask integration |
-| FD-62–FD-69 | §17 FunctionalScope/declaration representation + §18 graph resolver | pure scope/graph tests + ask integration |
+| FD-62–FD-69 | §17 directory-scope/placement representation + §18 resolver | pure scope/graph tests + ask integration |
 | FD-70–FD-74 | §17 declaration/identity carriers + §18 resolution; FD-74 projection in §20.1 | graph/source-binding + ask integration |
 | FD-75–FD-77 | §18 support evaluation + §20.2 understanding record composition | support + lifecycle record tests |
 | FD-78 | §20.1 ask composition | answer-service/MCP tests |
@@ -602,7 +602,7 @@ owner.
 | FD-83 | §18 health evaluator + §20.1 status projection | health/status tests |
 | FD-84 | §17 complete declaration input + §20.1 pure candidate validation | candidate-validation tests |
 | FD-85 | §19 receipt/transaction mechanics + §20.4 accepted/replay projection | store/service replay and atomicity tests |
-| FD-86–FD-87 | §17 scope algebra/member binding + §18 resolver | coverage/reachability tests |
+| FD-86–FD-87 | §17 directory-scope containment/root invariant + §18 resolver | totality/reachability tests |
 | FD-88 | §18 reverse graph traversal + §20.3 impact traversal | graph/reconsider tests |
 | FD-89 | §20.3 shared effect engine + §20.4 Functional Pyramid projection | reconsider/pyramid-write tests |
 | FD-90 | §20.1 same-scope ask composition + §20.2 normative derivation | ask/record tests |
@@ -626,7 +626,7 @@ in FD-1–FD-60:
 | FD-49–FD-58 | §22 extends generated wire, hooks, skills and managed-host delivery |
 
 
-### 17. Canonical carriers, scope algebra and declaration boundary
+### 17. Canonical carriers, directory scope and declaration boundary
 
 **Authority:** F1, F6, F7, F11, F12; L7–L8, L12–L14; FD-62–FD-74,
 FD-80, FD-82, FD-84, FD-86–FD-88.
@@ -635,98 +635,87 @@ Add one canonical core model module for Functional Pyramid domain carriers and
 export those carriers through the existing `span.core.model` package. Do not
 create setup/runtime DTO variants. The canonical family contains the Layer-2
 identities, member intent/view, participation/effect, status/view/candidate,
-findings, receipt selector/retrieval, rule/context declarations, route identity
-and `FunctionalRouteSupport`. Existing `EvidenceRequest`, `EvidenceRef`,
-`EvidenceScope`, `AuthorityBinding`, `SurfaceKey`,
+findings, receipt selector/retrieval, document placement/declaration, directory
+selector, route identity and `FunctionalRouteSupport`. Existing `EvidenceRequest`,
+`EvidenceRef`, `EvidenceScope`, `AuthorityBinding`, `SurfaceKey`,
 `ChangedSurface`/`ChangedConclusion` and `InvestigationContextRef` remain
 their current owners and are reused.
 
 The public route projection uses the exact Layer-2 carriers
-`FunctionalContextRoute`, `FunctionalRuleRoute`,
+`FunctionalDocumentPlacement`, `FunctionalDocumentRoute`,
 `FunctionalRouteProvenance`, `FunctionalPyramidFinding`,
 `FunctionalPyramidValidationFinding`, `FunctionalPyramidView` and
 `FunctionalPyramidUnavailable`; their field sets are not re-decided in the
 wire/shell layer. Declaration carriers remain distinct from resolved route
-carriers: declarations hold repository-owned references, while resolved rule
-routes reuse the existing `AuthorityBinding`.
+carriers: declarations hold repository-owned whole-document placements, while
+resolved document routes reuse the existing `AuthorityBinding`.
+
+`FunctionalPyramidDirectorySelector` is the public exact-directory selection
+inside `ask`. It carries `repository_id` and normalized repository-relative
+`directory`, with `.` as the repository root. The corresponding view sets
+`directory` and leaves `semantic_scope` absent. Ordinary surface obtain sets
+`semantic_scope` and leaves `directory` absent. The response carries exactly
+one selection.
 
 The new support union gains exactly one branch:
 `FunctionalRouteSupport`. Its canonical payload contains the repository whose
 semantic conclusion owns the dependency, the Functional Pyramid identity that
 governed the revision, the exact persisted semantic `EvidenceScope`, and the
 server-derived route identity. The route identity is a canonical digest/value of
-FD-73 applicability state; canonical rule prose is never part of that digest or
+FD-73 applicability state; canonical document content is never part of that digest or
 carrier. Existing authority dependencies continue to carry each applicable
 `AuthorityBinding` separately.
 
-**FunctionalScope representation.** Implement one strict
-`FunctionalScopeSelector` carrier and `FunctionalScope` as a canonical
-non-empty tuple/set of those selectors. The same carrier is used by member
-functional coverage and Functional Context applicability. Version 1 admits
-exactly four selector kinds:
+**Directory scope representation.** Implement one strict
+`FunctionalDirectoryScope` carrier: one normalized repository-relative directory
+string, with `.` as the repository root and widest scope. Its algebra is
+deterministic and symbolic:
 
-| kind | fields | meaning |
-| --- | --- | --- |
-| `REPOSITORY` | no path/locator | the complete repository functional region |
-| `PATH` | normalized repository-relative `path` | exactly that path and semantic symbols owned by that path |
-| `PREFIX` | normalized repository-relative directory `path` | that directory boundary and all descendant paths/symbols |
-| `SYMBOL` | normalized owning `path` + canonical symbol `locator` | exactly that symbol |
+- `.` contains every scope;
+- a scope contains itself;
+- scope `a` contains scope `b` iff `b` equals `a` or begins with `a` followed by
+  `/`;
+- otherwise the scopes do not intersect.
 
-No glob, regex, negation, suffix match or free-form selector exists in Version 1.
-Paths use canonical POSIX-style repository-relative normalization; empty paths,
-absolute paths, `.`/`..` traversal and trailing-separator aliases reject.
-`REPOSITORY` is the only whole-repository representation.
+There is no PATH, PREFIX, SYMBOL, REPOSITORY, glob, regex, negation, suffix
+match or free-form selector kind. Normalization rejects empty values, absolute
+paths, `.`/`..` traversal segments, trailing separators and non-POSIX separators.
+A scope is always relative to the declaring repository. It is explicit
+declaration input and is never inferred from the document's location, file
+name, directory placement, genre or similarity. A canonical document may carry
+an explicit scope declaration as an authoring input during initialization; the
+accepted placement scope in the declaration source is the single runtime owner.
+Resolution never reads document metadata to discover applicability.
 
-Normalization deduplicates selectors and removes selectors wholly contained by
-another selector in the same scope. The pure algebra is symbolic and never uses
-current file inventory:
+**Placement carriers.** A `FunctionalDocumentRef` is the canonical document
+identity: `{ "repository_id": str, "document_ref": str, "layer":
+FunctionalLayer }`. A `FunctionalDocumentPlacement` adds the declaring
+repository and the scope: `{ "declaring_repository_id": str, "document":
+FunctionalDocumentRef, "scope": str }`. Its identity is all four coordinates. A
+`FunctionalDocumentDeclaration` pairs one placement with its direct governing
+placements: `{ "placement": FunctionalDocumentPlacement,
+"governing_placements": [FunctionalDocumentPlacement | "ROOT", ...] }`. The same
+canonical document may therefore appear at several layers or scopes without
+creating a rule identity.
 
-- REPOSITORY contains/intersects every selector;
-- PREFIX contains an equal/narrower PREFIX, PATH, or SYMBOL whose owning path is
-  inside the prefix boundary;
-- PATH contains the same PATH and SYMBOLs owned by that path;
-- SYMBOL contains only the same canonical symbol;
-- two selectors intersect iff either contains the other under those rules.
-
-For COMPLETE coverage, a member FunctionalScope is covered iff every normalized
-member selector is contained by at least one normalized selector in the union of
-applicable Functional Context coverage. A collection of narrower child prefixes
-does not prove an open parent prefix or repository region complete; that avoids
-inferring absence from current inventory. Set difference need only return
-empty/non-empty plus the uncovered member selectors/provenance needed by FD-86;
-it does not invent complement globs.
-
-The resolver never converts an `EvidenceScope` into a second public selector
-grammar. One pure adapter consumes the already-fixed semantic `SurfaceKey` and
-`EvidenceScope`: FILE/SYMBOL owner kind supplies exact granularity; for
-SERVICE/DOMAIN, each scope path member is interpreted through the existing
-canonical semantic-containment owner—`containment.surface_file_locator` marks a
-canonical structural symbol locator as an exact SYMBOL member and every other
-path member remains a broad PREFIX boundary. A cold SERVICE/DOMAIN surface
-projection constructs that EvidenceScope from both declared
-`SurfaceBoundary.paths` and `SurfaceBoundary.symbols`. Only an explicitly
-repository-wide semantic selection uses empty EvidenceScope as the whole
-repository; an empty declared surface boundary is invalid/unresolvable rather
-than repository-wide. This adapter evaluates that semantic selection against
-FunctionalScope algebra and produces the FD-62 relation/provenance. It never uses
-extensions, filesystem existence or inventory to decide granularity.
+Resolution performs one exact authority lookup by the document's repository and
+locator. Exactly one `AuthorityBinding` must match, its evidence repository and
+locator must be identical, and `section_or_span` must be absent. No anchor,
+section key, opaque alias or similarity lookup is permitted. Strict decoding
+rejects an invalid locator as `INVALID_DOCUMENT_REFERENCE`. Resolution reports
+`MISSING_DOCUMENT_AUTHORITY` for no exact binding,
+`AMBIGUOUS_DOCUMENT_AUTHORITY` for more than one,
+`NONCANONICAL_DOCUMENT_AUTHORITY` for a repository/locator mismatch or
+section-bound evidence, and `DOCUMENT_UNAVAILABLE` when the exact canonical
+source cannot be observed. Binding status and content currency continue through
+the existing authority-support evaluator.
 
 **Declarations and bootstrap.** Add the canonical domain carriers in
-`src/span/core/model/functional_pyramid.py`, the pure resolver/algebra in
+`src/span/core/model/functional_pyramid.py`, the pure resolver in
 `src/span/core/functional_pyramid.py`, the orchestration service in
 `src/span/service/functional_pyramid.py`, and the external source capability
 in `src/span/ports/functional_pyramid.py`. The existing package exports remain
 the public import boundary.
-
-`FunctionalGraphRef` is the single canonical declaration-edge reference:
-`{ "repository_id": str, "identity": str }`. It is used for both context and
-rule edges; the containing field determines which identity namespace is
-required. The target repository is always explicit, including for a local edge,
-so there is no local shorthand/second grammar. Stable context/rule IDs remain
-unique across the resolved instance; the repository coordinate additionally
-makes FD-70 availability/ownership classification possible without a hidden
-identity index. `ROOT` remains the sole non-reference terminal and is allowed
-only where FD-67 permits it.
 
 For discoverability, a repository may expose exactly one conventional navigation
 bootstrap at `.span/functional-pyramid.json`. This bootstrap is configuration,
@@ -734,9 +723,7 @@ not authority. Its strict JSON shape is:
 
 ```text
 {
-  "version": 1,
-  "functional_scope": [FunctionalScopeSelector, ...],
-  "coverage": "PARTIAL" | "COMPLETE",
+  "version": 2,
   "declaration_sources": [EvidenceRequest, ...]
 }
 ```
@@ -750,39 +737,52 @@ Each named declaration source is strict JSON with one canonical document shape:
 
 ```text
 {
-  "version": 1,
-  "contexts": [
+  "version": 2,
+  "placements": [
     {
-      "context_id": str,
-      "coverage": [FunctionalScopeSelector, ...],
-      "inherits": [FunctionalGraphRef, ...],
-      "rules": [FunctionalGraphRef, ...]
-    }
-  ],
-  "rules": [
-    {
-      "rule_id": str,
-      "layer": "P0" | "P1" | "P2S" | "P2W" | "P3" | "P4",
-      "owner": {"repository_id": str, "authority_ref": str},
-      "governing_rule_ids": [FunctionalGraphRef | "ROOT", ...]
+      "document": {
+        "repository_id": str,
+        "document_ref": str,
+        "layer": FunctionalLayer
+      },
+      "scope": "." | "relative/directory",
+      "governing_placements": [
+        {
+          "declaring_repository_id": str,
+          "document": { "repository_id": str, "document_ref": str, "layer": FunctionalLayer },
+          "scope": "." | "relative/directory"
+        } | "ROOT"
+      ]
     }
   ]
 }
 ```
 
-P0 has exactly `ROOT`; other layers use the FD-67 governing-edge rules.
-Documents may contain contexts, rules or both. A declaration's own context/rule
-identity is owned by the repository containing that declaration source; every
-edge names its target repository through `FunctionalGraphRef`. IDs are stable
-and unique across the entire resolved pyramid instance; duplicate non-identical
-owners are FD-65/FD-71 findings. A graph ref whose repository is not an instance
-member is `INVALID_DECLARATION`; a ref into an unavailable member is
-`REPOSITORY_UNAVAILABLE`; a missing identity in an available named member is
-the corresponding `UNKNOWN_CONTEXT`/`UNKNOWN_RULE`. The document never
-contains canonical rule prose.
+The declaring repository of each placement is the member that owns the
+declaration source. A placement may reference a canonical document owned by any
+member of the instance; applicability scope always remains in the declaring
+repository. P0 placements have exactly `ROOT`; other layers use FD-67.
+Governing references use the fully qualified placement form even for local
+references, so there is no local shorthand or second grammar. A governing edge
+within one declaring repository is valid only when the governing placement's
+scope contains the governed placement's scope. Cross-repository governing edges
+are derivation only; their scopes are not compared.
+
+Duplicate non-identical placement identities or document relationships are
+structural findings. A reference whose repository is not an instance member is
+`INVALID_DECLARATION`; a reference into an unavailable member is
+`REPOSITORY_UNAVAILABLE`; a missing identity in an available member is
+`UNKNOWN_DOCUMENT`. Declarations contain no rule IDs, rule anchors, section
+placements or copied canonical document content.
+
+Version-1 rule declarations are rejected as `INVALID_DECLARATION_SOURCE` with
+detail identifying unsupported declaration version 1. There is no grouping or
+compatibility adapter from rule owners to placements. Such an adapter would omit
+applicable documents that have no rule entry and would preserve the wrong
+identity model.
 
 The `FunctionalPyramidDeclarationPort` reads only the exact bootstrap/declaration
-sources named by member intent across registered repositories. Version-1
+sources named by member intent across registered repositories. Version-2
 declaration sources are whole documents: each member
 `EvidenceRequest.ranges` must be empty. A non-empty ranges tuple is rejected as
 `INVALID_DECLARATION_SOURCE` before declaration parsing; the port never treats
@@ -859,7 +859,7 @@ Unit tests that do not need a real installation may inject explicit typed
 deterministic capabilities representing the intended participation state. They
 must not obtain legacy behavior by omitting Functional Pyramid dependencies.
 
-### 18. Pure graph resolver, health and support evaluation
+### 18. Pure resolver, health and support evaluation
 
 **Authority:** G1, G3, G4, G7; F1, F2, F11, F12; L12–L16; FD-9–FD-16,
 FD-62–FD-73, FD-75, FD-79–FD-81, FD-83, FD-86–FD-88, FD-91.
@@ -868,7 +868,8 @@ Add one pure Functional Pyramid resolver in `src/span/core/` with service
 orchestration in `src/span/service/`. It accepts:
 
 1. one ACTIVE instance/member view;
-2. the existing semantic owner `SurfaceKey` plus its fixed `EvidenceScope`;
+2. either an exact `FunctionalPyramidDirectorySelector` or the existing
+   semantic owner `SurfaceKey` plus its fixed `EvidenceScope`;
 3. strict-decoded declarations/member availability.
 
 `SurfaceKey` is not copied into FunctionalRouteSupport: a retained conclusion
@@ -877,55 +878,75 @@ canonical owner from the retained understanding and combines it with the
 dependency's persisted semantic EvidenceScope.
 
 It returns the canonical governing projection and route identity. Resolution
-order is exactly FD-62/FD-68: compute the semantic-scope relation to
-`FunctionalScope`, resolve only the functional intersection, compose every
-applicable context, expand inheritance, resolve rule owners/governing edges to
-closure, preserve unresolved branches and provenance, then derive the public
-scope relation:
+order is exactly FD-62/FD-68:
 
-- `OUTSIDE_FUNCTIONAL_SCOPE` → resolved empty route;
-- `COVERED` → no outside/uncovered portion;
-- `UNCOVERED` → functional portion exists and has no applicable context;
-- `MIXED` → broad scope contains more than one outside/covered/uncovered
-  portion.
+1. normalize the selected directory or derive one directory per semantic-scope
+   member;
+2. select every placement declaring the repository whose scope contains that
+   directory, including `.` and every declared ancestor scope;
+3. order and deduplicate by placement identity while preserving provenance;
+4. resolve each placement's canonical document and authority binding;
+5. expand every direct governing-placement edge to `ROOT` or a typed structural
+   terminal;
+6. report `declared_layers` and `absent_layers` for the selection.
 
-A MIXED route is RESOLVED only when every functional portion is covered and no
-other structural unresolved branch exists. Outside portions never create
-`UNCOVERED_PATH`.
+For exact directory selection, the resolver checks that the directory is inside
+the registered repository root, selects every containing scope, and returns the
+document branches from P0 through the deepest applicable placement.
+Repository-wide and ancestor placements apply. Sibling-only and
+descendant-only placements do not apply. This selection does not require a
+declared semantic surface and does not enumerate repository contents.
+
+For a semantic scope, each FILE or SYMBOL member maps to the directory
+containing its locator; each SERVICE or DOMAIN boundary member maps its declared
+path to that directory boundary unless the existing canonical
+semantic-containment owner classifies the member as an exact file or symbol
+locator, in which case its containing directory is used; an explicitly
+repository-wide selection uses every placement. The route is the union of the per-directory selections, with
+provenance retained per path or boundary. A directory with no narrower
+placement still returns its ancestor placements, including the mandatory
+repository-root P0 placement. There is no empty-governance branch.
 
 **Governing-edge admissibility.** Implement FD-67 with one pure closed relation
 owned by `src/span/core/functional_pyramid.py`. The core structural validator
-and ordinary rule traversal both delegate governing-edge classification to that
+and ordinary document traversal both delegate governing-edge classification to that
 same relation; candidate validation and ACTIVE health continue to consume the
 structural finding set produced from it. The relation encodes FD-67 directly and
 is never derived from an integer rank, enum declaration order, presentation
 order, joint applicability, membership, document class or another inferred
 property.
 
+For a same-declaring-repository edge, the relation additionally requires
+`contains(governing.scope, governed.scope)`. A narrower document cannot govern a
+broader location; that case is `INVALID_GOVERNING_EDGE`. Cross-repository edges
+are derivation only and their scopes are not compared.
+
 The route-order helper (whether retained as `_layer_rank` or renamed) is a
 presentation mechanism for FD-72 only. Its fixed P0/P1/P2S/P2W/P3/P4 order must
 not decide whether a governing edge is valid. P0/`ROOT` remains the existing
-separate terminal rule. Do not add another graph validator or route-specific
+separate terminal. Do not add another graph validator or route-specific
 exception.
 
 The same declaration graph owns reverse navigation. Reverse traversal derives
-dependent rules/contexts from the forward declaration edges; no second impact
-registry is stored.
+dependent documents/placements from the forward declaration edges; no second
+impact registry is stored.
 
-For FD-88 canonical-owner navigation, exact semantic selection of a
-Functional Rule's canonical `FunctionalRuleOwner.authority_ref` is itself a
-rule-resolution seed even when that selected owner scope is not covered by a
-Functional Context. The resolver maps the exact selected owner reference through
-the already-resolved `AuthorityBinding` set to the owning declared rule, then
-uses the same forward/reverse declaration graph to derive downstream rules and
-contexts. It does not perform semantic similarity, source scanning or maintain a
-second authority-to-rule registry.
+For FD-88 canonical-owner navigation, exact semantic selection of a canonical
+document is itself a document-resolution seed even when that selected document
+scope has no placement of its own. The resolver maps the exact selected document
+reference through the already-resolved `AuthorityBinding` set, then uses the
+same forward/reverse declaration graph to derive downstream documents and
+placements. It does not perform semantic similarity, source scanning or maintain
+a second authority-to-document registry.
 
 **Health.** One health evaluator consumes current ACTIVE member/declaration graph
 state and returns `VALID` when the FD-83 structural finding set is empty,
-otherwise `DEGRADED` with exactly those findings. Do not persist health. Do
-not include authority currency, expected PARTIAL uncovered scope or semantic
-support in health.
+otherwise `DEGRADED` with exactly those findings. The structural set includes a
+missing repository-root P0 placement, an illegal governing edge including scope
+containment, duplicate placement ownership, a document cycle, an unknown or
+unavailable required member/document, and an invalid declaration source. Do not
+persist health. Do not include authority currency, absent documentation layers
+or semantic support in health.
 
 **Support.** Extend the existing support evaluator rather than creating a
 Functional-Pyramid evaluator. Its dependency dispatch gains
@@ -937,7 +958,7 @@ semantic scope/current participation state:
 - ACTIVE but route/member/declaration evaluation operationally unavailable →
   `UNVERIFIABLE`;
 - resolved route identity changed → `REASSESSMENT_REQUIRED`;
-- current functional route contains unresolved functional branch →
+- current functional route contains a structural unresolved branch →
   `UNVERIFIABLE`;
 - identical complete resolved route → `CURRENT`.
 
@@ -1039,6 +1060,13 @@ effect computation, so ordinary repository writers cannot change semantic state
 between the accepted effect decision and commit. The service-owned shared effect
 engine runs while those locks are held; shell SQL does not classify effects.
 
+Opening a raw repository runtime validates the existing schema and repository
+binding without writing. This allows declaration revalidation and effect
+evaluation to open a member on demand while the installation transaction holds
+the write reservation. Explicit provisioning owns schema creation. Ordinary
+repository service-context composition performs expired operational-state
+cleanup separately from raw runtime acquisition.
+
 The transaction boundary and semantic-decision boundary remain distinct. Shell
 persistence acquires/holds the installation plus repository locks and exposes
 repository-qualified transaction capabilities. Service composition evaluates
@@ -1139,13 +1167,17 @@ The exact mechanism is:
 2. Repository authority configuration is explicit and repository-qualified:
    repeatable
    `--authority-seeds-file REPOSITORY_ID PATH` and
-   `--authority-bindings-file REPOSITORY_ID PATH`. Each file is a strict JSON
-   list of the existing canonical `EvidenceRef` or `AuthorityBinding`
-   carrier respectively; there is no setup-specific wrapper/domain carrier.
+   `--authority-bindings-file REPOSITORY_ID PATH`. Optional Functional Pyramid
+   bootstrap installation is separately explicit through repeatable
+   `--functional-pyramid-bootstrap-file REPOSITORY_ID PATH`. Authority files are
+   strict JSON lists of the existing canonical `EvidenceRef` or
+   `AuthorityBinding` carrier respectively. The bootstrap file is the exact
+   Version-2 shape from §17.
 3. The repository-id argument is shell routing metadata only. Every decoded
-   item must carry the same repository identity. Duplicate mappings, a mapping
-   for an unselected repository, malformed canonical content, or repository-id
-   disagreement reject before the first repository-store mutation.
+   authority item must carry the same repository identity. Each repository may
+   have at most one bootstrap mapping. Duplicate mappings, a mapping for an
+   unselected repository, malformed canonical content, or authority
+   repository-id disagreement reject before the first repository-store mutation.
 4. The shell preserves `InitializeRepositoryRequest` tri-state semantics for
    both families: missing mapping = `None`/preserve; mapped `[]` =
    `()`/clear; mapped non-empty list = replace with that exact tuple.
@@ -1165,7 +1197,15 @@ The exact mechanism is:
 8. Initialization remains repository-local administration, not Functional
    Pyramid participation. It may establish the authority state required by
    candidate validation but never ACTIVATEs/REVISEs/DEACTIVATEs/EXCLUDEs a
-   pyramid and creates no cross-repository setup transaction.
+   pyramid and creates no cross-repository setup transaction. When the explicit
+   bootstrap option is present, the installer validates exact Version-2 content
+   and writes it only to `.span/functional-pyramid.json`. An absent destination
+   may be created, identical bytes are a no-op, and different existing bytes
+   reject before mutation. Declaration sources named by that bootstrap must
+   already be repository-owned files. Initialization never generates a
+   declaration template, document relevance or relationships. A newly registered
+   repository starts UNCONFIGURED. Reinitializing an existing repository
+   preserves its current UNCONFIGURED, EXCLUDED or ACTIVE participation state.
 9. The install receipt reports observed `InitializeRepositoryResult`
    projections for each successfully initialized repository (repository id,
    canonical root, current repository schema, structural/store readiness and
@@ -1191,6 +1231,7 @@ Extend the existing `AskRequest` selector union and generated wire from its
 canonical model declaration with:
 
 - `FunctionalPyramidSelector`;
+- `FunctionalPyramidDirectorySelector`;
 - `FunctionalPyramidCandidateSelector`;
 - `FunctionalPyramidReceiptSelector`.
 
@@ -1214,7 +1255,8 @@ content. ACTIVE operational graph failure likewise projects
 
 Candidate validation is a pure service call over the proposed member intent plus
 current registered/declaration state. It uses the FD-84 reason taxonomy and the
-same graph/coverage validators as activation. It persists nothing.
+same placement-graph and root-invariant validators as activation. It persists
+nothing and does not enumerate the repository directory inventory.
 
 Status selectors are exact identities. A registered repository absent from both
 active membership and exclusion is UNCONFIGURED; an explicitly excluded
@@ -1228,7 +1270,7 @@ participation state.
 Candidate evaluation accumulates every deterministic finding that can be
 established from the submitted candidate. A lifecycle-invalid member may be
 uninspectable itself, but its finding must not short-circuit declaration,
-coverage, authority or graph validation for the other validly inspectable
+authority or placement-graph validation for the other validly inspectable
 members. The ordered validation/graph finding sets are therefore the complete
 deterministic result available for that candidate.
 
@@ -1241,9 +1283,9 @@ Keep the existing create/update command owners and transaction path. After
 semantic scope and assertion nature are fixed and before a NORMATIVE revision is
 accepted in an ACTIVE repository, service composition resolves the governing
 route and adds one `FunctionalRouteSupport` plus every applicable
-`AuthoritySupportDependency` to the canonical dependency set. A scope wholly
-OUTSIDE_FUNCTIONAL_SCOPE records the resolved empty route dependency and no
-invented Functional Pyramid authority dependency. DESCRIPTIVE recording remains
+`AuthoritySupportDependency` to the canonical dependency set. A participating
+semantic scope always resolves to at least the repository-root P0 placement, so
+no empty route dependency is invented. DESCRIPTIVE recording remains
 unchanged unless the caller explicitly cites authority.
 
 If derived governance is non-current, acceptance still follows the existing
@@ -1348,6 +1390,24 @@ No transition fabricates Functional Pyramid participation, authority support, or
 curation approval. Repository registration and Functional Pyramid participation
 remain separate. Repository-portable backups carry repository lifecycle state,
 not installation-level participation state.
+
+The Beta-5 declaration cutover is explicit. Existing Version-1 rule
+declarations are not accepted by the Version-2 decoder and are never grouped
+into synthetic documents. Before revising an ACTIVE instance, the operator
+creates Version-2 placements with explicit directory scopes from the
+repository's approved canonical document corpus, assigns at least one
+root-scoped P0 placement, validates the complete candidate in isolation and
+takes the ordinary verified backup required for an existing installation. The
+accepted revision retains historical receipts and semantic conclusions. Existing
+`FunctionalRouteSupport` whose rule-based route identity cannot equal the new
+document route becomes `REASSESSMENT_REQUIRED`; the accepted revision returns
+those exact dependent effects for ordinary evidence-near re-establishment.
+
+No schema transition may invent placement scope, document placement or a
+governing-document relationship. If a stored support payload cannot be decoded
+without the removed Version-1 carrier, the offline transition preserves the
+owning conclusion and records the dependency as requiring reassessment. Runtime
+open never silently rewrites it.
 
 The former Beta-1 package/release identity and schema-13→14 transition are
 historical and are retained in the
@@ -1738,7 +1798,7 @@ asynchronously.
 
 ### 27. Beta-3 verification
 
-Extend functional acceptance and installed-MCP coverage through cases 45–64.
+Extend functional acceptance and installed-MCP coverage through cases 47–66.
 Verification must prove at least:
 
 - capture is retained but not Answer content;

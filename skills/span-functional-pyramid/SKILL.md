@@ -34,8 +34,17 @@ Obtain durable participation and live health:
 
 ## 2. DISCOVER / DECLARE / REALIGN
 
-The agent establishes the intended members, declaration sources, FunctionalScope,
-and PARTIAL/COMPLETE coverage. Span does not manufacture that intent.
+The agent establishes the intended members and declaration sources. During
+discovery the declaring owner also assigns each document placement its explicit
+repository-relative directory scope: `.` for the repository root or a directory
+prefix. Scope may come from the owner directly or from an explicit scope
+declaration carried by the canonical document; Span never infers it from where a
+document sits. A member declares no functional boundary of its own.
+
+Each member must declare at least one root-scoped P0 placement whose governing
+relationship is `ROOT`. That placement is what makes every directory in the
+repository return a pyramid; a directory with no narrower placement inherits its
+ancestor placements.
 
 If repository-owned declarations must change, edit them outside Span and then use
 `reconsider` for each directly edited repository. Dispose every actionable
@@ -55,11 +64,7 @@ Validate the complete intended member set through `ask`:
         "repository_id": "repo-1",
         "declaration_sources": [
           {"locator": "docs/functional-pyramid.json", "ranges": []}
-        ],
-        "functional_scope": {
-          "selectors": [{"kind": "PREFIX", "path": "src"}]
-        },
-        "coverage": "PARTIAL"
+        ]
       }
     ]
   }
@@ -85,11 +90,7 @@ Record the already-validated intent through the existing `record` tool:
       "repository_id": "repo-1",
       "declaration_sources": [
         {"locator": "docs/functional-pyramid.json", "ranges": []}
-      ],
-      "functional_scope": {
-        "selectors": [{"kind": "PREFIX", "path": "src"}]
-      },
-      "coverage": "PARTIAL"
+      ]
     }
   ]
 }
@@ -136,6 +137,10 @@ For ACTIVE repositories, the ordinary lifecycle remains unchanged:
 
 - `ask` returns retained understanding plus governing orientation for the same
   semantic scope;
+- a directory lookup returns that directory's declared document placements from
+  P0 through the deepest applicable layer, including ancestor and root
+  placements. Every participating directory returns a result; there is no
+  uncovered-path answer. Absent layers are reported as absent;
 - a conformance judgment is NORMATIVE and is recorded with
   assertion_nature=NORMATIVE; Span derives route/authority support;
 - `reconsider` after implementation or governance edits returns the same
