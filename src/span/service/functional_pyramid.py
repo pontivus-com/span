@@ -235,7 +235,11 @@ class FunctionalPyramidService:
 
     def directory(
         self, selector: m.FunctionalPyramidDirectorySelector
-    ) -> m.FunctionalPyramidParticipation | m.FunctionalPyramidUnavailable | m.FunctionalPyramidView:
+    ) -> (
+        m.FunctionalPyramidParticipation
+        | m.FunctionalPyramidUnavailable
+        | m.FunctionalPyramidView
+    ):
         """Resolve one exact repository-relative directory through current state."""
         status = self.status(
             m.FunctionalPyramidSelector(repository_id=selector.repository_id)
@@ -1065,7 +1069,10 @@ class FunctionalPyramidService:
                         revision.content, m.SupportedConclusion
                     ):
                         continue
-                    if revision.content.assertion_nature is not m.AssertionNature.NORMATIVE:
+                    if (
+                        revision.content.assertion_nature
+                        is not m.AssertionNature.NORMATIVE
+                    ):
                         continue
                     if any(
                         isinstance(dependency, m.FunctionalRouteSupport)

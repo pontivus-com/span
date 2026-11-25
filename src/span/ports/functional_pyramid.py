@@ -51,9 +51,7 @@ class FunctionalPyramidDeclarationPort(_typing.Protocol):
         """Whether one canonical repository-relative directory currently exists."""
         ...
 
-    def read_declaration(
-        self, repository_id: str, request: m.EvidenceRequest
-    ) -> (
+    def read_declaration(self, repository_id: str, request: m.EvidenceRequest) -> (
         tuple[
             m.EvidenceRef,
             m.FunctionalPyramidDeclaration,

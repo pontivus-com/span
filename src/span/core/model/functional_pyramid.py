@@ -168,7 +168,9 @@ class FunctionalDocumentDeclaration:
 
     def __post_init__(self) -> None:
         if not self.governing_placements:
-            raise ValueError("FunctionalDocumentDeclaration requires a governing parent")
+            raise ValueError(
+                "FunctionalDocumentDeclaration requires a governing parent"
+            )
         for parent in self.governing_placements:
             if isinstance(parent, str) and parent != "ROOT":
                 raise ValueError("the only string governing terminal is ROOT")
@@ -208,7 +210,9 @@ class FunctionalPyramidMemberIntent:
             "FunctionalPyramidMemberIntent.repository_id", self.repository_id
         )
         if not self.declaration_sources:
-            raise ValueError("FunctionalPyramidMemberIntent requires declaration sources")
+            raise ValueError(
+                "FunctionalPyramidMemberIntent requires declaration sources"
+            )
 
 
 @_dataclass(frozen=True)
@@ -235,7 +239,9 @@ class FunctionalPyramidParticipation:
 
     def __post_init__(self) -> None:
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
-            raise ValueError("ACTIVE participation is projected as FunctionalPyramidView")
+            raise ValueError(
+                "ACTIVE participation is projected as FunctionalPyramidView"
+            )
 
 
 @_dataclass(frozen=True)
@@ -269,7 +275,9 @@ class FunctionalPyramidFinding:
             if value is not None:
                 _require_non_empty(f"FunctionalPyramidFinding.{name}", value)
         if self.directory is not None:
-            _require_directory_scope("FunctionalPyramidFinding.directory", self.directory)
+            _require_directory_scope(
+                "FunctionalPyramidFinding.directory", self.directory
+            )
 
 
 @_dataclass(frozen=True)
@@ -311,7 +319,9 @@ class FunctionalPyramidStatus:
     def __post_init__(self) -> None:
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
             if self.health is None or self.pyramid_id is None or self.version is None:
-                raise ValueError("ACTIVE status requires health, pyramid_id, and version")
+                raise ValueError(
+                    "ACTIVE status requires health, pyramid_id, and version"
+                )
             if not self.members:
                 raise ValueError("ACTIVE status requires at least one member")
             if self.health is FunctionalPyramidHealth.VALID and self.findings:
@@ -324,7 +334,9 @@ class FunctionalPyramidStatus:
         if self.pyramid_id is not None or self.version is not None or self.members:
             raise ValueError("inactive Functional Pyramid status has no live instance")
         if self.findings:
-            raise ValueError("inactive Functional Pyramid status has no health findings")
+            raise ValueError(
+                "inactive Functional Pyramid status has no health findings"
+            )
 
 
 @_dataclass(frozen=True)
@@ -468,8 +480,13 @@ class FunctionalPyramidView:
         if self.directory is not None:
             _require_directory_scope("FunctionalPyramidView.directory", self.directory)
         if self.status is FunctionalPyramidRouteStatus.RESOLVED and self.unresolved:
-            raise ValueError("RESOLVED FunctionalPyramidView has no unresolved findings")
-        if self.status is FunctionalPyramidRouteStatus.UNRESOLVED and not self.unresolved:
+            raise ValueError(
+                "RESOLVED FunctionalPyramidView has no unresolved findings"
+            )
+        if (
+            self.status is FunctionalPyramidRouteStatus.UNRESOLVED
+            and not self.unresolved
+        ):
             raise ValueError("UNRESOLVED FunctionalPyramidView requires findings")
         if len(set(self.placements)) != len(self.placements):
             raise ValueError("FunctionalPyramidView placements must be distinct")
@@ -479,7 +496,9 @@ class FunctionalPyramidView:
             raise ValueError("absent_layers must be distinct")
         if set(self.declared_layers) & set(self.absent_layers):
             raise ValueError("declared_layers and absent_layers must be disjoint")
-        if set(self.declared_layers) | set(self.absent_layers) != set(FunctionalPyramidLayer):
+        if set(self.declared_layers) | set(self.absent_layers) != set(
+            FunctionalPyramidLayer
+        ):
             raise ValueError("declared_layers and absent_layers must cover every layer")
 
 
@@ -512,16 +531,23 @@ class RetrievedFunctionalPyramidReceipt:
 
     def __post_init__(self) -> None:
         if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
-            raise ValueError("RetrievedFunctionalPyramidReceipt.committed_at must be aware")
+            raise ValueError(
+                "RetrievedFunctionalPyramidReceipt.committed_at must be aware"
+            )
         if len({effect.repository_id for effect in self.participation_effects}) != len(
             self.participation_effects
         ):
             raise ValueError("participation effects must be unique per repository")
         if len(set(self.dependent_effect_refs)) != len(self.dependent_effect_refs):
             raise ValueError("dependent effect refs must be distinct")
-        if self.action in (FunctionalPyramidAction.ACTIVATE, FunctionalPyramidAction.REVISE):
+        if self.action in (
+            FunctionalPyramidAction.ACTIVATE,
+            FunctionalPyramidAction.REVISE,
+        ):
             if self.pyramid_id is None or self.version is None or not self.members:
-                raise ValueError("activate/revise receipt requires live instance members")
+                raise ValueError(
+                    "activate/revise receipt requires live instance members"
+                )
             return
         if self.members:
             raise ValueError("deactivate/exclude receipt has no active members")

@@ -105,13 +105,13 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             ("repo-a", "docs/product.md"): _authority(
                 "repo-a", "docs/product.md", "a1"
             ),
-            ("repo-a", "docs/design.md"): _authority(
-                "repo-a", "docs/design.md", "a3"
-            ),
+            ("repo-a", "docs/design.md"): _authority("repo-a", "docs/design.md", "a3"),
             ("repo-a", "docs/ui.md"): _authority("repo-a", "docs/ui.md", "aui"),
         }
 
-    def _directory(self, directory: str) -> tuple[m.FunctionalPyramidView, m.FunctionalRouteIdentity]:
+    def _directory(
+        self, directory: str
+    ) -> tuple[m.FunctionalPyramidView, m.FunctionalRouteIdentity]:
         return fp.resolve_functional_pyramid_directory_route(
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
@@ -279,7 +279,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=self.authorities,
         )
-        self.assertEqual(set(view.placements), {self.p0, self.p1, self.p3, self.sibling})
+        self.assertEqual(
+            set(view.placements), {self.p0, self.p1, self.p3, self.sibling}
+        )
 
     def test_unrelated_member_does_not_change_route_identity(self) -> None:
         _, first = fp.resolve_functional_pyramid_directory_route(

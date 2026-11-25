@@ -172,7 +172,6 @@ def load_authority_files(
     return seeds, bindings
 
 
-
 def load_functional_pyramid_bootstraps(
     targets: _typing.Iterable[str | Path],
     bootstrap_files: _typing.Iterable[_typing.Sequence[str]],

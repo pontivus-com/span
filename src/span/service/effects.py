@@ -246,7 +246,9 @@ class DependencyEffectService:
             ref: "recorded governing route changed under the accepted Functional Pyramid delta"
             for ref in route_dependents
         }
-        for ref in sorted(set(forced_reassessment_refs), key=lambda item: item.sort_key):
+        for ref in sorted(
+            set(forced_reassessment_refs), key=lambda item: item.sort_key
+        ):
             direct.append(ref)
             forced[ref] = (
                 "Functional Pyramid route identity model changed during the "

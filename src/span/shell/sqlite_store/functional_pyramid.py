@@ -113,9 +113,13 @@ def _decode_member_data(value: object) -> m.FunctionalPyramidMemberView:
     except m.CanonicalDecodeError:
         pass
     if not isinstance(value, dict):
-        raise FunctionalPyramidInstallationStoreError("stored pyramid member is invalid")
+        raise FunctionalPyramidInstallationStoreError(
+            "stored pyramid member is invalid"
+        )
     if value.get("$type") != "FunctionalPyramidMemberView":
-        raise FunctionalPyramidInstallationStoreError("stored pyramid member type is invalid")
+        raise FunctionalPyramidInstallationStoreError(
+            "stored pyramid member type is invalid"
+        )
     allowed = {
         "$type",
         "repository_id",
@@ -123,7 +127,11 @@ def _decode_member_data(value: object) -> m.FunctionalPyramidMemberView:
         "functional_scope",
         "coverage",
     }
-    if set(value) - allowed or "repository_id" not in value or "declaration_refs" not in value:
+    if (
+        set(value) - allowed
+        or "repository_id" not in value
+        or "declaration_refs" not in value
+    ):
         raise FunctionalPyramidInstallationStoreError(
             "stored pyramid member cannot be projected to Version-2 membership"
         )

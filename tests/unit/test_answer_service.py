@@ -1270,6 +1270,7 @@ class AnswerServiceTest(unittest.TestCase):
             ),
             understanding_id=m.UnderstandingId("u-normative"),
         )
+
         def unresolved(scope: m.EvidenceScope) -> m.FunctionalPyramidView:
             return _functional_pyramid_view(
                 scope,

@@ -61,7 +61,9 @@ def directory_scope_contains(outer: str, inner: str) -> bool:
 
 def directory_scope_intersects(left: str, right: str) -> bool:
     """Directory scopes intersect exactly when one contains the other."""
-    return directory_scope_contains(left, right) or directory_scope_contains(right, left)
+    return directory_scope_contains(left, right) or directory_scope_contains(
+        right, left
+    )
 
 
 def _placement_sort_key(
@@ -609,9 +611,11 @@ def evaluate_functional_pyramid_health(
         members, declarations, available_repositories, declaration_findings
     )
     return (
-        FunctionalPyramidHealth.VALID
-        if not findings
-        else FunctionalPyramidHealth.DEGRADED,
+        (
+            FunctionalPyramidHealth.VALID
+            if not findings
+            else FunctionalPyramidHealth.DEGRADED
+        ),
         findings,
     )
 
@@ -667,10 +671,7 @@ def _direct_selection(
         placement
         for placement in index
         if placement.declaring_repository_id == repository_id
-        and (
-            directory is None
-            or directory_scope_contains(placement.scope, directory)
-        )
+        and (directory is None or directory_scope_contains(placement.scope, directory))
     ]
     return tuple(sorted(selected, key=_placement_sort_key))
 
@@ -758,20 +759,24 @@ def _route_identity(
                 "document_ref": placement.document.document_ref,
                 "layer": placement.document.layer.value,
                 "scope": placement.scope,
-                "parents": [
-                    "ROOT"
-                    if isinstance(parent, str)
-                    else {
-                        "declaring_repository_id": parent.declaring_repository_id,
-                        "document_repository_id": parent.document.repository_id,
-                        "document_ref": parent.document.document_ref,
-                        "layer": parent.document.layer.value,
-                        "scope": parent.scope,
-                    }
-                    for parent in index[placement].governing_placements
-                ]
-                if placement in index
-                else [],
+                "parents": (
+                    [
+                        (
+                            "ROOT"
+                            if isinstance(parent, str)
+                            else {
+                                "declaring_repository_id": parent.declaring_repository_id,
+                                "document_repository_id": parent.document.repository_id,
+                                "document_ref": parent.document.document_ref,
+                                "layer": parent.document.layer.value,
+                                "scope": parent.scope,
+                            }
+                        )
+                        for parent in index[placement].governing_placements
+                    ]
+                    if placement in index
+                    else []
+                ),
             }
             for placement in closure
         ],

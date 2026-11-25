@@ -70,10 +70,7 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
             return False
         return selected.is_dir()
 
-
-    def read_declaration(
-        self, repository_id: str, request: m.EvidenceRequest
-    ) -> (
+    def read_declaration(self, repository_id: str, request: m.EvidenceRequest) -> (
         tuple[
             m.EvidenceRef,
             m.FunctionalPyramidDeclaration,

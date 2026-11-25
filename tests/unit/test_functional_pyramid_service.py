@@ -118,9 +118,7 @@ class _Declarations:
     def directory_exists(self, repository_id: str, directory: str) -> bool:
         return directory in self.directories.get(repository_id, set())
 
-    def read_declaration(
-        self, repository_id: str, request: m.EvidenceRequest
-    ):
+    def read_declaration(self, repository_id: str, request: m.EvidenceRequest):
         self.calls.append((repository_id, request))
         result = self.results[(repository_id, request.locator)]
         if isinstance(result, Exception):
@@ -332,9 +330,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
 
     def test_candidate_v1_source_is_validation_error_only(self) -> None:
         self.declarations.results[("repo-a", "decl.json")] = (
-            FunctionalPyramidDeclarationInvalid(
-                "unsupported", unsupported_version=1
-            )
+            FunctionalPyramidDeclarationInvalid("unsupported", unsupported_version=1)
         )
         candidate = self.admin_service.candidate(
             m.FunctionalPyramidCandidateSelector(
@@ -429,9 +425,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.state.versions[pyramid_id] = version
         self.state.members[(pyramid_id, version)] = (member,)
         self.declarations.results[("repo-a", "decl.json")] = (
-            FunctionalPyramidDeclarationInvalid(
-                "unsupported", unsupported_version=1
-            )
+            FunctionalPyramidDeclarationInvalid("unsupported", unsupported_version=1)
         )
 
         status = self.admin_service.status(

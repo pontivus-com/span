@@ -350,7 +350,9 @@ def probe_functional_pyramid_repository(
                         "locator": request.locator,
                         "status": "valid" if not graph_findings else "invalid",
                         "evidence_id": declaration_ref.evidence_id.value,
-                        "findings": [finding.reason.value for finding in graph_findings],
+                        "findings": [
+                            finding.reason.value for finding in graph_findings
+                        ],
                     }
                 )
                 if graph_findings:
