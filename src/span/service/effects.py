@@ -225,6 +225,7 @@ class DependencyEffectService:
         self,
         *,
         changed_route_identities: tuple[m.FunctionalRouteIdentity, ...] = (),
+        changed_authority_refs: tuple[m.EvidenceRef, ...] = (),
         forced_reassessment_refs: tuple[m.ConclusionRevisionRef, ...] = (),
         newly_active_repositories: tuple[str, ...] = (),
         deliberately_inactive_repositories: tuple[str, ...] = (),
@@ -242,6 +243,12 @@ class DependencyEffectService:
         """
         route_dependents = self._route_dependents(changed_route_identities)
         direct = list(route_dependents)
+        for authority in changed_authority_refs:
+            direct.extend(
+                self._authority_identity_dependents(
+                    authority.repository_id, authority.evidence_id
+                )
+            )
         forced: dict[m.ConclusionRevisionRef, str] = {
             ref: "recorded governing route changed under the accepted Functional Pyramid delta"
             for ref in route_dependents
@@ -517,18 +524,28 @@ class DependencyEffectService:
         for binding in store.load_authority_bindings(repository_id):
             if not m.evidence_scope_allows(binding.evidence_ref.locator, changed):
                 continue
-            evidence_id = binding.evidence_ref.evidence_id
-            for ref in self._support_dependents("AUTHORITY", evidence_id.value):
-                revision = self._conclusion_revision(ref)
-                if not isinstance(revision.content, m.SupportedConclusion):
-                    continue
-                if any(
-                    isinstance(dependency, m.AuthoritySupportDependency)
-                    and dependency.authority.evidence_ref.repository_id == repository_id
-                    and dependency.authority.evidence_ref.evidence_id == evidence_id
-                    for dependency in revision.content.support
-                ):
-                    refs.append(ref)
+            refs.extend(
+                self._authority_identity_dependents(
+                    repository_id, binding.evidence_ref.evidence_id
+                )
+            )
+        return tuple(dict.fromkeys(refs))
+
+    def _authority_identity_dependents(
+        self, repository_id: str, evidence_id: m.EvidenceId
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        refs: list[m.ConclusionRevisionRef] = []
+        for ref in self._support_dependents("AUTHORITY", evidence_id.value):
+            revision = self._conclusion_revision(ref)
+            if not isinstance(revision.content, m.SupportedConclusion):
+                continue
+            if any(
+                isinstance(dependency, m.AuthoritySupportDependency)
+                and dependency.authority.evidence_ref.repository_id == repository_id
+                and dependency.authority.evidence_ref.evidence_id == evidence_id
+                for dependency in revision.content.support
+            ):
+                refs.append(ref)
         return tuple(dict.fromkeys(refs))
 
     def _route_dependents(

@@ -594,8 +594,13 @@ class FunctionalPyramidService:
         pyramid_id: m.FunctionalPyramidId | None = None,
         expected_version: m.FunctionalPyramidVersion | None = None,
         repository_id: str | None = None,
+        changed_authority_refs: tuple[m.EvidenceRef, ...] = (),
     ) -> m.FunctionalPyramidRecorded:
-        """Accept/replay one installation-scoped participation write (FD-85/FD-93)."""
+        """Accept/replay one installation-scoped participation write (FD-85/FD-93).
+
+        The administrative caller alone supplies old/new authority identities
+        retained in pending installer provenance; these are not record-wire fields.
+        """
         state = self._require_state()
         self._validate_record_shape(
             action=action,
@@ -644,6 +649,8 @@ class FunctionalPyramidService:
                     | {item.repository_id for item in members}
                 )
             )
+        if changed_authority_refs:
+            repository_ids = tuple(sorted(set(repository_ids) | set(self._registered())))
         repository_paths = self._attached_paths(repository_ids)
         with state.transaction(repository_paths) as transaction:
             replay = transaction.receipt(request_id)
@@ -671,6 +678,7 @@ class FunctionalPyramidService:
                     members=members,
                     pyramid_id=pyramid_id,
                     expected_version=expected_version,
+                    changed_authority_refs=changed_authority_refs,
                 )
             assert action is m.FunctionalPyramidAction.DEACTIVATE
             assert pyramid_id is not None
@@ -782,6 +790,7 @@ class FunctionalPyramidService:
         members: tuple[m.FunctionalPyramidMemberIntent, ...],
         pyramid_id: m.FunctionalPyramidId | None,
         expected_version: m.FunctionalPyramidVersion | None,
+        changed_authority_refs: tuple[m.EvidenceRef, ...] = (),
     ) -> m.FunctionalPyramidRecorded:
         selector = m.FunctionalPyramidCandidateSelector(
             action=action,
@@ -848,6 +857,7 @@ class FunctionalPyramidService:
             selected_id,
             old_members,
             candidate.members,
+            changed_authority_refs=changed_authority_refs,
         )
         now = self._clock()
         transaction.write_pyramid_version(
@@ -1001,6 +1011,8 @@ class FunctionalPyramidService:
                 | {effect.repository_id for effect in receipt.participation_effects}
             )
         )
+        if receipt.dependent_effect_refs:
+            repository_ids = tuple(sorted(set(repository_ids) | set(self._registered())))
         paths = self._attached_paths(repository_ids) if repository_ids else ()
         with self._require_state().transaction(paths) as transaction:
             return self._project_receipt(transaction, receipt)
@@ -1152,6 +1164,8 @@ class FunctionalPyramidService:
         pyramid_id: m.FunctionalPyramidId,
         old_members: tuple[m.FunctionalPyramidMemberView, ...],
         new_members: tuple[m.FunctionalPyramidMemberView, ...],
+        *,
+        changed_authority_refs: tuple[m.EvidenceRef, ...] = (),
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
@@ -1178,6 +1192,7 @@ class FunctionalPyramidService:
                 )
         return self._effect_service(transaction).functional_pyramid_change(
             changed_route_identities=route_ids,
+            changed_authority_refs=changed_authority_refs,
             forced_reassessment_refs=forced_refs,
             newly_active_repositories=tuple(sorted(new - old)),
             deliberately_inactive_repositories=tuple(sorted(old - new)),

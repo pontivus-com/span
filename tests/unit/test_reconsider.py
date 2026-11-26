@@ -791,6 +791,27 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(affected.support.state, m.SupportState.CURRENT)
         self.assertEqual(result.reestablishment_contexts, ())
 
+        # A removed binding cannot be rediscovered from the post-replacement
+        # store. The installer supplies its old identity to the same engine.
+        store_auth.register_repository(
+            "repo-auth", str(root_auth), authority_bindings=()
+        )
+        support.evaluate_revision.return_value = support_rules.evaluation(
+            m.SupportState.REASSESSMENT_REQUIRED,
+            NOW,
+            "authority binding removed",
+        )
+        surfaces, contexts, refs = effects.functional_pyramid_change(
+            changed_authority_refs=(authority.evidence_ref,)
+        )
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].understanding_id.value, "u-authority")
+        self.assertEqual(len(contexts), 1)
+        self.assertEqual(
+            surfaces[0].conclusions[0].support.state,
+            m.SupportState.REASSESSMENT_REQUIRED,
+        )
+
     def test_governance_only_change_crosses_physical_repository_boundary(
         self,
     ) -> None:
