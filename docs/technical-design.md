@@ -1112,6 +1112,37 @@ provenance as exact configuration evidence; it is not authority or additional
 ingress. The runtime authority store remains the sole registered binding owner.
 Use existing evidence/authority stores, not a new semantic store.
 
+**Administrative ownership.** Before reading mutable preflight state, a mutating
+installer invocation acquires exclusive administrative ownership of the
+canonical installation data directory and retains it through preflight,
+backup, pending-intent publication, provisioning, participation, verification
+and final receipt replacement (or failure). Implement this once at the
+existing installer entry/composition boundary as a shell-owned OS advisory
+exclusive lock on a stable installation-local lock file distinct from the
+atomically replaced receipt and databases. Canonicalize the data directory so
+path aliases cannot bypass ownership. Hold the open lock handle for the whole
+operation; process exit releases ownership, not the pending intent. Do not
+unlink or replace the lock file while ownership can be held, including during
+maintenance. A competing invocation fails explicitly before modifying state;
+it does not wait indefinitely, steal ownership or retry as a fix. Reuse existing
+store ownership and participation CAS for their respective boundaries; do not
+hold a SQLite exclusive transaction across service calls or invent a second
+semantic writer.
+
+Ordinary installation and mutating maintenance that can change the same
+receipt, repository/installation stores or governed metadata participate in the
+same administrative ownership rule. With pending intent, only same-input
+governed recovery or explicitly authorized existing backup/restore recovery
+may proceed; other mutating administrative paths reject before mutation.
+Read-only verification, inspection and dry-run do not acquire a mutating
+lease or clear pending intent; they report incomplete setup rather than
+certifying a partial state. An operator recovery uses the same exclusive
+ownership boundary and existing verified backup contract. The lock does not
+authorize overriding concurrent MCP participation changes: existing CAS,
+candidate revalidation and observed-state checks still govern; a conflicting
+participation or authority state is a named recovery conflict. No new
+persistence schema, semantic store or lock framework is introduced.
+
 **Interrupted initialization.** Reuse the existing installer receipt owner
 (`install.json`) and its verified backup/recovery path. After read-only
 preflight and backup, but before any generated-file or authority mutation,
@@ -1141,9 +1172,9 @@ Mismatch, competing mutation, missing evidence or different pending input is an
 explicit recovery conflict, not permission to overwrite unowned data or create a
 new revision. Preserve the previous receipt and backup; use the existing
 recovery path when the original operation cannot be safely completed. Same-input
-recovery does not require the operator to reconstruct a payload. The explicit
-setup session and existing ownership/CAS rules remain in force; no claim of
-atomicity across repository provisioning and participation is made.
+recovery does not require the operator to reconstruct a payload. The exclusive administrative
+ownership defined above and existing store/CAS rules remain in force; no claim
+of atomicity across repository provisioning and participation is made.
 
 After acceptance, retain its receipt selector before finalization; on
 interruption it remains discoverable via the original pending request ID. Only
@@ -1219,7 +1250,10 @@ dependent effects, equivalent existing authority reuse, provenance, public
 findings and continuation. Interrupt before publication/provisioning, after
 provisioning and after acceptance but before final receipt; prove the same
 pending intent can complete without an extra participation version or lost
-ownership/effect evidence.
+ownership/effect evidence. Exercise competing governed and ordinary installers,
+mutating maintenance, and process exit/recovery: exactly one administrative
+owner may mutate; a loser cannot replace pending intent, backup or receipt or
+change bindings. Standalone verification remains observational.
 
 ### 18. Pure resolver, health and support evaluation
 

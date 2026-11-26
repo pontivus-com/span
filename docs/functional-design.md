@@ -1679,8 +1679,9 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     authority is reused without replacing its identity; ordinary authority
     survives exclusion. Interrupted setup preserves recoverable pending intent
     and accepted receipt identity, never reports successful governed setup
-    prematurely, and resumes without a duplicate write. Ordinary install and
-    observation modes do not activate.
+    prematurely, and resumes without a duplicate write. Competing administrative
+    mutations cannot replace pending intent or partially provision another setup.
+    Ordinary install and observation modes do not activate.
 71. **Public findings.** FD-88B applies across all public governance results;
     internal reasons/locators never leak.
 72. **Complete bounded retrieval.** FD-88C directory continuation returns all

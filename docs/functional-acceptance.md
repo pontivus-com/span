@@ -113,7 +113,7 @@ partial V3 verification does not close them.
 | FA-67 | Document-only governed initialization | Pending — S-VERIFY-02 |
 | FA-68 | Strict preflight | Pending — S-INIT-01/02, S-VERIFY-02 |
 | FA-69 | Repeat and revise; authority-only delta effects | Pending — S-INIT-02/03, S-VERIFY-02 |
-| FA-70 | Ownership, existing-binding reuse and durable interruption recovery | Pending — S-INIT-02/03, S-VERIFY-02 |
+| FA-70 | Exclusive administrative ownership, existing-binding reuse and durable interruption recovery | Pending — S-INIT-02/03, S-VERIFY-02 |
 | FA-71 | Public findings | Pending — S-PUBLIC-01 |
 | FA-72 | Complete bounded retrieval | Pending — S-PUBLIC-02 |
 The matrix names enforcement boundaries; the CI execution receipt remains the
