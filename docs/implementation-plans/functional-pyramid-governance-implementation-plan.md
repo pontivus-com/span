@@ -41,6 +41,14 @@ The governing documents are amended in the same Git change as this plan. Before 
 
 ### S-INIT-01 — Complete one strict classification ingress and pure derivation
 
+**Single ingress correction:** the earlier flat own-repository-only classification
+could not express the existing FD-66 shared-document placement capability.
+The sole classification grammar now includes exact declaring/owning repository
+coordinates and resolves parent placements by both. Do not introduce a raw
+bootstrap or manual initial activation alternative. Preserve the existing V3
+resolver and canonical authority identity. The new cross-repository ingress
+tests require executable verification.
+
 **Execution state:** strict classification row/JSON ingress, canonical governing
 order and all-excluded-member rejection implemented in the existing core owner.
 Focused Actions verification for `5c3ef93062a2`: 43 tests and 30 subtests passed;

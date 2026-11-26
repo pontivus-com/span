@@ -615,17 +615,24 @@ L16)*
 
 **FD-88A — Governed initialization establishes the Functional Pyramid from the
 repository-supplied input.**
-Decode the complete member set under lifecycle §7.1. Rows are unique per
-canonical document. A document whose statements span several layers or scopes
-is split or extracted by its owner before it can be classified. Reject unknown,
-ambiguous, incomplete, conflicting or unreadable inputs; never infer missing
-semantic or authority decisions. Resolve each governing identity against exactly
-one placed document in the complete explicitly selected member set. Every
-selected member must satisfy FD-66/FD-86, including a member with no place rows.
+Decode the complete member set under lifecycle §7.1 through the sole governed
+initialization ingress. Rows are unique per declaring repository and canonical
+document identity (FD-66). The declaring repository is the file's selected member;
+the canonical document owner may be another selected member. Shared documents
+may have one placement per declaring repository, with one consistent authority
+kind/status for their canonical document identity. A document whose statements
+span several layers or scopes within one declaring repository is split or
+extracted by its owner before classification. Reject unknown, ambiguous,
+incomplete, conflicting or unreadable inputs; never infer missing semantic or
+authority decisions. Resolve each governing reference against exactly one
+declaring-repository/document pair across the complete selected member set.
+Every selected member must satisfy FD-66/FD-86, including a member with no place
+rows. The single JSON ingress must express existing shared placements; a raw
+declaration or manual activation path is not an alternative initializer.
 
 Derive repository-kind and area-kind sources, document membership, one
 placement per document, governing coordinates, ordering, one whole-document
-authority binding per placement and exact navigation/member-intent references.
+authority binding per distinct placed canonical document and exact navigation/member-intent references.
 For a newly derived binding use the document's repository and locator, no
 section/span, the supplied kind/status, empty applicability and no declared
 precedence. A unique existing whole-document binding that already satisfies

@@ -647,19 +647,26 @@ def _classification_row(
     document_ref: str,
     layer: m.FunctionalPyramidLayer | None,
     scope: str | None,
-    *governing: m.FunctionalDocumentIdentity | str,
+    *governing: m.FunctionalDocumentIdentity | tuple[str, m.FunctionalDocumentIdentity] | str,
     disposition: m.FunctionalPyramidClassificationDisposition = (
         m.FunctionalPyramidClassificationDisposition.PLACE
     ),
     reason: str | None = None,
+    declaring_repository_id: str | None = None,
 ) -> m.FunctionalPyramidClassificationRow:
     return m.FunctionalPyramidClassificationRow(
+        declaring_repository_id=declaring_repository_id or repository_id,
         repository_id=repository_id,
         document_ref=document_ref,
         disposition=disposition,
         layer=layer,
         scope=scope,
-        governing_documents=tuple(governing),
+        governing_documents=tuple(
+            (parent.repository_id, parent)
+            if isinstance(parent, m.FunctionalDocumentIdentity)
+            else parent
+            for parent in governing
+        ),
         exclusion_reason=reason,
         authority_kind=(
             m.AuthorityKind.REPOSITORY_RULE
@@ -738,7 +745,7 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
             derivation.exclusions,
             (
                 m.FunctionalPyramidClassificationExclusion(
-                    "repo-a", "docs/legacy.md", "superseded"
+                    "repo-a", "repo-a", "docs/legacy.md", "superseded"
                 ),
             ),
         )
@@ -976,6 +983,38 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
             (),
         )
 
+    def test_shared_document_placement_preserves_declaring_identity(self) -> None:
+        shared = m.FunctionalDocumentIdentity("repo-b", "docs/goals.md")
+        root = _classification_row(
+            "repo-b", "docs/goals.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
+        )
+        adopted = _classification_row(
+            "repo-b", "docs/goals.md", m.FunctionalPyramidLayer.P0, ".", "ROOT",
+            declaring_repository_id="repo-a",
+        )
+        child = _classification_row(
+            "repo-b", "docs/invariants.md", m.FunctionalPyramidLayer.P1, ".",
+            ("repo-a", shared), declaring_repository_id="repo-a",
+        )
+        classification = m.FunctionalPyramidClassification(rows=(root, adopted, child))
+        result = fp.derive_functional_pyramid_declarations(classification)
+        first = result.declarations[0][1]
+        self.assertEqual(first.placements[0].placement.declaring_repository_id, "repo-a")
+        self.assertEqual(first.placements[0].placement.document.identity, shared)
+        self.assertEqual(first.placements[1].governing_placements, (first.placements[0].placement,))
+        self.assertEqual(fp.evaluate_functional_pyramid_source_structure(result.declarations), ())
+        bindings, owned = fp.reconcile_functional_pyramid_bindings(
+            classification,
+            fingerprints={
+                shared: "live",
+                m.FunctionalDocumentIdentity("repo-b", "docs/invariants.md"): "live",
+            },
+            registered=(),
+            previously_owned=(),
+        )
+        self.assertEqual(len(bindings), 2)
+        self.assertEqual(bindings, owned)
+
     def test_derived_source_bytes_round_trip_and_are_content_addressed(self) -> None:
         derivation = fp.derive_functional_pyramid_declarations(
             m.FunctionalPyramidClassification(rows=self._rows())
@@ -1072,6 +1111,7 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
 
     def test_strict_classification_document(self) -> None:
         root: dict[str, object] = {
+            "declaring_repository_id": "repo-a",
             "repository_id": "repo-a",
             "document_ref": "docs/goals.md",
             "disposition": "place",
@@ -1082,6 +1122,7 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
             "authority_status": "DRAFT",
         }
         exclusion: dict[str, object] = {
+            "declaring_repository_id": "repo-a",
             "repository_id": "repo-a",
             "document_ref": "docs/legacy.md",
             "disposition": "exclude",
@@ -1105,7 +1146,7 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
             ([root], 1.0),
             ([root, root], 1),
             ([{**root, "governing_documents": []}], 1),
-            ([{**root, "repository_id": "repo-b"}], 1),
+            ([{**root, "declaring_repository_id": "repo-b"}], 1),
             ([{**root, "authority_kind": "unknown"}], 1),
             ([{**root, "authority_status": None}], 1),
             ([{**root, "extra": True}], 1),

@@ -1007,6 +1007,7 @@ grammar is:
   "version": 1,
   "rows": [
     {
+      "declaring_repository_id": "repo-a",
       "repository_id": "repo-a",
       "document_ref": "docs/goals.md",
       "disposition": "place",
@@ -1017,18 +1018,20 @@ grammar is:
       "authority_status": "ACCEPTED"
     },
     {
+      "declaring_repository_id": "repo-a",
       "repository_id": "repo-a",
       "document_ref": "docs/invariants.md",
       "disposition": "place",
       "layer": "P1",
       "scope": ".",
       "governing_documents": [
-        {"repository_id": "repo-a", "document_ref": "docs/goals.md"}
+        {"declaring_repository_id": "repo-a", "repository_id": "repo-a", "document_ref": "docs/goals.md"}
       ],
       "authority_kind": "REPOSITORY_RULE",
       "authority_status": "ACCEPTED"
     },
     {
+      "declaring_repository_id": "repo-a",
       "repository_id": "repo-a",
       "document_ref": "docs/legacy.md",
       "disposition": "exclude",
@@ -1038,23 +1041,29 @@ grammar is:
 }
 ```
 
-A place row has exactly `repository_id`, `document_ref`, `disposition`, `layer`,
-`scope`, `governing_documents`, `authority_kind` and `authority_status`. An
-exclude row has exactly `repository_id`, `document_ref`, `disposition` and
-`exclusion_reason`. The top level has exactly `version` and `rows`; unknown
-fields, an unsupported version, non-canonical paths or scopes, duplicate
-documents and mixed place/exclude fields fail. `governing_documents` contains
-`"ROOT"` only for a P0 row, or document identity objects. A non-P0 row has at
-least one governing document and no `ROOT`.
+A place row has exactly `declaring_repository_id`, `repository_id`,
+`document_ref`, `disposition`, `layer`, `scope`, `governing_documents`,
+`authority_kind` and `authority_status`. An exclude row has exactly
+`declaring_repository_id`, `repository_id`, `document_ref`, `disposition`
+and `exclusion_reason`. The top level has exactly `version` and `rows`;
+unknown fields, unsupported versions, non-canonical paths/scopes, duplicate
+declaring-repository/document pairs and mixed place/exclude fields fail.
+`declaring_repository_id` equals the classification's mapped member;
+`repository_id` is the canonical document owner, also a selected member.
+`governing_documents` contains `"ROOT"` only for a P0 row, or objects with
+exactly the declaring repository, owning repository and document locator fields.
+A non-P0 row has at least one governing reference and no `ROOT`.
 
-The flat import places a document in its owning repository. Cross-repository
-*placement* remains a Version-3 source capability outside this ingress; the
-current corpus places each document in its own repository. Cross-repository
-*governing* is supported: the materialiser loads the complete selected member
-set, builds one identity index across the member files, and resolves each
-governing identity across repositories. A governing identity that does not
-resolve to exactly one place row in the selected member set fails before any
-write.
+The one import supports both shared-document placement and cross-repository
+governing edges without an alternative raw declaration input. Span loads the
+complete selected member set, indexes by declaring repository and canonical
+document identity, and resolves the exact parent placement before deriving
+its layer/scope coordinates. Repeated placements of the same document across
+declaring repositories must agree on the canonical authority kind/status.
+An exclusion is local to its declaring repository; a document placed elsewhere
+still requires its one canonical authority binding. No second grammar is
+accepted. A missing/ambiguous parent or conflicting authority decision fails
+before any write.
 
 Reuse `derive_functional_pyramid_declarations` in `src/span/core/functional_pyramid.py`
 and the canonical model in `src/span/core/model/classification.py`. Extend the

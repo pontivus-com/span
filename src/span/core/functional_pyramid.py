@@ -311,7 +311,9 @@ def decode_functional_pyramid_classification(
     raw = _require_json_object(value, frozenset({"version", "rows"}))
     if type(raw["version"]) is not int or raw["version"] != 1:
         raise ValueError("classification.version must be 1")
-    common = frozenset({"repository_id", "document_ref", "disposition"})
+    common = frozenset(
+        {"declaring_repository_id", "repository_id", "document_ref", "disposition"}
+    )
     rows: list[FunctionalPyramidClassificationRow] = []
     for item in _require_json_array(raw["rows"], "classification.rows"):
         if not isinstance(item, dict):
@@ -332,13 +334,17 @@ def decode_functional_pyramid_classification(
             }
         )
         row = _require_json_object(item, fields)
+        declaring = _require_json_string(
+            row["declaring_repository_id"], "row.declaring_repository_id"
+        )
         owner = _require_json_string(row["repository_id"], "row.repository_id")
-        if owner != repository_id:
-            raise ValueError("classification row repository identity mismatch")
+        if declaring != repository_id:
+            raise ValueError("classification row declaring repository identity mismatch")
         document = _require_json_string(row["document_ref"], "row.document_ref")
         if disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
             rows.append(
                 FunctionalPyramidClassificationRow(
+                    declaring_repository_id=declaring,
                     repository_id=owner,
                     document_ref=document,
                     disposition=disposition,
@@ -348,16 +354,27 @@ def decode_functional_pyramid_classification(
                 )
             )
             continue
-        parents: list[FunctionalDocumentIdentity | str] = []
+        parents: list[tuple[str, FunctionalDocumentIdentity] | str] = []
         for parent in _require_json_array(
             row["governing_documents"], "row.governing_documents"
         ):
             if isinstance(parent, str):
                 parents.append(parent)
             else:
-                parents.append(_decode_document_identity(parent))
+                coordinates = _require_json_object(
+                    parent,
+                    frozenset({"declaring_repository_id", "repository_id", "document_ref"}),
+                )
+                parents.append((
+                    _require_json_string(coordinates["declaring_repository_id"], "governing declaring repository"),
+                    _decode_document_identity({
+                        "repository_id": coordinates["repository_id"],
+                        "document_ref": coordinates["document_ref"],
+                    }),
+                ))
         rows.append(
             FunctionalPyramidClassificationRow(
+                declaring_repository_id=declaring,
                 repository_id=owner,
                 document_ref=document,
                 disposition=disposition,
@@ -493,23 +510,28 @@ def derive_functional_pyramid_declarations(
     identity, governing placement coordinates and ordering. Graph validity is
     evaluated separately through the source-set structural owner.
     """
-    placed: dict[FunctionalDocumentIdentity, FunctionalPyramidClassificationRow] = {}
+    placed: dict[
+        tuple[str, FunctionalDocumentIdentity], FunctionalPyramidClassificationRow
+    ] = {}
     exclusions: list[FunctionalPyramidClassificationExclusion] = []
     for row in classification.rows:
         if row.disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
             assert row.exclusion_reason is not None
             exclusions.append(
                 FunctionalPyramidClassificationExclusion(
+                    declaring_repository_id=row.declaring_repository_id,
                     repository_id=row.repository_id,
                     document_ref=row.document_ref,
                     reason=row.exclusion_reason,
                 )
             )
             continue
-        placed[FunctionalDocumentIdentity(row.repository_id, row.document_ref)] = row
+        placed[(row.declaring_repository_id, FunctionalDocumentIdentity(row.repository_id, row.document_ref))] = row
 
-    represented = {row.repository_id for row in classification.rows}
-    with_placements = {row.repository_id for row in placed.values()}
+    represented = {row.declaring_repository_id for row in classification.rows}
+    if any(row.repository_id not in represented for row in classification.rows):
+        raise ValueError("canonical document owner is outside the selected member set")
+    with_placements = {row.declaring_repository_id for row in placed.values()}
     missing = sorted(represented - with_placements)
     if missing:
         raise ValueError(
@@ -523,7 +545,7 @@ def derive_functional_pyramid_declarations(
         assert row.layer is not None
         assert row.scope is not None
         return FunctionalDocumentPlacement(
-            declaring_repository_id=row.repository_id,
+            declaring_repository_id=row.declaring_repository_id,
             document=FunctionalDocumentRef(
                 row.repository_id, row.document_ref, row.layer
             ),
@@ -544,7 +566,7 @@ def derive_functional_pyramid_declarations(
             except KeyError:
                 raise ValueError(
                     "governing document is not a placed document in this "
-                    f"classification: {parent.repository_id}:{parent.document_ref}"
+                    f"classification: {parent[0]}:{parent[1].repository_id}:{parent[1].document_ref}"
                 ) from None
             resolved.append(placement_for(parent_row))
         return tuple(sorted(resolved, key=_placement_sort_key))
@@ -552,7 +574,7 @@ def derive_functional_pyramid_declarations(
     grouped: dict[tuple[str, str], list[FunctionalPyramidClassificationRow]] = {}
     for row in placed.values():
         assert row.scope is not None
-        grouped.setdefault((row.repository_id, row.scope), []).append(row)
+        grouped.setdefault((row.declaring_repository_id, row.scope), []).append(row)
 
     declarations: list[tuple[str, FunctionalPyramidDeclaration]] = []
     for repository_id, scope in sorted(grouped):
@@ -568,10 +590,10 @@ def derive_functional_pyramid_declarations(
         documents = tuple(
             sorted(
                 (
-                    FunctionalDocumentIdentity(repository_id, row.document_ref)
+                    FunctionalDocumentIdentity(row.repository_id, row.document_ref)
                     for row in rows
                 ),
-                key=lambda identity: identity.document_ref,
+                key=lambda identity: (identity.repository_id, identity.document_ref),
             )
         )
         declarations.append(
@@ -597,6 +619,7 @@ def derive_functional_pyramid_declarations(
             sorted(
                 exclusions,
                 key=lambda exclusion: (
+                    exclusion.declaring_repository_id,
                     exclusion.repository_id,
                     exclusion.document_ref,
                 ),
@@ -791,10 +814,11 @@ def reconcile_functional_pyramid_bindings(
             raise ValueError("invalid Functional Pyramid binding ownership evidence")
         if key in current and current[key] != previous:
             raise ValueError("Functional Pyramid binding ownership conflict")
-    whole: dict[FunctionalDocumentIdentity, list[AuthorityBinding]] = {}
+    whole: dict[tuple[str, str], list[AuthorityBinding]] = {}
     for binding in registered:
         if binding.evidence_ref.section_or_span is None:
-            whole.setdefault(_binding_identity(binding), []).append(binding)
+            reference = binding.evidence_ref
+            whole.setdefault((reference.repository_id, reference.locator), []).append(binding)
     result = {key: value for key, value in current.items() if key not in old_owned}
     owned: dict[tuple[str, str], AuthorityBinding] = {}
     for row in classification.rows:
@@ -804,7 +828,7 @@ def reconcile_functional_pyramid_bindings(
             raise ValueError(f"classified document is unavailable: {document}")
         if row.disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
             continue
-        candidates = whole.get(document, [])
+        candidates = whole.get((document.repository_id, document.document_ref), [])
         if len(candidates) > 1:
             raise ValueError(f"competing whole-document authority bindings: {document}")
         existing = candidates[0] if candidates else None

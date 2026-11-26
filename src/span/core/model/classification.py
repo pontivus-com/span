@@ -41,17 +41,19 @@ class FunctionalPyramidClassificationDisposition(_enum.Enum):
 class FunctionalPyramidClassificationRow:
     """One document's owner-decided placement."""
 
+    declaring_repository_id: str
     repository_id: str
     document_ref: str
     disposition: FunctionalPyramidClassificationDisposition
     layer: FunctionalPyramidLayer | None = None
     scope: str | None = None
-    governing_documents: tuple[FunctionalDocumentIdentity | str, ...] = ()
+    governing_documents: tuple[tuple[str, FunctionalDocumentIdentity] | str, ...] = ()
     exclusion_reason: str | None = None
     authority_kind: AuthorityKind | None = None
     authority_status: AuthorityStatus | None = None
 
     def __post_init__(self) -> None:
+        _require_non_empty("declaring_repository_id", self.declaring_repository_id)
         identity = FunctionalDocumentIdentity(self.repository_id, self.document_ref)
         if not isinstance(self.disposition, FunctionalPyramidClassificationDisposition):
             raise ValueError("row.disposition is not a classification disposition")
@@ -90,9 +92,15 @@ class FunctionalPyramidClassificationRow:
             if isinstance(parent, str):
                 if parent != "ROOT":
                     raise ValueError("the only string governing terminal is ROOT")
-            elif not isinstance(parent, FunctionalDocumentIdentity):
-                raise ValueError("governing documents are document identities or ROOT")
-            elif parent == identity:
+            elif (
+                not isinstance(parent, tuple)
+                or len(parent) != 2
+                or not isinstance(parent[0], str)
+                or not parent[0]
+                or not isinstance(parent[1], FunctionalDocumentIdentity)
+            ):
+                raise ValueError("governing documents are declaring/document identities or ROOT")
+            elif parent == (self.declaring_repository_id, identity):
                 raise ValueError("a placement cannot govern itself")
         if len(set(governing)) != len(governing):
             raise ValueError("governing documents must be distinct")
@@ -109,11 +117,13 @@ class FunctionalPyramidClassificationRow:
 class FunctionalPyramidClassificationExclusion:
     """One explicit non-placement decision and its reason."""
 
+    declaring_repository_id: str
     repository_id: str
     document_ref: str
     reason: str
 
     def __post_init__(self) -> None:
+        _require_non_empty("declaring_repository_id", self.declaring_repository_id)
         FunctionalDocumentIdentity(self.repository_id, self.document_ref)
         _require_non_empty("exclusion.reason", self.reason)
 
@@ -142,6 +152,18 @@ class FunctionalPyramidClassification:
             raise ValueError("classification.version must be 1")
         if not self.rows:
             raise ValueError("classification requires at least one row")
-        identities = [(row.repository_id, row.document_ref) for row in self.rows]
+        identities = [
+            (row.declaring_repository_id, row.repository_id, row.document_ref)
+            for row in self.rows
+        ]
         if len(set(identities)) != len(identities):
-            raise ValueError("classification rows must be unique per document")
+            raise ValueError("classification rows must be unique per document in the declaring repository")
+        decisions: dict[FunctionalDocumentIdentity, tuple[AuthorityKind, AuthorityStatus]] = {}
+        for row in self.rows:
+            if row.disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
+                continue
+            assert row.authority_kind is not None and row.authority_status is not None
+            document = FunctionalDocumentIdentity(row.repository_id, row.document_ref)
+            decision = (row.authority_kind, row.authority_status)
+            if decisions.setdefault(document, decision) != decision:
+                raise ValueError("shared document has conflicting authority decisions")
