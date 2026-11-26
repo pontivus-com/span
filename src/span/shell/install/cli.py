@@ -924,17 +924,39 @@ def _execute(env: _Environment) -> None:
     prior_receipt = read_receipt(env.data_dir)
     prior = prior_receipt or {}
     mappings = args.functional_pyramid_classification_file
-    if governed.PENDING in prior and _mutating_invocation(env) and not mappings and args.restore_backup is None:
-        raise SystemExit("incomplete governed initialization; resume the same classification input or explicitly restore a verified backup")
-    if mappings and any((
-        args.list_orphans, args.backup, args.backup_repository,
-        args.load_repository_backup, args.reap_repository_backups,
-        args.restore_backup, args.reap_backups, args.verify_backup,
-        args.verify_repository_backup, args.transition_store, args.transition_phase,
-        args.transition_root, args.uninstall, args.purge, args.verify_only,
-        args.snapshot_census, args.compare_census,
-    )):
-        raise SystemExit("classification input belongs only to the governed install operation")
+    if (
+        governed.PENDING in prior
+        and _mutating_invocation(env)
+        and not mappings
+        and args.restore_backup is None
+    ):
+        raise SystemExit(
+            "incomplete governed initialization; resume the same classification input or explicitly restore a verified backup"
+        )
+    if mappings and any(
+        (
+            args.list_orphans,
+            args.backup,
+            args.backup_repository,
+            args.load_repository_backup,
+            args.reap_repository_backups,
+            args.restore_backup,
+            args.reap_backups,
+            args.verify_backup,
+            args.verify_repository_backup,
+            args.transition_store,
+            args.transition_phase,
+            args.transition_root,
+            args.uninstall,
+            args.purge,
+            args.verify_only,
+            args.snapshot_census,
+            args.compare_census,
+        )
+    ):
+        raise SystemExit(
+            "classification input belongs only to the governed install operation"
+        )
     if _run_one_shot(env):
         return
     pending = None
@@ -945,7 +967,9 @@ def _execute(env: _Environment) -> None:
                 env.data_dir, env.targets, mappings, args.authority_bindings_file, prior
             )
         except (OSError, ValueError, KeyError) as exc:
-            raise SystemExit(f"governed initialization preflight rejected: {exc}") from None
+            raise SystemExit(
+                f"governed initialization preflight rejected: {exc}"
+            ) from None
     elif governed.PENDING in prior:
         print("incomplete governed initialization; observation only")
     scope = None
@@ -957,8 +981,12 @@ def _execute(env: _Environment) -> None:
     state = _provision_runtime(env, prior, pending, artifacts)
     host_registration = _register_hosts(env, scope, prior_receipt)
     report = verify_installation(
-        state.venv_python, env.data_dir, env.targets, env.dry,
-        strict=pending is not None, pending_setup=pending is not None,
+        state.venv_python,
+        env.data_dir,
+        env.targets,
+        env.dry,
+        strict=pending is not None,
+        pending_setup=pending is not None,
     )
     receipt = _build_receipt(env, state, host_registration, report)
     if not env.dry:

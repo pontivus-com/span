@@ -31,9 +31,7 @@ def parse_args(argv=None):
         action="store_true",
         help="exit non-zero when structural or provenance acceptance fails",
     )
-    parser.add_argument(
-        "--pending-setup", action="store_true", help=argparse.SUPPRESS
-    )
+    parser.add_argument("--pending-setup", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
@@ -144,13 +142,15 @@ def main(argv=None):
             isinstance(pending_entries, dict)
             and set(pending_entries).issubset(roots_by_repository)
             and all(
-                repo["functional_pyramid"]["provenance"].get("state") == "PROVENANCE_MATCH"
+                repo["functional_pyramid"]["provenance"].get("state")
+                == "PROVENANCE_MATCH"
                 for repo in repos
                 if repo["functional_pyramid"]["repository_id"] in pending_entries
             )
         )
     acceptance_ok = (
-        pending_ok and bool(installation.get("ready"))
+        pending_ok
+        and bool(installation.get("ready"))
         and active.get("status") in ("valid", "not_active")
         and repositories_accept
     )

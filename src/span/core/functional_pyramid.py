@@ -339,7 +339,9 @@ def decode_functional_pyramid_classification(
         )
         owner = _require_json_string(row["repository_id"], "row.repository_id")
         if declaring != repository_id:
-            raise ValueError("classification row declaring repository identity mismatch")
+            raise ValueError(
+                "classification row declaring repository identity mismatch"
+            )
         document = _require_json_string(row["document_ref"], "row.document_ref")
         if disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
             rows.append(
@@ -363,15 +365,24 @@ def decode_functional_pyramid_classification(
             else:
                 coordinates = _require_json_object(
                     parent,
-                    frozenset({"declaring_repository_id", "repository_id", "document_ref"}),
+                    frozenset(
+                        {"declaring_repository_id", "repository_id", "document_ref"}
+                    ),
                 )
-                parents.append((
-                    _require_json_string(coordinates["declaring_repository_id"], "governing declaring repository"),
-                    _decode_document_identity({
-                        "repository_id": coordinates["repository_id"],
-                        "document_ref": coordinates["document_ref"],
-                    }),
-                ))
+                parents.append(
+                    (
+                        _require_json_string(
+                            coordinates["declaring_repository_id"],
+                            "governing declaring repository",
+                        ),
+                        _decode_document_identity(
+                            {
+                                "repository_id": coordinates["repository_id"],
+                                "document_ref": coordinates["document_ref"],
+                            }
+                        ),
+                    )
+                )
         rows.append(
             FunctionalPyramidClassificationRow(
                 declaring_repository_id=declaring,
@@ -526,7 +537,12 @@ def derive_functional_pyramid_declarations(
                 )
             )
             continue
-        placed[(row.declaring_repository_id, FunctionalDocumentIdentity(row.repository_id, row.document_ref))] = row
+        placed[
+            (
+                row.declaring_repository_id,
+                FunctionalDocumentIdentity(row.repository_id, row.document_ref),
+            )
+        ] = row
 
     represented = {row.declaring_repository_id for row in classification.rows}
     if any(row.repository_id not in represented for row in classification.rows):
@@ -818,7 +834,9 @@ def reconcile_functional_pyramid_bindings(
     for binding in registered:
         if binding.evidence_ref.section_or_span is None:
             reference = binding.evidence_ref
-            whole.setdefault((reference.repository_id, reference.locator), []).append(binding)
+            whole.setdefault((reference.repository_id, reference.locator), []).append(
+                binding
+            )
     result = {key: value for key, value in current.items() if key not in old_owned}
     owned: dict[tuple[str, str], AuthorityBinding] = {}
     for row in classification.rows:

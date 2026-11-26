@@ -3,22 +3,28 @@
 No second setup store or writer: all pending data is administrative provenance
 in install.json. The canonical participation service remains the only writer.
 """
+
 from __future__ import annotations
 
 import contextlib
 import hashlib
 import json
 import typing
-import uuid
 from pathlib import Path
 
 from span.shell.install.constants import INSTALL_VERSION
 from span.shell.install.preflight import _repository_mapping
-from span.shell.install.receipt import publish_install_bytes, read_receipt, write_receipt
+from span.shell.install.receipt import (
+    publish_install_bytes,
+    read_receipt,
+    write_receipt,
+)
 
 if typing.TYPE_CHECKING:
     from span.core import model as m
-    from span.shell.sqlite_store.functional_pyramid import FunctionalPyramidInstallationStore
+    from span.shell.sqlite_store.functional_pyramid import (
+        FunctionalPyramidInstallationStore,
+    )
 
 PENDING = "pending_governed_initialization"
 ACCEPTED = "governed_initialization"
@@ -77,7 +83,9 @@ def _bindings(data_dir: Path, repository_id: str) -> tuple[m.AuthorityBinding, .
 
 
 @contextlib.contextmanager
-def _state(data_dir: Path) -> typing.Iterator[FunctionalPyramidInstallationStore | None]:
+def _state(
+    data_dir: Path,
+) -> typing.Iterator[FunctionalPyramidInstallationStore | None]:
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.functional_pyramid import (
         FunctionalPyramidInstallationStore,
@@ -88,9 +96,11 @@ def _state(data_dir: Path) -> typing.Iterator[FunctionalPyramidInstallationStore
     if not path.exists():
         yield None
         return
-    with contextlib.closing(FunctionalPyramidInstallationStore(
-        path, retention=DEFAULT_LIFECYCLE_RETENTION, read_only=True
-    )) as state:
+    with contextlib.closing(
+        FunctionalPyramidInstallationStore(
+            path, retention=DEFAULT_LIFECYCLE_RETENTION, read_only=True
+        )
+    ) as state:
         yield state
 
 
@@ -108,8 +118,12 @@ def _artifact_path(root: Path, locator: str) -> Path:
 
 
 def _inspect_artifact(
-    root: Path, locator: str, digest: str, known: dict[str, object],
-    *, recovering: bool = False,
+    root: Path,
+    locator: str,
+    digest: str,
+    known: dict[str, object],
+    *,
+    recovering: bool = False,
 ) -> None:
     path = _artifact_path(root, locator)
     if not path.exists():
@@ -121,9 +135,11 @@ def _inspect_artifact(
         raise ValueError(f"immutable generated declaration collision: {path}")
 
 
-def _classify(
-    roots: dict[str, Path], mapped: dict[str, str]
-) -> tuple[m.FunctionalPyramidClassification, dict[str, dict[str, object]], dict[m.FunctionalDocumentIdentity, str]]:
+def _classify(roots: dict[str, Path], mapped: dict[str, str]) -> tuple[
+    m.FunctionalPyramidClassification,
+    dict[str, dict[str, object]],
+    dict[m.FunctionalDocumentIdentity, str],
+]:
     from span.core import functional_pyramid as fp
     from span.core import model as m
     from span.shell.filesystem_evidence import FilesystemEvidenceSource
@@ -146,17 +162,26 @@ def _classify(
     fingerprints: dict[m.FunctionalDocumentIdentity, str] = {}
     for row in combined.rows:
         if row.repository_id not in mapped:
-            raise ValueError("canonical document owner is not a selected governed member")
+            raise ValueError(
+                "canonical document owner is not a selected governed member"
+            )
         identity = m.FunctionalDocumentIdentity(row.repository_id, row.document_ref)
         if identity not in fingerprints:
-            source = FilesystemEvidenceSource(row.repository_id, str(roots[row.repository_id]))
-            result = source.read_exact(row.repository_id, m.EvidenceRequest(row.document_ref), None)
+            source = FilesystemEvidenceSource(
+                row.repository_id, str(roots[row.repository_id])
+            )
+            result = source.read_exact(
+                row.repository_id, m.EvidenceRequest(row.document_ref), None
+            )
             if isinstance(result, m.EvidenceSourceFailure):
                 raise ValueError(f"classified document unavailable: {identity}")
             fingerprints[identity] = result.content_fingerprint
         if row.scope is not None:
             scope = (roots[row.declaring_repository_id] / row.scope).resolve()
-            if not scope.is_relative_to(roots[row.declaring_repository_id]) or not scope.is_dir():
+            if (
+                not scope.is_relative_to(roots[row.declaring_repository_id])
+                or not scope.is_dir()
+            ):
                 raise ValueError(f"declared directory unavailable: {scope}")
     return combined, entries, fingerprints
 
@@ -170,13 +195,21 @@ def _artifacts(
     derived = fp.derive_functional_pyramid_declarations(classification)
     members = fp.derive_functional_pyramid_member_intents(derived)
     artifacts = {
-        (repository_id, fp.functional_pyramid_declaration_request(repository_id, declaration).locator):
-        fp.encode_functional_pyramid_declaration(repository_id, declaration)
+        (
+            repository_id,
+            fp.functional_pyramid_declaration_request(
+                repository_id, declaration
+            ).locator,
+        ): fp.encode_functional_pyramid_declaration(repository_id, declaration)
         for repository_id, declaration in derived.declarations
     }
     for member in members:
-        artifacts[(member.repository_id, BOOTSTRAP)] = fp.encode_functional_pyramid_bootstrap(
-            m.FunctionalPyramidBootstrap(version=2, declaration_sources=member.declaration_sources)
+        artifacts[(member.repository_id, BOOTSTRAP)] = (
+            fp.encode_functional_pyramid_bootstrap(
+                m.FunctionalPyramidBootstrap(
+                    version=2, declaration_sources=member.declaration_sources
+                )
+            )
         )
     return members, artifacts
 
@@ -203,12 +236,20 @@ def _configuration(
             saved = _object(_object(pending["repositories"])[repository_id])
             old.extend(_canonical_bindings(saved["previous_bindings"]))
     bindings, newly_owned = fp.reconcile_functional_pyramid_bindings(
-        classification, fingerprints=fingerprints,
-        registered=tuple(old), previously_owned=tuple(owned),
+        classification,
+        fingerprints=fingerprints,
+        registered=tuple(old),
+        previously_owned=tuple(owned),
     )
     for repository_id, entry in entries.items():
+
         def selected(items: typing.Iterable[m.AuthorityBinding]) -> list[object]:
-            return [m.to_canonical(binding) for binding in items if binding.evidence_ref.repository_id == repository_id]
+            return [
+                m.to_canonical(binding)
+                for binding in items
+                if binding.evidence_ref.repository_id == repository_id
+            ]
+
         entry["previous_bindings"] = selected(old)
         entry["bindings"] = selected(bindings)
         entry["owned_bindings"] = selected(newly_owned)
@@ -235,14 +276,23 @@ def _action(
 
     selected = {member.repository_id for member in members}
     with _state(data_dir) as state:
-        active = set() if state is None else {
-            pyramid_id for repository_id in selected
-            if (pyramid_id := state.active_pyramid_id(repository_id)) is not None
-        }
+        active = (
+            set()
+            if state is None
+            else {
+                pyramid_id
+                for repository_id in selected
+                if (pyramid_id := state.active_pyramid_id(repository_id)) is not None
+            }
+        )
         if not active:
-            return m.FunctionalPyramidCandidateSelector(
-                action=m.FunctionalPyramidAction.ACTIVATE, members=members
-            ), None, None
+            return (
+                m.FunctionalPyramidCandidateSelector(
+                    action=m.FunctionalPyramidAction.ACTIVATE, members=members
+                ),
+                None,
+                None,
+            )
         if len(active) != 1 or state is None:
             raise ValueError("governed initialization cannot merge active instances")
         pyramid_id = next(iter(active))
@@ -251,42 +301,63 @@ def _action(
         assert version is not None
         retained = state.pyramid_members(pyramid_id, version)
         if {item.repository_id for item in retained} != selected:
-            raise ValueError("governed initialization requires the complete active member set")
+            raise ValueError(
+                "governed initialization requires the complete active member set"
+            )
         retained_refs = {
             (member.repository_id, ref.locator): ref.revision_or_fingerprint
-            for member in retained for ref in member.declaration_refs
+            for member in retained
+            for ref in member.declaration_refs
         }
         intended_refs = {
-            (member.repository_id, request.locator):
-            _object(entries[member.repository_id]["artifacts"])[request.locator]
-            for member in members for request in member.declaration_sources
+            (member.repository_id, request.locator): _object(
+                entries[member.repository_id]["artifacts"]
+            )[request.locator]
+            for member in members
+            for request in member.declaration_sources
         }
         changed = any(
-            set(_canonical_bindings(entry["previous_bindings"])) !=
-            set(_canonical_bindings(entry["bindings"]))
+            set(_canonical_bindings(entry["previous_bindings"]))
+            != set(_canonical_bindings(entry["bindings"]))
             for entry in entries.values()
         )
         if retained_refs == intended_refs and not changed:
             return None, pyramid_id.value, version.value
-        return m.FunctionalPyramidCandidateSelector(
-            action=m.FunctionalPyramidAction.REVISE,
-            members=members, pyramid_id=pyramid_id, expected_version=version,
-        ), pyramid_id.value, version.value
+        return (
+            m.FunctionalPyramidCandidateSelector(
+                action=m.FunctionalPyramidAction.REVISE,
+                members=members,
+                pyramid_id=pyramid_id,
+                expected_version=version,
+            ),
+            pyramid_id.value,
+            version.value,
+        )
 
 
 def prepare(
-    data_dir: Path, targets: tuple[Path, ...], mappings: list[list[str]],
-    binding_files: list[list[str]], prior: dict[str, object],
+    data_dir: Path,
+    targets: tuple[Path, ...],
+    mappings: list[list[str]],
+    binding_files: list[list[str]],
+    prior: dict[str, object],
 ) -> tuple[dict[str, object], dict[tuple[str, str], bytes]]:
+    import uuid
     """Validate exact input and recoverable intent before any setup mutation."""
     from span.core import model as m
 
     roots = {target.name: target for target in targets}
     if len(roots) != len(targets):
         raise ValueError("selected repositories must have distinct identities")
-    mapped = _repository_mapping(mappings, selected_repository_ids=set(roots), label="Functional Pyramid classification")
+    mapped = _repository_mapping(
+        mappings,
+        selected_repository_ids=set(roots),
+        label="Functional Pyramid classification",
+    )
     if any(repository_id in mapped for repository_id, _ in binding_files):
-        raise ValueError("competing ordinary authority binding input for governed member")
+        raise ValueError(
+            "competing ordinary authority binding input for governed member"
+        )
     registered = _existing_roots(data_dir)
     for repository_id, root in roots.items():
         if repository_id in registered and registered[repository_id] != str(root):
@@ -298,36 +369,50 @@ def prepare(
     members, artifacts = _artifacts(classification)
     _configuration(data_dir, entries, classification, fingerprints, accepted, pending)
     for repository_id, entry in entries.items():
-        known = _object(_object(accepted.get(repository_id, {})).get("owned_artifacts", {}))
-        planned = {locator: _digest(data) for (owner, locator), data in artifacts.items() if owner == repository_id}
+        known = _object(
+            _object(accepted.get(repository_id, {})).get("owned_artifacts", {})
+        )
+        planned = {
+            locator: _digest(data)
+            for (owner, locator), data in artifacts.items()
+            if owner == repository_id
+        }
         if pending is not None:
             saved = _object(_object(pending["repositories"])[repository_id])
             if saved.get("artifacts") != planned:
                 raise ValueError("recovery conflict: derived artifacts differ")
         for locator, digest in planned.items():
             _inspect_artifact(
-                roots[repository_id], locator, digest, known,
+                roots[repository_id],
+                locator,
+                digest,
+                known,
                 recovering=pending is not None,
             )
         entry["artifacts"] = planned
         entry["prior_artifacts"] = known
         entry["owned_artifacts"] = {**known, **planned}
     if pending is not None:
-        if pending.get("repositories") != entries or pending.get("members") != m.to_canonical(members):
+        if pending.get("repositories") != entries or pending.get(
+            "members"
+        ) != m.to_canonical(members):
             raise ValueError("recovery conflict: pending governed input differs")
         _check_pending_participation(data_dir, pending, members)
         return pending, artifacts
     candidate, pyramid_id, version = _action(data_dir, members, entries)
     return {
-        "repositories": entries, "members": m.to_canonical(members),
+        "repositories": entries,
+        "members": m.to_canonical(members),
         "candidate": m.to_canonical(candidate),
         "request_id": f"governed:{uuid.uuid4().hex}" if candidate is not None else None,
-        "prior_pyramid_id": pyramid_id, "prior_version": version,
+        "prior_pyramid_id": pyramid_id,
+        "prior_version": version,
     }, artifacts
 
 
 def _check_pending_participation(
-    data_dir: Path, pending: dict[str, object],
+    data_dir: Path,
+    pending: dict[str, object],
     members: tuple[m.FunctionalPyramidMemberIntent, ...],
 ) -> None:
     from span.core import model as m
@@ -345,10 +430,13 @@ def _check_pending_participation(
         if accepted is not None:
             if accepted.pyramid_id is None or accepted.version is None:
                 raise ValueError("recovery conflict: invalid accepted participation")
-            expected_id, expected_version = accepted.pyramid_id.value, accepted.version.value
+            expected_id, expected_version = (
+                accepted.pyramid_id.value,
+                accepted.version.value,
+            )
             if {member.repository_id for member in accepted.members} != selected:
                 raise ValueError("recovery conflict: accepted membership differs")
-        elif pending.get("accepted_pyramid_id") is not None:
+        elif request_id is not None and pending.get("accepted_pyramid_id") is not None:
             raise ValueError("recovery conflict: accepted receipt unavailable")
         if state is None:
             if expected_id is not None:
@@ -362,24 +450,35 @@ def _check_pending_participation(
                 version = state.pyramid_version(actual)
                 if version is None or version.value != expected_version:
                     raise ValueError("recovery conflict: participation version changed")
-                if {member.repository_id for member in state.pyramid_members(actual, version)} != selected:
+                if {
+                    member.repository_id
+                    for member in state.pyramid_members(actual, version)
+                } != selected:
                     raise ValueError("recovery conflict: membership changed")
 
 
 def retain_pending(
-    data_dir: Path, prior: dict[str, object], pending: dict[str, object], backup: str | None
+    data_dir: Path,
+    prior: dict[str, object],
+    pending: dict[str, object],
+    backup: str | None,
 ) -> None:
     if PENDING not in prior:
         pending["backup"] = backup
     receipt = {
-        "install_version": INSTALL_VERSION, "repos": [], "host_registration": {},
-        **prior, PENDING: pending,
+        "install_version": INSTALL_VERSION,
+        "repos": [],
+        "host_registration": {},
+        **prior,
+        PENDING: pending,
     }
     write_receipt(data_dir, receipt)
 
 
 def publish(
-    pending: dict[str, object], artifacts: dict[tuple[str, str], bytes], *,
+    pending: dict[str, object],
+    artifacts: dict[tuple[str, str], bytes],
+    *,
     bootstrap: bool,
 ) -> None:
     for (repository_id, locator), data in sorted(artifacts.items()):
@@ -388,7 +487,10 @@ def publish(
         entry = _object(_object(pending["repositories"])[repository_id])
         root = Path(_string(entry["root"]))
         _inspect_artifact(
-            root, locator, _digest(data), _object(entry["prior_artifacts"]),
+            root,
+            locator,
+            _digest(data),
+            _object(entry["prior_artifacts"]),
             recovering=True,
         )
         path = _artifact_path(root, locator)
@@ -397,7 +499,9 @@ def publish(
         publish_install_bytes(path, data, replace=bootstrap and path.exists())
 
 
-def bindings_for(pending: dict[str, object]) -> dict[str, tuple[m.AuthorityBinding, ...]]:
+def bindings_for(
+    pending: dict[str, object],
+) -> dict[str, tuple[m.AuthorityBinding, ...]]:
     return {
         repository_id: _canonical_bindings(_object(entry)["bindings"])
         for repository_id, entry in _object(pending["repositories"]).items()
@@ -412,7 +516,16 @@ def _changed_authorities(pending: dict[str, object]) -> tuple[m.EvidenceRef, ...
         old = set(_canonical_bindings(item["previous_bindings"]))
         new = set(_canonical_bindings(item["bindings"]))
         refs.update(binding.evidence_ref for binding in old ^ new)
-    return tuple(sorted(refs, key=lambda ref: (ref.repository_id, ref.evidence_id.value, ref.revision_or_fingerprint or "")))
+    return tuple(
+        sorted(
+            refs,
+            key=lambda ref: (
+                ref.repository_id,
+                ref.evidence_id.value,
+                ref.revision_or_fingerprint or "",
+            ),
+        )
+    )
 
 
 def establish(data_dir: Path, pending: dict[str, object]) -> None:
@@ -420,11 +533,15 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
     from span.core import model as m
     from span.shell.installation_runtime import open_installation_runtime
 
-    members = tuple(m.from_canonical(m.FunctionalPyramidMemberIntent, item) for item in _array(pending["members"]))
+    members = tuple(
+        m.from_canonical(m.FunctionalPyramidMemberIntent, item)
+        for item in _array(pending["members"])
+    )
     roots = _existing_roots(data_dir)
     raw = pending["candidate"]
     with open_installation_runtime(
-        data_dir, repository_locator=roots.__getitem__,
+        data_dir,
+        repository_locator=roots.__getitem__,
         registered_repository_ids=lambda: tuple(sorted(roots)),
     ) as runtime:
         service = runtime.functional_pyramid
@@ -440,12 +557,22 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
                     raise ValueError(f"governed candidate rejected: {validation}")
             else:
                 for member in members:
-                    status = service.status(m.FunctionalPyramidSelector(repository_id=member.repository_id))
-                    if status.pyramid_id != existing.pyramid_id or status.version != existing.version:
-                        raise ValueError("recovery conflict: accepted participation changed")
+                    status = service.status(
+                        m.FunctionalPyramidSelector(repository_id=member.repository_id)
+                    )
+                    if (
+                        status.pyramid_id != existing.pyramid_id
+                        or status.version != existing.version
+                    ):
+                        raise ValueError(
+                            "recovery conflict: accepted participation changed"
+                        )
             recorded = service.record(
-                request_id=request_id, action=candidate.action, members=candidate.members,
-                pyramid_id=candidate.pyramid_id, expected_version=candidate.expected_version,
+                request_id=request_id,
+                action=candidate.action,
+                members=candidate.members,
+                pyramid_id=candidate.pyramid_id,
+                expected_version=candidate.expected_version,
                 changed_authority_refs=_changed_authorities(pending),
             )
             pyramid_id, version = recorded.pyramid_id, recorded.version
@@ -457,12 +584,30 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
             if type(prior_version) is not int:
                 raise ValueError("invalid pending participation version")
             version = m.FunctionalPyramidVersion(prior_version)
-        expected = {(member.repository_id, request.locator) for member in members for request in member.declaration_sources}
+        expected = {
+            (member.repository_id, request.locator)
+            for member in members
+            for request in member.declaration_sources
+        }
         for member in members:
-            status = service.status(m.FunctionalPyramidSelector(repository_id=member.repository_id))
-            actual = {(item.repository_id, ref.locator) for item in status.members for ref in item.declaration_refs}
-            if status.state is not m.FunctionalPyramidParticipationState.ACTIVE or status.health is not m.FunctionalPyramidHealth.VALID or status.pyramid_id != pyramid_id or status.version != version or expected != actual:
-                raise ValueError(f"governed participation verification failed: {member.repository_id}")
+            status = service.status(
+                m.FunctionalPyramidSelector(repository_id=member.repository_id)
+            )
+            actual = {
+                (item.repository_id, ref.locator)
+                for item in status.members
+                for ref in item.declaration_refs
+            }
+            if (
+                status.state is not m.FunctionalPyramidParticipationState.ACTIVE
+                or status.health is not m.FunctionalPyramidHealth.VALID
+                or status.pyramid_id != pyramid_id
+                or status.version != version
+                or expected != actual
+            ):
+                raise ValueError(
+                    f"governed participation verification failed: {member.repository_id}"
+                )
         assert pyramid_id is not None and version is not None
         pending["accepted_pyramid_id"] = pyramid_id.value
         pending["accepted_version"] = version.value
@@ -472,7 +617,11 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
     write_receipt(data_dir, {**prior, PENDING: pending})
 
 
-def finalize(receipt: dict[str, object], prior: dict[str, object], pending: dict[str, object] | None) -> None:
+def finalize(
+    receipt: dict[str, object],
+    prior: dict[str, object],
+    pending: dict[str, object] | None,
+) -> None:
     """Promote verified administrative provenance, preserving historical ownership."""
     accepted = _object(prior.get(ACCEPTED, {}))
     if pending is not None:

@@ -54,6 +54,7 @@ _REPO_FILES = {
     + "\n",
 }
 
+
 def _classification_file(declaring, area):
     def identity(locator):
         return {
@@ -69,20 +70,28 @@ def _classification_file(declaring, area):
         ("P2S", "rules/p2s.md", area, "rules/p1.md"),
         ("P2W", "rules/p2w.md", area, "rules/p2s.md"),
     ):
-        rows.append({
-            **identity(locator),
-            "disposition": "place",
-            "layer": layer,
-            "scope": scope,
-            "governing_documents": ["ROOT"] if parent is None else [identity(parent)],
-            "authority_kind": "CONTRACT_SPECIFICATION" if layer == "P2S" else "REPOSITORY_RULE",
-            "authority_status": "ACCEPTED",
-        })
-    rows.append({
-        **identity("rules/p0-v2.md"),
-        "disposition": "exclude",
-        "exclusion_reason": "not yet adopted",
-    })
+        rows.append(
+            {
+                **identity(locator),
+                "disposition": "place",
+                "layer": layer,
+                "scope": scope,
+                "governing_documents": (
+                    ["ROOT"] if parent is None else [identity(parent)]
+                ),
+                "authority_kind": (
+                    "CONTRACT_SPECIFICATION" if layer == "P2S" else "REPOSITORY_RULE"
+                ),
+                "authority_status": "ACCEPTED",
+            }
+        )
+    rows.append(
+        {
+            **identity("rules/p0-v2.md"),
+            "disposition": "exclude",
+            "exclusion_reason": "not yet adopted",
+        }
+    )
     return _json.dumps({"version": 1, "rows": rows}, sort_keys=True) + "\n"
 
 
@@ -435,16 +444,30 @@ dispose();
         env["XDG_CONFIG_HOME"] = str(runtime_root / "config")
         ordinary = [
             str(install_exe),
-            "--repo", str(repo_a), "--repo", str(repo_b),
-            "--data-dir", str(data_dir),
-            "--venv-dir", str(venv_dir),
-            "--bin-dir", str(bin_dir),
-            "--span-repo", str(repo_root),
-            "--no-codex", "--no-claude", "--no-hooks", "--no-skills",
+            "--repo",
+            str(repo_a),
+            "--repo",
+            str(repo_b),
+            "--data-dir",
+            str(data_dir),
+            "--venv-dir",
+            str(venv_dir),
+            "--bin-dir",
+            str(bin_dir),
+            "--span-repo",
+            str(repo_root),
+            "--no-codex",
+            "--no-claude",
+            "--no-hooks",
+            "--no-skills",
         ]
         command = ordinary + [
-            "--functional-pyramid-classification-file", repo_a.name, str(repo_a / "docs/classification.json"),
-            "--functional-pyramid-classification-file", repo_b.name, str(repo_b / "docs/classification.json"),
+            "--functional-pyramid-classification-file",
+            repo_a.name,
+            str(repo_a / "docs/classification.json"),
+            "--functional-pyramid-classification-file",
+            repo_b.name,
+            str(repo_b / "docs/classification.json"),
         ]
         self._execute_installer(command if governed else ordinary, env)
         runtime_exe = venv_dir / "bin" / "span-mcp"
@@ -452,16 +475,23 @@ dispose();
         self.assertTrue((data_dir / f"{repo_a.name}.db").is_file())
         self.assertTrue((data_dir / f"{repo_b.name}.db").is_file())
         for root in (repo_a, repo_b):
-            self.assertEqual((root / ".span" / "functional-pyramid.json").is_file(), governed)
+            self.assertEqual(
+                (root / ".span" / "functional-pyramid.json").is_file(), governed
+            )
         return str(runtime_exe), command, env
 
     def _execute_installer(self, command, env):
         installed = _subprocess.run(
-            command, cwd=str(self.tmp), capture_output=True, text=True,
-            timeout=900, env=env,
+            command,
+            cwd=str(self.tmp),
+            capture_output=True,
+            text=True,
+            timeout=900,
+            env=env,
         )
         self.assertEqual(
-            installed.returncode, 0,
+            installed.returncode,
+            0,
             (installed.stderr or installed.stdout)[-12000:],
         )
         return installed
@@ -474,21 +504,29 @@ dispose();
             _write_files(repo, files)
             self.assertFalse((repo / ".span").exists())
         data_dir = root / "data"
-        runtime_exe, command, env = self._install_governed_runtime(repo_a, repo_b, data_dir)
+        runtime_exe, command, env = self._install_governed_runtime(
+            repo_a, repo_b, data_dir
+        )
         receipt = _json.loads((data_dir / "install.json").read_text())
         self.assertNotIn("pending_governed_initialization", receipt)
         entries = receipt["governed_initialization"]
         self.assertEqual(set(entries), {"repo-a", "repo-b"})
         self.assertEqual(entries["repo-a"]["version"], 1)
         self.assertEqual(entries["repo-b"]["version"], 1)
-        self.assertEqual(entries["repo-a"]["pyramid_id"], entries["repo-b"]["pyramid_id"])
+        self.assertEqual(
+            entries["repo-a"]["pyramid_id"], entries["repo-b"]["pyramid_id"]
+        )
         self.assertEqual(entries["repo-a"]["bindings"], [])
         self.assertEqual(len(entries["repo-b"]["bindings"]), 4)
         self.assertEqual(len(entries["repo-a"]["artifacts"]), 3)
         self.assertTrue(receipt["verify"]["acceptance_ok"])
         for repo in receipt["verify"]["repos"]:
-            self.assertEqual(repo["functional_pyramid"]["participation"]["state"], "ACTIVE")
-            self.assertEqual(repo["functional_pyramid"]["provenance"]["state"], "PROVENANCE_MATCH")
+            self.assertEqual(
+                repo["functional_pyramid"]["participation"]["state"], "ACTIVE"
+            )
+            self.assertEqual(
+                repo["functional_pyramid"]["provenance"]["state"], "PROVENANCE_MATCH"
+            )
         before = entries["repo-a"]["participation_results"]
         # The sole input may be reformatted without creating another version.
         path = repo_a / "docs/classification.json"

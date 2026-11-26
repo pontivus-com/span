@@ -595,6 +595,7 @@ class FunctionalPyramidService:
         expected_version: m.FunctionalPyramidVersion | None = None,
         repository_id: str | None = None,
         changed_authority_refs: tuple[m.EvidenceRef, ...] = (),
+        replay_only: bool = False,
     ) -> m.FunctionalPyramidRecorded:
         """Accept/replay one installation-scoped participation write (FD-85/FD-93).
 
@@ -630,6 +631,12 @@ class FunctionalPyramidService:
                 cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
             )
 
+        if replay_only:
+            raise RecordingValidationError(
+                "new participation must be initialized by span-install",
+                public_cause="initialize the Functional Pyramid using span-install and the classification document",
+            )
+
         if action is m.FunctionalPyramidAction.EXCLUDE:
             assert repository_id is not None
             return self._record_exclude(
@@ -650,7 +657,9 @@ class FunctionalPyramidService:
                 )
             )
         if changed_authority_refs:
-            repository_ids = tuple(sorted(set(repository_ids) | set(self._registered())))
+            repository_ids = tuple(
+                sorted(set(repository_ids) | set(self._registered()))
+            )
         repository_paths = self._attached_paths(repository_ids)
         with state.transaction(repository_paths) as transaction:
             replay = transaction.receipt(request_id)
@@ -1012,7 +1021,9 @@ class FunctionalPyramidService:
             )
         )
         if receipt.dependent_effect_refs:
-            repository_ids = tuple(sorted(set(repository_ids) | set(self._registered())))
+            repository_ids = tuple(
+                sorted(set(repository_ids) | set(self._registered()))
+            )
         paths = self._attached_paths(repository_ids) if repository_ids else ()
         with self._require_state().transaction(paths) as transaction:
             return self._project_receipt(transaction, receipt)

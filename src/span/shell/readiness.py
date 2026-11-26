@@ -606,8 +606,13 @@ def installed_authority_bindings(
 
 
 def _initialization_provenance(
-    data_dir: str | _pathlib.Path, repository_id: str, root: str | _pathlib.Path,
-    entry: dict[str, object], *, pyramid_id: object, version: object,
+    data_dir: str | _pathlib.Path,
+    repository_id: str,
+    root: str | _pathlib.Path,
+    entry: dict[str, object],
+    *,
+    pyramid_id: object,
+    version: object,
 ) -> dict[str, object]:
     """Verify the actual installed generated configuration against its receipt."""
     mismatches: list[dict[str, object]] = []
@@ -616,7 +621,9 @@ def _initialization_provenance(
         raise ValueError("invalid generated artifact provenance")
     classification = entry.get("classification")
     classification_digest = entry.get("classification_digest")
-    if not isinstance(classification, str) or not isinstance(classification_digest, str):
+    if not isinstance(classification, str) or not isinstance(
+        classification_digest, str
+    ):
         raise ValueError("invalid classification provenance")
     inputs = {**artifacts, classification: classification_digest}
     for locator, expected in inputs.items():
@@ -629,22 +636,41 @@ def _initialization_provenance(
         if actual != expected:
             mismatches.append({"locator": locator, "reason": "digest_mismatch"})
     refs = _active_member_declaration_refs(data_dir, repository_id)
-    expected_refs = {key: value for key, value in artifacts.items() if key != ".span/functional-pyramid.json"}
-    actual_refs = {} if refs is None else {
-        ref.locator: ref.revision_or_fingerprint for ref in refs
+    expected_refs = {
+        key: value
+        for key, value in artifacts.items()
+        if key != ".span/functional-pyramid.json"
     }
+    actual_refs = (
+        {}
+        if refs is None
+        else {ref.locator: ref.revision_or_fingerprint for ref in refs}
+    )
     if actual_refs != expected_refs:
-        mismatches.append({"locator": repository_id, "reason": "accepted_declaration_set_differs"})
+        mismatches.append(
+            {"locator": repository_id, "reason": "accepted_declaration_set_differs"}
+        )
     if installed_authority_bindings(data_dir, repository_id) != entry.get("bindings"):
-        mismatches.append({"locator": repository_id, "reason": "installed_binding_set_differs"})
+        mismatches.append(
+            {"locator": repository_id, "reason": "installed_binding_set_differs"}
+        )
     participation = _functional_pyramid_participation(data_dir, repository_id)
-    if participation.get("state") != "ACTIVE" or participation.get("pyramid_id") != pyramid_id or participation.get("version") != version:
-        mismatches.append({"locator": repository_id, "reason": "accepted_participation_differs"})
+    if (
+        participation.get("state") != "ACTIVE"
+        or participation.get("pyramid_id") != pyramid_id
+        or participation.get("version") != version
+    ):
+        mismatches.append(
+            {"locator": repository_id, "reason": "accepted_participation_differs"}
+        )
     if str(_pathlib.Path(root).resolve()) != entry.get("root"):
-        mismatches.append({"locator": repository_id, "reason": "repository_root_differs"})
+        mismatches.append(
+            {"locator": repository_id, "reason": "repository_root_differs"}
+        )
     return {
         "state": "PROVENANCE_MISMATCH" if mismatches else "PROVENANCE_MATCH",
-        "inputs": len(inputs), "mismatches": mismatches,
+        "inputs": len(inputs),
+        "mismatches": mismatches,
     }
 
 
@@ -666,14 +692,21 @@ def probe_governed_provenance(
     pending = receipt.get(PENDING)
     if isinstance(pending, dict):
         if not pending_setup:
-            return {"state": "PENDING_GOVERNED_INITIALIZATION", "inputs": [], "mismatches": []}
+            return {
+                "state": "PENDING_GOVERNED_INITIALIZATION",
+                "inputs": [],
+                "mismatches": [],
+            }
         entries = pending.get("repositories")
         if isinstance(entries, dict) and repository_id in entries:
-            entry = entries[repository_id]
-            if not isinstance(entry, dict):
+            pending_entry = entries[repository_id]
+            if not isinstance(pending_entry, dict):
                 raise ValueError("invalid pending initialization provenance")
             return _initialization_provenance(
-                data_dir, repository_id, root, entry,
+                data_dir,
+                repository_id,
+                root,
+                pending_entry,
                 pyramid_id=pending.get("accepted_pyramid_id"),
                 version=pending.get("accepted_version"),
             )
@@ -683,8 +716,12 @@ def probe_governed_provenance(
         if not isinstance(recorded, dict):
             raise ValueError("invalid accepted initialization provenance")
         return _initialization_provenance(
-            data_dir, repository_id, root, recorded,
-            pyramid_id=recorded.get("pyramid_id"), version=recorded.get("version"),
+            data_dir,
+            repository_id,
+            root,
+            recorded,
+            pyramid_id=recorded.get("pyramid_id"),
+            version=recorded.get("version"),
         )
     facts = receipt.get("preflight_facts")
     entry: dict[str, object] | None = None

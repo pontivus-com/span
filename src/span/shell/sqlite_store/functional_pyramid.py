@@ -489,8 +489,12 @@ class FunctionalPyramidInstallationStore(_FunctionalPyramidInstallationReader):
             raise FunctionalPyramidInstallationSchemaError(
                 f"Functional Pyramid installation store is not initialized: {self.path}"
             )
-        database = f"{self.path.resolve().as_uri()}?mode=ro" if read_only else str(self.path)
-        self._connection = _sqlite3.connect(database, uri=read_only, check_same_thread=False)
+        database = (
+            f"{self.path.resolve().as_uri()}?mode=ro" if read_only else str(self.path)
+        )
+        self._connection = _sqlite3.connect(
+            database, uri=read_only, check_same_thread=False
+        )
         self._connection.row_factory = _sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._validate_schema()

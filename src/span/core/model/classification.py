@@ -99,7 +99,9 @@ class FunctionalPyramidClassificationRow:
                 or not parent[0]
                 or not isinstance(parent[1], FunctionalDocumentIdentity)
             ):
-                raise ValueError("governing documents are declaring/document identities or ROOT")
+                raise ValueError(
+                    "governing documents are declaring/document identities or ROOT"
+                )
             elif parent == (self.declaring_repository_id, identity):
                 raise ValueError("a placement cannot govern itself")
         if len(set(governing)) != len(governing):
@@ -157,8 +159,12 @@ class FunctionalPyramidClassification:
             for row in self.rows
         ]
         if len(set(identities)) != len(identities):
-            raise ValueError("classification rows must be unique per document in the declaring repository")
-        decisions: dict[FunctionalDocumentIdentity, tuple[AuthorityKind, AuthorityStatus]] = {}
+            raise ValueError(
+                "classification rows must be unique per document in the declaring repository"
+            )
+        decisions: dict[
+            FunctionalDocumentIdentity, tuple[AuthorityKind, AuthorityStatus]
+        ] = {}
         for row in self.rows:
             if row.disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
                 continue

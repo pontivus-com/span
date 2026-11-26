@@ -429,13 +429,6 @@ def _call_functional_pyramid(
         if not isinstance(action, m.FunctionalPyramidAction):
             raise ValueError("Functional Pyramid record requires its declared action")
         request_id = m.RequestId(request.request_id)
-        if action is m.FunctionalPyramidAction.ACTIVATE and service.receipt(
-            m.FunctionalPyramidReceiptSelector(request_id)
-        ) is None:
-            raise RecordingValidationError(
-                "new participation must be initialized by span-install",
-                public_cause="initialize the Functional Pyramid using span-install and the classification document",
-            )
         return service.record(
             request_id=request_id,
             action=action,
@@ -451,6 +444,7 @@ def _call_functional_pyramid(
                 else m.FunctionalPyramidVersion(request.expected_version)
             ),
             repository_id=request.repository_id,
+            replay_only=action is m.FunctionalPyramidAction.ACTIVATE,
         )
 
     raise RoutingError(f"unknown installation-scoped tool: {tool_name}")

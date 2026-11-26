@@ -109,9 +109,13 @@ def _surface_repositories(result):
 def _install(command, data_dir, repository_id):
     result = subprocess.run(command, capture_output=True, text=True, timeout=600)
     if result.returncode:
-        raise RuntimeError("governed install failed: " + (result.stderr or result.stdout)[-8000:])
+        raise RuntimeError(
+            "governed install failed: " + (result.stderr or result.stdout)[-8000:]
+        )
     receipt = json.loads((pathlib.Path(data_dir) / "install.json").read_text())
-    return receipt["governed_initialization"][repository_id]["participation_results"][-1]
+    return receipt["governed_initialization"][repository_id]["participation_results"][
+        -1
+    ]
 
 
 async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
@@ -199,15 +203,24 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
             )
 
             manual_activation, _ = await _call(
-                session, "record", {
+                session,
+                "record",
+                {
                     "request_id": "manual-activation-forbidden",
                     "kind": "functional_pyramid",
                     "action": "activate",
-                    "members": [{
-                        "repository_id": repo_a_id,
-                        "declaration_sources": [{"locator": "docs/invalid-functional-pyramid.json", "ranges": []}],
-                    }],
-                }
+                    "members": [
+                        {
+                            "repository_id": repo_a_id,
+                            "declaration_sources": [
+                                {
+                                    "locator": "docs/invalid-functional-pyramid.json",
+                                    "ranges": [],
+                                }
+                            ],
+                        }
+                    ],
+                },
             )
             pre_created, pre_created_error = await _call(
                 session,
@@ -245,7 +258,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                 for member in activated["members"]
             ]
             candidate, candidate_error = await _call(
-                session, "ask", {
+                session,
+                "ask",
+                {
                     "selector": {
                         "$type": "FunctionalPyramidCandidateSelector",
                         "action": "revise",
@@ -253,7 +268,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                         "pyramid_id": activated["pyramid_id"],
                         "expected_version": activated["version"],
                     }
-                }
+                },
             )
 
             activation_receipt_before, activation_receipt_before_error = await _call(
@@ -456,7 +471,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
 
             # Change the repository-owned classification, never a generated source.
             for repository in (repo_a, repo_b):
-                classification_path = pathlib.Path(repository) / "docs/classification.json"
+                classification_path = (
+                    pathlib.Path(repository) / "docs/classification.json"
+                )
                 classification = json.loads(classification_path.read_text())
                 for row in classification["rows"]:
                     locator = row["document_ref"]
@@ -465,9 +482,14 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                     elif locator == "rules/p0-v2.md":
                         row["document_ref"] = "rules/p0-v1.md"
                     for parent in row.get("governing_documents", []):
-                        if isinstance(parent, dict) and parent["document_ref"] == "rules/p0-v1.md":
+                        if (
+                            isinstance(parent, dict)
+                            and parent["document_ref"] == "rules/p0-v1.md"
+                        ):
                             parent["document_ref"] = "rules/p0-v2.md"
-                classification_path.write_text(json.dumps(classification, sort_keys=True) + "\n")
+                classification_path.write_text(
+                    json.dumps(classification, sort_keys=True) + "\n"
+                )
             revision_result = _install(command, data_dir, repo_a_id)
             changed = {
                 "surfaces": revision_result["dependent_effects"],

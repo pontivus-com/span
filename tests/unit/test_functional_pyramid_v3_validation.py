@@ -647,7 +647,9 @@ def _classification_row(
     document_ref: str,
     layer: m.FunctionalPyramidLayer | None,
     scope: str | None,
-    *governing: m.FunctionalDocumentIdentity | tuple[str, m.FunctionalDocumentIdentity] | str,
+    *governing: m.FunctionalDocumentIdentity
+    | tuple[str, m.FunctionalDocumentIdentity]
+    | str,
     disposition: m.FunctionalPyramidClassificationDisposition = (
         m.FunctionalPyramidClassificationDisposition.PLACE
     ),
@@ -662,9 +664,11 @@ def _classification_row(
         layer=layer,
         scope=scope,
         governing_documents=tuple(
-            (parent.repository_id, parent)
-            if isinstance(parent, m.FunctionalDocumentIdentity)
-            else parent
+            (
+                (parent.repository_id, parent)
+                if isinstance(parent, m.FunctionalDocumentIdentity)
+                else parent
+            )
             for parent in governing
         ),
         exclusion_reason=reason,
@@ -989,20 +993,34 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
             "repo-b", "docs/goals.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
         )
         adopted = _classification_row(
-            "repo-b", "docs/goals.md", m.FunctionalPyramidLayer.P0, ".", "ROOT",
+            "repo-b",
+            "docs/goals.md",
+            m.FunctionalPyramidLayer.P0,
+            ".",
+            "ROOT",
             declaring_repository_id="repo-a",
         )
         child = _classification_row(
-            "repo-b", "docs/invariants.md", m.FunctionalPyramidLayer.P1, ".",
-            ("repo-a", shared), declaring_repository_id="repo-a",
+            "repo-b",
+            "docs/invariants.md",
+            m.FunctionalPyramidLayer.P1,
+            ".",
+            ("repo-a", shared),
+            declaring_repository_id="repo-a",
         )
         classification = m.FunctionalPyramidClassification(rows=(root, adopted, child))
         result = fp.derive_functional_pyramid_declarations(classification)
         first = result.declarations[0][1]
-        self.assertEqual(first.placements[0].placement.declaring_repository_id, "repo-a")
+        self.assertEqual(
+            first.placements[0].placement.declaring_repository_id, "repo-a"
+        )
         self.assertEqual(first.placements[0].placement.document.identity, shared)
-        self.assertEqual(first.placements[1].governing_placements, (first.placements[0].placement,))
-        self.assertEqual(fp.evaluate_functional_pyramid_source_structure(result.declarations), ())
+        self.assertEqual(
+            first.placements[1].governing_placements, (first.placements[0].placement,)
+        )
+        self.assertEqual(
+            fp.evaluate_functional_pyramid_source_structure(result.declarations), ()
+        )
         bindings, owned = fp.reconcile_functional_pyramid_bindings(
             classification,
             fingerprints={
