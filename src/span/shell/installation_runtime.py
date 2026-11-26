@@ -117,6 +117,7 @@ def open_installation_runtime(
             data_dir,
             repository_runtime=runtime.repository_runtime,
             registered_repository_ids=registered_repository_ids,
+            policy=policy,
         ) as functional_pyramid:
             runtime.bind_functional_pyramid(functional_pyramid)
             yield runtime

@@ -24,6 +24,7 @@ from span.shell.sqlite_store.functional_pyramid import (
 )
 from span.shell.sqlite_store.lifecycle import UnknownRepository
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.functional_pyramid import FunctionalPyramidService
 
 
@@ -129,6 +130,7 @@ def open_functional_pyramid_service(
     *,
     repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
     registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
 ) -> _typing.Iterator[FunctionalPyramidService | None]:
     """Open existing installation state; never create or migrate it."""
     root = _pathlib.Path(data_dir)
@@ -144,6 +146,7 @@ def open_functional_pyramid_service(
     try:
         yield compose_functional_pyramid_service(
             state=state,
+            policy=policy,
             repository_runtime=repository_runtime,
             registered_repository_ids=registered_repository_ids,
             repository_paths=lambda repository_ids: tuple(
@@ -163,6 +166,7 @@ def compose_functional_pyramid_service(
     repository_paths: _typing.Callable[[tuple[str, ...]], tuple[tuple[str, str], ...]],
     clock: _typing.Callable[[], _datetime.datetime] | None = None,
     new_context_id: _typing.Callable[[], str] | None = None,
+    policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
 ) -> FunctionalPyramidService:
     """Compose the one installation-wide Functional Pyramid service."""
     return FunctionalPyramidService(
@@ -171,6 +175,7 @@ def compose_functional_pyramid_service(
         ),
         authority=_InstallationAuthorityResolver(repository_runtime),
         state=state,
+        policy=policy,
         registered_repository_ids=registered_repository_ids,
         repository_paths=repository_paths,
         repository_runtime=repository_runtime,

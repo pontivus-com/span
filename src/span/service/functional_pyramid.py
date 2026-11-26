@@ -9,6 +9,7 @@ import typing as _typing
 from span.core import containment
 from span.core import functional_pyramid as _fp
 from span.core import model as m
+from span.core.paging import format_versioned_token, parse_versioned_token, question_digest
 from span.core import support_rules as _support_rules
 from span.core.identity import functional_pyramid_identity, payload_digest
 from span.core.recording import (
@@ -26,6 +27,8 @@ from span.ports.functional_pyramid import (
     FunctionalPyramidStateTransaction,
 )
 from span.ports.lifecycle import LifecycleAuthorityResolver
+from span.ports.structural import StaleContinuationError
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY, encoded_size
 from span.service.contexts import ContextBinding, build_context
 from span.service.effects import DependencyEffectService
 from span.service.ids import server_context_id
@@ -126,7 +129,9 @@ class FunctionalPyramidService:
         ) = None,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
+        policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
     ) -> None:
+        self._policy = policy
         self._declarations = declarations
         self._authority = authority
         self._state = state
@@ -232,7 +237,7 @@ class FunctionalPyramidService:
             pyramid_id=pyramid_id,
             version=version,
             members=members,
-            findings=findings,
+            findings=tuple(m.public_pyramid_finding(item) for item in findings),
         )
 
     def route(
@@ -279,6 +284,8 @@ class FunctionalPyramidService:
             m.FunctionalPyramidSelector(repository_id=selector.repository_id)
         )
         if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
+            if selector.after is not None:
+                raise StaleContinuationError("pyramid participation changed; restart the directory listing")
             return m.FunctionalPyramidParticipation(participation)
         assert pyramid_id is not None
         assert version is not None
@@ -303,12 +310,66 @@ class FunctionalPyramidService:
                 authority_bindings=context.authority_bindings,
                 declaration_findings=context.findings,
             )
-            return resolution.view
+            return self._directory_page(selector, resolution.view, context.current_members)
         except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid governance cannot be evaluated",
                 recovery="restore the registered member repository and retry",
             )
+
+    def _directory_page(
+        self,
+        selector: m.FunctionalPyramidDirectorySelector,
+        view: m.FunctionalPyramidView,
+        members: tuple[m.FunctionalPyramidMemberView, ...],
+    ) -> m.FunctionalPyramidView | m.FunctionalPyramidUnavailable:
+        """Return a version-bound, size-bounded page of the same live projection."""
+        version = question_digest(
+            "functional-pyramid-directory",
+            selector.repository_id,
+            selector.directory,
+            payload_digest(m.to_canonical(members)).value,
+            payload_digest(m.to_canonical(view)).value,
+        )
+        try:
+            offset = parse_versioned_token(selector.after, version=version)
+        except ValueError as exc:
+            raise StaleContinuationError(str(exc)) from exc
+        total = len(view.placements)
+        if selector.after is not None and not 0 < offset < total:
+            raise StaleContinuationError("invalid directory continuation; restart the listing")
+        limit = self._policy.max_response_bytes
+
+        def page(count: int) -> m.FunctionalPyramidView:
+            end = offset + count
+            more = end < total
+            return _dataclasses.replace(
+                view,
+                placements=view.placements[offset:end],
+                truncated=more,
+                omitted=("Further governing placements are available",) if more else (),
+                next_after=format_versioned_token(version, end) if more else None,
+            )
+
+        full = page(total - offset)
+        if encoded_size(full) <= limit:
+            return full
+        low, high = 1, total - offset - 1
+        best = None
+        while low <= high:
+            mid = (low + high) // 2
+            candidate = page(mid)
+            if encoded_size(candidate) <= limit:
+                best = candidate
+                low = mid + 1
+            else:
+                high = mid - 1
+        if best is not None:
+            return best
+        return m.FunctionalPyramidUnavailable(
+            failure="The directory response cannot fit within the server response budget",
+            recovery="Ask for a narrower directory or increase the configured host response budget",
+        )
 
     def orientation(
         self,
@@ -463,7 +524,7 @@ class FunctionalPyramidService:
                 version=target_version,
                 members=(),
                 activation_ready=False,
-                validation_findings=_ordered_validation_findings(validation),
+                validation_findings=tuple(m.public_pyramid_finding(item) for item in _ordered_validation_findings(validation)),
                 graph_findings=(),
             )
 
@@ -487,8 +548,8 @@ class FunctionalPyramidService:
             version=target_version,
             members=members,
             activation_ready=not ordered_validation and not structural,
-            validation_findings=ordered_validation,
-            graph_findings=structural,
+            validation_findings=tuple(m.public_pyramid_finding(item) for item in ordered_validation),
+            graph_findings=tuple(m.public_pyramid_finding(item) for item in structural),
         )
 
     def _candidate_lifecycle(
@@ -813,7 +874,7 @@ class FunctionalPyramidService:
                 finding
                 for finding in candidate.validation_findings
                 if finding.reason
-                is m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION
+                is m.FunctionalPyramidPublicReason.STALE_PYRAMID_VERSION
             ),
             None,
         )

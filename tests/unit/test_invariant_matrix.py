@@ -148,8 +148,8 @@ class FunctionalAcceptanceMatrixTest(unittest.TestCase):
     def test_matrix_lists_every_version_one_acceptance_case_once_in_order(self):
         self.assertEqual(
             [row[0] for row in self.rows],
-            [f"FA-{number:02d}" for number in range(1, 67)],
-            "the Version-1 acceptance matrix must carry FA-01..FA-66 in order",
+            [f"FA-{number:02d}" for number in range(1, 73)],
+            "the Version-1 acceptance matrix must carry FA-01..FA-72 in order",
         )
 
     def test_every_acceptance_case_names_live_boundary_tests(self):

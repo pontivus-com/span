@@ -1,6 +1,7 @@
 """Functional Pyramid Version-3 source/service orchestration tests."""
 
 import contextlib
+import dataclasses
 import datetime
 import unittest
 from unittest import mock
@@ -11,6 +12,8 @@ from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidRepositoryUnavailable,
 )
+from span.ports.structural import StaleContinuationError
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY, encoded_size
 from span.service.functional_pyramid import FunctionalPyramidService
 
 
@@ -373,7 +376,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertFalse(candidate.activation_ready)
         self.assertEqual(
             {item.reason for item in candidate.validation_findings},
-            {m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE},
+            {m.FunctionalPyramidPublicReason.DECLARATION_INVALID},
         )
         self.assertEqual(candidate.graph_findings, ())
 
@@ -408,7 +411,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(candidate.validation_findings, ())
         self.assertEqual(
             {item.reason for item in candidate.graph_findings},
-            {m.FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE},
+            {m.FunctionalPyramidPublicReason.DECLARATION_INVALID},
         )
 
     def test_repository_unavailability_is_graph_state(self) -> None:
@@ -428,7 +431,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
         self.assertEqual(candidate.validation_findings, ())
         self.assertIn(
-            m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+            m.FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE,
             {item.reason for item in candidate.graph_findings},
         )
 
@@ -465,7 +468,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(status.state, m.FunctionalPyramidParticipationState.ACTIVE)
         self.assertEqual(status.health, m.FunctionalPyramidHealth.DEGRADED)
         self.assertIn(
-            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+            m.FunctionalPyramidPublicReason.DECLARATION_INVALID,
             {finding.reason for finding in status.findings},
         )
 
@@ -487,7 +490,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertFalse(candidate.activation_ready)
         self.assertEqual(
             {item.reason for item in candidate.validation_findings},
-            {m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE},
+            {m.FunctionalPyramidPublicReason.DECLARATION_INVALID},
         )
         self.assertEqual(candidate.graph_findings, ())
 
@@ -509,7 +512,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(status.state, m.FunctionalPyramidParticipationState.ACTIVE)
         self.assertEqual(status.health, m.FunctionalPyramidHealth.DEGRADED)
         self.assertIn(
-            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+            m.FunctionalPyramidPublicReason.DECLARATION_INVALID,
             {finding.reason for finding in status.findings},
         )
 
@@ -570,6 +573,57 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             ("docs/foundation.md", "docs/design.md"),
         )
 
+    def test_directory_continuation_recovers_every_placement(self) -> None:
+        intent = self._install_v3("repo-a")
+        ref, declaration, _ = self.declarations.results[("repo-a", "decl.json")]
+        root = declaration.placements[0].placement
+        extra = tuple(
+            _placement("repo-a", f"docs/rule-{i:03d}.md", m.FunctionalPyramidLayer.P1, ".")
+            for i in range(20)
+        )
+        declaration = dataclasses.replace(
+            declaration,
+            documents=declaration.documents + tuple(item.document.identity for item in extra),
+            placements=declaration.placements + tuple(
+                m.FunctionalDocumentDeclaration(placement=item, governing_placements=(root,))
+                for item in extra
+            ),
+        )
+        self.declarations.results[("repo-a", "decl.json")] = (ref, declaration, ())
+        store = self.runtime_stores["repo-a"]
+        store.load_authority_bindings.return_value += tuple(
+            _binding("repo-a", item.document.document_ref) for item in extra
+        )
+        self.admin_service.record(
+            request_id=m.RequestId("paged-activation"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(intent,),
+        )
+        selector = m.FunctionalPyramidDirectorySelector("repo-a", ".")
+        full = self.admin_service.directory(selector)
+        assert isinstance(full, m.FunctionalPyramidView)
+        self.assertEqual(len(full.placements), 21)
+        self.admin_service._policy = dataclasses.replace(
+            DEFAULT_SERVICE_BOUNDS_POLICY, max_response_bytes=2500
+        )
+        collected = []
+        first = self.admin_service.directory(selector)
+        assert isinstance(first, m.FunctionalPyramidView)
+        self.assertTrue(first.truncated)
+        self.assertIsNotNone(first.next_after)
+        current = first
+        while True:
+            self.assertLessEqual(encoded_size(current), 2500)
+            self.assertEqual(current.unresolved, full.unresolved)
+            collected.extend(current.placements)
+            if current.next_after is None:
+                break
+            current = self.admin_service.directory(dataclasses.replace(selector, after=current.next_after))
+            assert isinstance(current, m.FunctionalPyramidView)
+        self.assertEqual(tuple(collected), full.placements)
+        with self.assertRaises(StaleContinuationError):
+            self.admin_service.directory(m.FunctionalPyramidDirectorySelector("repo-a", "src", first.next_after))
+
     def test_duplicate_unregistered_and_other_active_members_accumulate(self) -> None:
         intent = self._install_v3("repo-a")
         unknown = m.FunctionalPyramidMemberIntent(
@@ -586,9 +640,9 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(
             {finding.reason for finding in candidate.validation_findings},
             {
-                m.FunctionalPyramidValidationReason.DUPLICATE_MEMBER,
-                m.FunctionalPyramidValidationReason.UNREGISTERED_MEMBER,
-                m.FunctionalPyramidValidationReason.MEMBER_ALREADY_ACTIVE,
+                m.FunctionalPyramidPublicReason.DUPLICATE_MEMBER,
+                m.FunctionalPyramidPublicReason.UNREGISTERED_MEMBER,
+                m.FunctionalPyramidPublicReason.MEMBER_ALREADY_ACTIVE,
             },
         )
 
@@ -603,7 +657,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             )
         )
         self.assertIn(
-            m.FunctionalPyramidValidationReason.UNKNOWN_PYRAMID,
+            m.FunctionalPyramidPublicReason.UNKNOWN_PYRAMID,
             {finding.reason for finding in unknown.validation_findings},
         )
 
@@ -621,7 +675,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         finding = next(
             item
             for item in stale.validation_findings
-            if item.reason is m.FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION
+            if item.reason is m.FunctionalPyramidPublicReason.STALE_PYRAMID_VERSION
         )
         self.assertEqual(finding.current_version, m.FunctionalPyramidVersion(2))
 

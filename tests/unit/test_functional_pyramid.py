@@ -98,6 +98,24 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
             },
         )
 
+    def test_public_governance_findings_exclude_internal_diagnostics(self) -> None:
+        from span.core.schema import schema_for_result, to_wire_root
+
+        for reason in m.FunctionalPyramidFindingReason:
+            finding = m.public_pyramid_finding(m.FunctionalPyramidFinding(
+                reason=reason, detail="internal secret.json", recovery="secret.json",
+                declaration_locator="secret.json",
+            ))
+            payload = json.dumps(to_wire_root(type(finding), m.to_canonical(finding)))
+            self.assertNotIn("declaration_locator", payload)
+            self.assertNotIn("secret.json", payload)
+            self.assertIn(finding.reason, tuple(m.FunctionalPyramidPublicReason))
+        for carrier in (m.FunctionalPyramidView, m.FunctionalPyramidStatus, m.FunctionalPyramidCandidate):
+            schema = json.dumps(schema_for_result(carrier))
+            self.assertNotIn("declaration_locator", schema)
+            self.assertNotIn("INVALID_PLACEMENT_SCOPE", schema)
+            self.assertNotIn("INVALID_DECLARATION_SOURCE", schema)
+
     def test_document_placement_identity_includes_scope_and_layer(self) -> None:
         ref = m.FunctionalDocumentRef(
             repository_id="repo-a",

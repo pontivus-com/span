@@ -5,7 +5,7 @@ choices. The composition boundary applies them; no public request carries a
 response budget or a traversal bound.
 """
 
-from span.core.model import QueryBounds, ServiceBoundsPolicy
+from span.core.model import QueryBounds, ServiceBoundsPolicy, to_canonical
 
 __all__ = ["DEFAULT_SERVICE_BOUNDS_POLICY"]
 
@@ -66,3 +66,14 @@ DEFAULT_SERVICE_BOUNDS_POLICY = ServiceBoundsPolicy(
         max_candidate_relationships=1,
     ),
 )
+
+
+def encoded_size(value: object) -> int:
+    """The exact MCP wire size: the budget is measured on delivered bytes."""
+    import json
+
+    from span.core.schema import to_wire_root
+
+    payload = to_wire_root(type(value), to_canonical(value))
+    return len(json.dumps(payload, sort_keys=True).encode("utf-8"))
+

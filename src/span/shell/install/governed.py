@@ -342,8 +342,9 @@ def prepare(
     binding_files: list[list[str]],
     prior: dict[str, object],
 ) -> tuple[dict[str, object], dict[tuple[str, str], bytes]]:
-    import uuid
     """Validate exact input and recoverable intent before any setup mutation."""
+    import uuid
+
     from span.core import model as m
 
     roots = {target.name: target for target in targets}
@@ -436,7 +437,7 @@ def _check_pending_participation(
             )
             if {member.repository_id for member in accepted.members} != selected:
                 raise ValueError("recovery conflict: accepted membership differs")
-        elif request_id is not None and pending.get("accepted_pyramid_id") is not None:
+        elif raw is not None and pending.get("accepted_pyramid_id") is not None:
             raise ValueError("recovery conflict: accepted receipt unavailable")
         if state is None:
             if expected_id is not None:

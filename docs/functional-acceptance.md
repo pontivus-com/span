@@ -110,11 +110,11 @@ partial V3 verification does not close them.
 | FA-64 | Migrated current knowledge is pending | `test_schema14_current_revision_migrates_as_pending_capture` |
 | FA-65 | Three-tool host surface remains exact | `test_only_the_three_core_tools_are_registered` |
 | FA-66 | Installed lifecycle closes the loop | `test_installed_cross_repository_governance_journey` |
-| FA-67 | Document-only governed initialization | Pending — S-VERIFY-02 |
-| FA-68 | Strict preflight | Pending — S-INIT-01/02, S-VERIFY-02 |
-| FA-69 | Repeat and revise; authority-only delta effects | Pending — S-INIT-02/03, S-VERIFY-02 |
-| FA-70 | Exclusive administrative ownership, existing-binding reuse and durable interruption recovery | Pending — S-INIT-02/03, S-VERIFY-02 |
-| FA-71 | Public findings | Pending — S-PUBLIC-01 |
-| FA-72 | Complete bounded retrieval | Pending — S-PUBLIC-02 |
+| FA-67 | Document-only governed initialization | `test_installed_document_only_governed_initialization` |
+| FA-68 | Strict preflight | `test_strict_classification_document`; `test_installed_document_only_governed_initialization` |
+| FA-69 | Repeat and revise; authority-only delta effects | `test_installed_document_only_governed_initialization`; `test_installed_cross_repository_governance_journey` |
+| FA-70 | Exclusive administrative ownership, existing-binding reuse and durable interruption recovery | `test_administrative_owner_blocks_alias_and_competing_maintenance`; `test_classification_reconciles_authority_without_claiming_ordinary_ownership`; `test_installed_document_only_governed_initialization` |
+| FA-71 | Public findings | `test_public_governance_findings_exclude_internal_diagnostics`; `test_installed_cross_repository_governance_journey` |
+| FA-72 | Complete bounded retrieval | `test_directory_continuation_recovers_every_placement` |
 The matrix names enforcement boundaries; the CI execution receipt remains the
 evidence that those tests passed for a particular candidate.

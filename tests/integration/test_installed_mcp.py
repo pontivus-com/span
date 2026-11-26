@@ -539,6 +539,44 @@ dispose();
         self.assertTrue(repeated["verify"]["acceptance_ok"])
         self.assertTrue(_pathlib.Path(runtime_exe).is_file())
 
+        # Invalid input must fail before changing accepted installation metadata.
+        receipt_path = data_dir / "install.json"
+        accepted_bytes = receipt_path.read_bytes()
+        original = path.read_text()
+        path.write_text("{invalid")
+        rejected = _subprocess.run(command, cwd=str(self.tmp), capture_output=True, text=True, timeout=900, env=env)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertEqual(receipt_path.read_bytes(), accepted_bytes)
+        path.write_text(original)
+
+        # Exercise interruption after the participation write but before final receipt promotion.
+        for repo in (repo_a, repo_b):
+            classification = repo / "docs/classification.json"
+            content = _json.loads(classification.read_text())
+            for row in content["rows"]:
+                if row["document_ref"] == "rules/p2s.md":
+                    row["authority_kind"] = "DECISION_RECORD"
+            classification.write_text(_json.dumps(content))
+        injected = (
+            "from span.shell.install import cli, governed; "
+            "from unittest.mock import patch; import sys; "
+            "patch.object(governed, 'finalize', side_effect=RuntimeError('injected interruption')).start(); "
+            "cli.main(sys.argv[1:])"
+        )
+        interrupted = _subprocess.run(
+            [str(_pathlib.Path(runtime_exe).with_name("python")), "-c", injected, *command[1:]],
+            cwd=str(self.tmp), capture_output=True, text=True, timeout=900, env=env,
+        )
+        self.assertNotEqual(interrupted.returncode, 0)
+        self.assertIn("injected interruption", interrupted.stderr)
+        pending = _json.loads(receipt_path.read_text())["pending_governed_initialization"]
+        self.assertEqual(pending["accepted_version"], 2)
+        self._execute_installer(command, env)
+        recovered = _json.loads(receipt_path.read_text())
+        self.assertNotIn("pending_governed_initialization", recovered)
+        self.assertEqual(recovered["governed_initialization"]["repo-a"]["version"], 2)
+        self.assertTrue(recovered["verify"]["acceptance_ok"])
+
     def test_installed_cross_repository_governance_journey(self):
         root = self.tmp / "governed"
         repo_a = root / "repo-a"
@@ -581,7 +619,7 @@ dispose();
         self.assertFalse(observed["mixed_candidate_error"])
         self.assertIn("UNREGISTERED_MEMBER", observed["mixed_validation_reasons"])
         self.assertIn(
-            "INVALID_DECLARATION_SOURCE", observed["mixed_validation_reasons"]
+            "DECLARATION_INVALID", observed["mixed_validation_reasons"]
         )
         self.assertEqual(observed["mixed_graph_reasons"], [])
 

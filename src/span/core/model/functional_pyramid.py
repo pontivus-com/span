@@ -84,6 +84,19 @@ class FunctionalPyramidFindingReason(_enum.Enum):
     MISSING_ROOT_PLACEMENT = "MISSING_ROOT_PLACEMENT"
 
 
+class FunctionalPyramidPublicReason(_enum.Enum):
+    DECLARATION_INVALID = "DECLARATION_INVALID"
+    DOCUMENT_SET_INCOMPLETE = "DOCUMENT_SET_INCOMPLETE"
+    DOCUMENT_UNAVAILABLE = "DOCUMENT_UNAVAILABLE"
+    DOCUMENT_AMBIGUOUS = "DOCUMENT_AMBIGUOUS"
+    GOVERNANCE_UNAVAILABLE = "GOVERNANCE_UNAVAILABLE"
+    UNREGISTERED_MEMBER = "UNREGISTERED_MEMBER"
+    DUPLICATE_MEMBER = "DUPLICATE_MEMBER"
+    MEMBER_ALREADY_ACTIVE = "MEMBER_ALREADY_ACTIVE"
+    UNKNOWN_PYRAMID = "UNKNOWN_PYRAMID"
+    STALE_PYRAMID_VERSION = "STALE_PYRAMID_VERSION"
+
+
 class FunctionalPyramidValidationReason(_enum.Enum):
     UNREGISTERED_MEMBER = "UNREGISTERED_MEMBER"
     DUPLICATE_MEMBER = "DUPLICATE_MEMBER"
@@ -352,13 +365,90 @@ class FunctionalPyramidValidationFinding:
 
 
 @_dataclass(frozen=True)
+class FunctionalPyramidPublicFinding:
+    """Public governance finding (FD-88B); internal provenance stays private."""
+
+    reason: FunctionalPyramidPublicReason
+    detail: str
+    recovery: str
+    repository_id: str | None = None
+    directory: str | None = None
+    placement: FunctionalDocumentPlacement | None = None
+    pyramid_id: FunctionalPyramidId | None = None
+    expected_version: FunctionalPyramidVersion | None = None
+    current_version: FunctionalPyramidVersion | None = None
+
+
+def public_pyramid_finding(
+    finding: FunctionalPyramidFinding | FunctionalPyramidValidationFinding,
+) -> FunctionalPyramidPublicFinding:
+    """Project internal diagnostics onto the exact public vocabulary."""
+    if isinstance(finding, FunctionalPyramidValidationFinding):
+        reason = (
+            FunctionalPyramidPublicReason.DECLARATION_INVALID
+            if finding.reason in (
+                FunctionalPyramidValidationReason.MISSING_DECLARATION_SOURCE,
+                FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
+            )
+            else FunctionalPyramidPublicReason(finding.reason.value)
+        )
+        return FunctionalPyramidPublicFinding(
+            reason=reason,
+            detail="Declaration source is missing or invalid" if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID else finding.detail,
+            recovery="Correct the classification and rerun governed installation" if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID else finding.recovery,
+            repository_id=finding.repository_id,
+            directory=finding.directory,
+            pyramid_id=finding.pyramid_id,
+            expected_version=finding.expected_version,
+            current_version=finding.current_version,
+        )
+    reason = {
+        FunctionalPyramidFindingReason.INVALID_DECLARATION: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidFindingReason.DOCUMENT_SCOPE_MISMATCH: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidFindingReason.NONCANONICAL_DOCUMENT_AUTHORITY: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidFindingReason.DOCUMENT_CYCLE: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidFindingReason.INVALID_GOVERNING_EDGE: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidFindingReason.MISSING_AREA_DOCUMENT: FunctionalPyramidPublicReason.DOCUMENT_SET_INCOMPLETE,
+        FunctionalPyramidFindingReason.UNLISTED_AREA_DOCUMENT: FunctionalPyramidPublicReason.DOCUMENT_SET_INCOMPLETE,
+        FunctionalPyramidFindingReason.UNKNOWN_DOCUMENT: FunctionalPyramidPublicReason.DOCUMENT_SET_INCOMPLETE,
+        FunctionalPyramidFindingReason.UNRESOLVED_DOCUMENT_PARENT: FunctionalPyramidPublicReason.DOCUMENT_SET_INCOMPLETE,
+        FunctionalPyramidFindingReason.MISSING_ROOT_PLACEMENT: FunctionalPyramidPublicReason.DOCUMENT_SET_INCOMPLETE,
+        FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE: FunctionalPyramidPublicReason.DOCUMENT_UNAVAILABLE,
+        FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_PLACEMENT: FunctionalPyramidPublicReason.DOCUMENT_AMBIGUOUS,
+        FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_SOURCE: FunctionalPyramidPublicReason.DOCUMENT_AMBIGUOUS,
+        FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_LAYER: FunctionalPyramidPublicReason.DOCUMENT_AMBIGUOUS,
+        FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_SCOPE: FunctionalPyramidPublicReason.DOCUMENT_AMBIGUOUS,
+        FunctionalPyramidFindingReason.AMBIGUOUS_DOCUMENT_AUTHORITY: FunctionalPyramidPublicReason.DOCUMENT_AMBIGUOUS,
+        FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE: FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE,
+        FunctionalPyramidFindingReason.MISSING_DOCUMENT_AUTHORITY: FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE,
+    }[finding.reason]
+    detail, recovery = {
+        FunctionalPyramidPublicReason.DECLARATION_INVALID: ("Governance declaration is invalid", "Correct the classification and rerun governed installation"),
+        FunctionalPyramidPublicReason.DOCUMENT_SET_INCOMPLETE: ("Required governing documents are incomplete", "Supply the required documents and governing references in the classification"),
+        FunctionalPyramidPublicReason.DOCUMENT_UNAVAILABLE: ("A governing document is unavailable", "Restore the canonical governing document"),
+        FunctionalPyramidPublicReason.DOCUMENT_AMBIGUOUS: ("Governing document placement or authority is ambiguous", "Resolve conflicting classification or authority decisions"),
+        FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE: ("Required governance is unavailable", "Restore the participating repository and authority binding"),
+    }[reason]
+    return FunctionalPyramidPublicFinding(
+        reason=reason,
+        detail=detail,
+        recovery=recovery,
+        repository_id=finding.repository_id,
+        directory=finding.directory,
+        placement=finding.placement,
+    )
+
+
+@_dataclass(frozen=True)
 class FunctionalPyramidStatus:
     state: FunctionalPyramidParticipationState
     health: FunctionalPyramidHealth | None = None
     pyramid_id: FunctionalPyramidId | None = None
     version: FunctionalPyramidVersion | None = None
     members: tuple[FunctionalPyramidMemberView, ...] = ()
-    findings: tuple[FunctionalPyramidFinding, ...] = ()
+    findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
 
     def __post_init__(self) -> None:
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
@@ -403,6 +493,7 @@ class FunctionalPyramidSelector:
 class FunctionalPyramidDirectorySelector:
     repository_id: str
     directory: str
+    after: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty(
@@ -440,8 +531,8 @@ class FunctionalPyramidCandidate:
     action: FunctionalPyramidAction
     members: tuple[FunctionalPyramidMemberView, ...]
     activation_ready: bool
-    validation_findings: tuple[FunctionalPyramidValidationFinding, ...] = ()
-    graph_findings: tuple[FunctionalPyramidFinding, ...] = ()
+    validation_findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
+    graph_findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
     pyramid_id: FunctionalPyramidId | None = None
     version: FunctionalPyramidVersion | None = None
 
@@ -456,7 +547,7 @@ class FunctionalPyramidCandidate:
             raise ValueError("revise candidate requires pyramid_id")
         if revising and self.version is None:
             unknown_target = any(
-                finding.reason is FunctionalPyramidValidationReason.UNKNOWN_PYRAMID
+                finding.reason is FunctionalPyramidPublicReason.UNKNOWN_PYRAMID
                 for finding in self.validation_findings
             )
             if not unknown_target:
@@ -513,9 +604,10 @@ class FunctionalPyramidView:
     absent_layers: tuple[FunctionalPyramidLayer, ...]
     directory: str | None = None
     semantic_scope: EvidenceScope | None = None
-    unresolved: tuple[FunctionalPyramidFinding, ...] = ()
+    unresolved: tuple[FunctionalPyramidPublicFinding, ...] = ()
     truncated: bool = False
     omitted: tuple[str, ...] = ()
+    next_after: str | None = None
 
     def __post_init__(self) -> None:
         if (self.directory is None) == (self.semantic_scope is None):
@@ -535,6 +627,8 @@ class FunctionalPyramidView:
             raise ValueError("UNRESOLVED FunctionalPyramidView requires findings")
         if len(set(self.placements)) != len(self.placements):
             raise ValueError("FunctionalPyramidView placements must be distinct")
+        if self.next_after is not None and (not self.truncated or self.directory is None):
+            raise ValueError("directory continuation requires a truncated directory view")
         if self.truncated != bool(self.omitted):
             raise ValueError(
                 "FunctionalPyramidView truncation requires exactly omitted entries"
@@ -564,6 +658,7 @@ class FunctionalPyramidResolution:
     identity: FunctionalRouteIdentity
     routes: tuple[FunctionalDocumentRoute, ...] = ()
     provenance: tuple[FunctionalRouteProvenance, ...] = ()
+    findings: tuple[FunctionalPyramidFinding, ...] = ()
 
 
 @_dataclass(frozen=True)

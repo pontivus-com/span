@@ -39,6 +39,7 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidView,
     FunctionalRouteIdentity,
     FunctionalRouteProvenance,
+    public_pyramid_finding,
 )
 from span.core.model.investigation import EvidenceRequest, SourceRange
 from span.core.model.primitives import (
@@ -1791,13 +1792,14 @@ def _resolve(
             directory=directory_selection,
             semantic_scope=semantic_selection,
             placements=closure,
-            unresolved=unresolved,
+            unresolved=tuple(public_pyramid_finding(item) for item in unresolved),
             declared_layers=declared,
             absent_layers=absent,
         ),
         identity=identity,
         routes=routes,
         provenance=tuple(provenance),
+        findings=unresolved,
     )
 
 

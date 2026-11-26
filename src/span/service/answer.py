@@ -22,7 +22,7 @@ from span.core import support_rules
 from span.core.recording import RecordingValidationError
 from span.core.rejection import RejectionCauseKind
 from span.ports.lifecycle import LifecycleStorePort
-from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY, encoded_size as _encoded_size
 from span.service.contexts import context_binding, issue_context
 from span.service.continuation import (
     ContinuationCursor,
@@ -61,16 +61,6 @@ def gap_recovery(reason: m.GapReason) -> str:
             "when the meaning is stable for shared reuse"
         )
     return "re-read the cited evidence, then record against the current revision"
-
-
-def _encoded_size(value: object) -> int:
-    """The exact MCP wire size: the budget is measured on delivered bytes."""
-    import json
-
-    from span.core.schema import to_wire_root
-
-    payload = to_wire_root(type(value), m.to_canonical(value))
-    return len(json.dumps(payload, sort_keys=True).encode("utf-8"))
 
 
 class AnswerService:
