@@ -81,7 +81,9 @@ def administrative_ownership(data_dir: str | Path) -> Iterator[None]:
             lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
         )
     except OSError as exc:
-        raise SystemExit(f"cannot open administrative lock {lock_path}: {exc}") from None
+        raise SystemExit(
+            f"cannot open administrative lock {lock_path}: {exc}"
+        ) from None
     try:
         if not stat.S_ISREG(os.fstat(handle).st_mode):
             raise SystemExit(f"invalid administrative lock file: {lock_path}")
@@ -92,7 +94,9 @@ def administrative_ownership(data_dir: str | Path) -> Iterator[None]:
                 f"another installer owns {root}; no administrative state changed"
             ) from None
         except OSError as exc:
-            raise SystemExit(f"cannot acquire administrative ownership: {exc}") from None
+            raise SystemExit(
+                f"cannot acquire administrative ownership: {exc}"
+            ) from None
         yield
     finally:
         os.close(handle)

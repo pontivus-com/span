@@ -50,8 +50,12 @@ The pure source/bootstrap/member-intent projection and authority reconciliation
 passed focused Actions verification at `d6a7d45228c7`: 46 tests and 30 subtests;
 Ruff and zero-error typing passed. The runner supplied Black formatting and
 measured 33,978 test lines. The exclusive administrative lock and atomic receipt
-publication are implemented for focused verification; governed pending intent
-and installer participation composition remain open. The acceptance matrix continues to require executable FA-67–72 evidence;
+publication passed focused Actions verification at `d200cbab4bbe`: 169 tests
+and 30 subtests, Ruff and zero-error typing. Black formatting was applied
+from that runner, and the test-line measurement is 34,020. Governed pending
+intent and installer participation composition remain open. The temporary
+verification workflow is removed; use the normal CI workflow for subsequent
+candidate verification. The acceptance matrix continues to require executable FA-67–72 evidence;
 a partial change does not close this gate.
 
 1. Extend `FunctionalPyramidClassificationRow` using the existing canonical authority-kind/status enums. Place rows require both, explicit `ROOT` for P0, nonempty distinct qualified governing identities otherwise; exclude rows carry no placement or authority fields and a nonblank reason. Use existing strict canonical path and scope validators; reject unknown/missing/mixed fields, unsupported version, duplicate rows, duplicate mappings, noncanonical paths, repository mismatch and malformed identities. No permissive parser or compatibility grammar.
