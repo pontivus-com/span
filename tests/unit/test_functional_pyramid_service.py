@@ -578,14 +578,20 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         ref, declaration, _ = self.declarations.results[("repo-a", "decl.json")]
         root = declaration.placements[0].placement
         extra = tuple(
-            _placement("repo-a", f"docs/rule-{i:03d}.md", m.FunctionalPyramidLayer.P1, ".")
+            _placement(
+                "repo-a", f"docs/rule-{i:03d}.md", m.FunctionalPyramidLayer.P1, "."
+            )
             for i in range(20)
         )
         declaration = dataclasses.replace(
             declaration,
-            documents=declaration.documents + tuple(item.document.identity for item in extra),
-            placements=declaration.placements + tuple(
-                m.FunctionalDocumentDeclaration(placement=item, governing_placements=(root,))
+            documents=declaration.documents
+            + tuple(item.document.identity for item in extra),
+            placements=declaration.placements
+            + tuple(
+                m.FunctionalDocumentDeclaration(
+                    placement=item, governing_placements=(root,)
+                )
                 for item in extra
             ),
         )
@@ -618,11 +624,15 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             collected.extend(current.placements)
             if current.next_after is None:
                 break
-            current = self.admin_service.directory(dataclasses.replace(selector, after=current.next_after))
+            current = self.admin_service.directory(
+                dataclasses.replace(selector, after=current.next_after)
+            )
             assert isinstance(current, m.FunctionalPyramidView)
         self.assertEqual(tuple(collected), full.placements)
         with self.assertRaises(StaleContinuationError):
-            self.admin_service.directory(m.FunctionalPyramidDirectorySelector("repo-a", "src", first.next_after))
+            self.admin_service.directory(
+                m.FunctionalPyramidDirectorySelector("repo-a", "src", first.next_after)
+            )
 
     def test_duplicate_unregistered_and_other_active_members_accumulate(self) -> None:
         intent = self._install_v3("repo-a")

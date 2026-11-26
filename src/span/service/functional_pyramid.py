@@ -9,7 +9,11 @@ import typing as _typing
 from span.core import containment
 from span.core import functional_pyramid as _fp
 from span.core import model as m
-from span.core.paging import format_versioned_token, parse_versioned_token, question_digest
+from span.core.paging import (
+    format_versioned_token,
+    parse_versioned_token,
+    question_digest,
+)
 from span.core import support_rules as _support_rules
 from span.core.identity import functional_pyramid_identity, payload_digest
 from span.core.recording import (
@@ -285,7 +289,9 @@ class FunctionalPyramidService:
         )
         if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
             if selector.after is not None:
-                raise StaleContinuationError("pyramid participation changed; restart the directory listing")
+                raise StaleContinuationError(
+                    "pyramid participation changed; restart the directory listing"
+                )
             return m.FunctionalPyramidParticipation(participation)
         assert pyramid_id is not None
         assert version is not None
@@ -310,7 +316,9 @@ class FunctionalPyramidService:
                 authority_bindings=context.authority_bindings,
                 declaration_findings=context.findings,
             )
-            return self._directory_page(selector, resolution.view, context.current_members)
+            return self._directory_page(
+                selector, resolution.view, context.current_members
+            )
         except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid governance cannot be evaluated",
@@ -337,7 +345,9 @@ class FunctionalPyramidService:
             raise StaleContinuationError(str(exc)) from exc
         total = len(view.placements)
         if selector.after is not None and not 0 < offset < total:
-            raise StaleContinuationError("invalid directory continuation; restart the listing")
+            raise StaleContinuationError(
+                "invalid directory continuation; restart the listing"
+            )
         limit = self._policy.max_response_bytes
 
         def page(count: int) -> m.FunctionalPyramidView:
@@ -524,7 +534,10 @@ class FunctionalPyramidService:
                 version=target_version,
                 members=(),
                 activation_ready=False,
-                validation_findings=tuple(m.public_pyramid_finding(item) for item in _ordered_validation_findings(validation)),
+                validation_findings=tuple(
+                    m.public_pyramid_finding(item)
+                    for item in _ordered_validation_findings(validation)
+                ),
                 graph_findings=(),
             )
 
@@ -548,7 +561,9 @@ class FunctionalPyramidService:
             version=target_version,
             members=members,
             activation_ready=not ordered_validation and not structural,
-            validation_findings=tuple(m.public_pyramid_finding(item) for item in ordered_validation),
+            validation_findings=tuple(
+                m.public_pyramid_finding(item) for item in ordered_validation
+            ),
             graph_findings=tuple(m.public_pyramid_finding(item) for item in structural),
         )
 

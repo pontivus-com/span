@@ -453,7 +453,10 @@ class FunctionalPyramidRouteRelevanceTest(unittest.TestCase):
         affected = self._resolve(declarations, "src")
         unrelated = self._resolve(declarations, "ui")
         self.assertEqual(affected.status, m.FunctionalPyramidRouteStatus.UNRESOLVED)
-        self.assertIn("DOCUMENT_SET_INCOMPLETE", {item.reason.value for item in affected.unresolved})
+        self.assertIn(
+            "DOCUMENT_SET_INCOMPLETE",
+            {item.reason.value for item in affected.unresolved},
+        )
         self.assertEqual(unrelated.status, m.FunctionalPyramidRouteStatus.RESOLVED)
 
     def test_cross_source_duplicate_reaches_every_affected_route(self) -> None:
@@ -490,7 +493,10 @@ class FunctionalPyramidRouteRelevanceTest(unittest.TestCase):
             with self.subTest(directory=directory):
                 view = self._resolve(declarations, directory)
                 self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.UNRESOLVED)
-                self.assertIn("DOCUMENT_AMBIGUOUS", {item.reason.value for item in view.unresolved})
+                self.assertIn(
+                    "DOCUMENT_AMBIGUOUS",
+                    {item.reason.value for item in view.unresolved},
+                )
 
     def test_mismatched_placement_is_reported_at_its_actual_scope(self) -> None:
         misplaced = _source(
@@ -509,7 +515,9 @@ class FunctionalPyramidRouteRelevanceTest(unittest.TestCase):
         )
         view = self._resolve((self._root(), misplaced), "src")
         self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.UNRESOLVED)
-        self.assertIn("DECLARATION_INVALID", {item.reason.value for item in view.unresolved})
+        self.assertIn(
+            "DECLARATION_INVALID", {item.reason.value for item in view.unresolved}
+        )
 
     def test_unrelated_member_defect_does_not_unresolve_a_route(self) -> None:
         valid_area = _source(

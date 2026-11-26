@@ -386,7 +386,8 @@ def public_pyramid_finding(
     if isinstance(finding, FunctionalPyramidValidationFinding):
         reason = (
             FunctionalPyramidPublicReason.DECLARATION_INVALID
-            if finding.reason in (
+            if finding.reason
+            in (
                 FunctionalPyramidValidationReason.MISSING_DECLARATION_SOURCE,
                 FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
             )
@@ -394,8 +395,16 @@ def public_pyramid_finding(
         )
         return FunctionalPyramidPublicFinding(
             reason=reason,
-            detail="Declaration source is missing or invalid" if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID else finding.detail,
-            recovery="Correct the classification and rerun governed installation" if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID else finding.recovery,
+            detail=(
+                "Declaration source is missing or invalid"
+                if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID
+                else finding.detail
+            ),
+            recovery=(
+                "Correct the classification and rerun governed installation"
+                if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID
+                else finding.recovery
+            ),
             repository_id=finding.repository_id,
             directory=finding.directory,
             pyramid_id=finding.pyramid_id,
@@ -425,11 +434,26 @@ def public_pyramid_finding(
         FunctionalPyramidFindingReason.MISSING_DOCUMENT_AUTHORITY: FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE,
     }[finding.reason]
     detail, recovery = {
-        FunctionalPyramidPublicReason.DECLARATION_INVALID: ("Governance declaration is invalid", "Correct the classification and rerun governed installation"),
-        FunctionalPyramidPublicReason.DOCUMENT_SET_INCOMPLETE: ("Required governing documents are incomplete", "Supply the required documents and governing references in the classification"),
-        FunctionalPyramidPublicReason.DOCUMENT_UNAVAILABLE: ("A governing document is unavailable", "Restore the canonical governing document"),
-        FunctionalPyramidPublicReason.DOCUMENT_AMBIGUOUS: ("Governing document placement or authority is ambiguous", "Resolve conflicting classification or authority decisions"),
-        FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE: ("Required governance is unavailable", "Restore the participating repository and authority binding"),
+        FunctionalPyramidPublicReason.DECLARATION_INVALID: (
+            "Governance declaration is invalid",
+            "Correct the classification and rerun governed installation",
+        ),
+        FunctionalPyramidPublicReason.DOCUMENT_SET_INCOMPLETE: (
+            "Required governing documents are incomplete",
+            "Supply the required documents and governing references in the classification",
+        ),
+        FunctionalPyramidPublicReason.DOCUMENT_UNAVAILABLE: (
+            "A governing document is unavailable",
+            "Restore the canonical governing document",
+        ),
+        FunctionalPyramidPublicReason.DOCUMENT_AMBIGUOUS: (
+            "Governing document placement or authority is ambiguous",
+            "Resolve conflicting classification or authority decisions",
+        ),
+        FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE: (
+            "Required governance is unavailable",
+            "Restore the participating repository and authority binding",
+        ),
     }[reason]
     return FunctionalPyramidPublicFinding(
         reason=reason,
@@ -627,8 +651,12 @@ class FunctionalPyramidView:
             raise ValueError("UNRESOLVED FunctionalPyramidView requires findings")
         if len(set(self.placements)) != len(self.placements):
             raise ValueError("FunctionalPyramidView placements must be distinct")
-        if self.next_after is not None and (not self.truncated or self.directory is None):
-            raise ValueError("directory continuation requires a truncated directory view")
+        if self.next_after is not None and (
+            not self.truncated or self.directory is None
+        ):
+            raise ValueError(
+                "directory continuation requires a truncated directory view"
+            )
         if self.truncated != bool(self.omitted):
             raise ValueError(
                 "FunctionalPyramidView truncation requires exactly omitted entries"

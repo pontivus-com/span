@@ -2,7 +2,7 @@
   "any_count": 6,
   "bare_generics": 34,
   "broad_excepts": 14,
-  "concrete_carriers": 225,
+  "concrete_carriers": 226,
   "core_layer_violations": 0,
   "duplicate_helper_bodies": 0,
   "duplicate_source_groups": 0,
@@ -14,7 +14,7 @@
   "mapping_symbols": 0,
   "max_carrier_fields": 13,
   "most_branches": 36,
-  "most_parameters": 9,
+  "most_parameters": 10,
   "mutable_module_tables": 0,
   "provider_edge_helpers": 3,
   "provider_paging_helpers": 0,
@@ -22,7 +22,7 @@
   "test_doubles_in_src": 0,
   "test_files": 60,
   "test_helper_definitions": 3,
-  "test_lines": 34020,
+  "test_lines": 34111,
   "type_ignore": 22,
   "untyped_defs": 103
 }

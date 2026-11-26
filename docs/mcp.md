@@ -286,6 +286,10 @@ for `activate`, `revise`, `deactivate`, or `exclude`. ACTIVATE/REVISE carry the
 complete member intent; REVISE/DEACTIVATE use the exact pyramid/version
 compare-and-set identity. The request uses the installation-level receipt
 namespace rather than an ordinary understanding `RecordingIdentity`.
+New ACTIVATE requests are accepted only through governed `span-install` with the
+repository-owned classification document. MCP ACTIVATE is replay-only; it cannot
+create participation. Explicit existing-member-set changes remain lifecycle actions,
+not a second initialization mechanism.
 
 Accepted ACTIVATE/REVISE/DEACTIVATE results return only actual durable
 participation changes plus the live canonical affected projection and one

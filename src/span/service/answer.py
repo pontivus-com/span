@@ -22,7 +22,10 @@ from span.core import support_rules
 from span.core.recording import RecordingValidationError
 from span.core.rejection import RejectionCauseKind
 from span.ports.lifecycle import LifecycleStorePort
-from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY, encoded_size as _encoded_size
+from span.service.bounds import (
+    DEFAULT_SERVICE_BOUNDS_POLICY,
+    encoded_size as _encoded_size,
+)
 from span.service.contexts import context_binding, issue_context
 from span.service.continuation import (
     ContinuationCursor,

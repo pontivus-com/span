@@ -102,15 +102,23 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
         from span.core.schema import schema_for_result, to_wire_root
 
         for reason in m.FunctionalPyramidFindingReason:
-            finding = m.public_pyramid_finding(m.FunctionalPyramidFinding(
-                reason=reason, detail="internal secret.json", recovery="secret.json",
-                declaration_locator="secret.json",
-            ))
+            finding = m.public_pyramid_finding(
+                m.FunctionalPyramidFinding(
+                    reason=reason,
+                    detail="internal secret.json",
+                    recovery="secret.json",
+                    declaration_locator="secret.json",
+                )
+            )
             payload = json.dumps(to_wire_root(type(finding), m.to_canonical(finding)))
             self.assertNotIn("declaration_locator", payload)
             self.assertNotIn("secret.json", payload)
             self.assertIn(finding.reason, tuple(m.FunctionalPyramidPublicReason))
-        for carrier in (m.FunctionalPyramidView, m.FunctionalPyramidStatus, m.FunctionalPyramidCandidate):
+        for carrier in (
+            m.FunctionalPyramidView,
+            m.FunctionalPyramidStatus,
+            m.FunctionalPyramidCandidate,
+        ):
             schema = json.dumps(schema_for_result(carrier))
             self.assertNotIn("declaration_locator", schema)
             self.assertNotIn("INVALID_PLACEMENT_SCOPE", schema)

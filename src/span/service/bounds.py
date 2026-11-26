@@ -76,4 +76,3 @@ def encoded_size(value: object) -> int:
 
     payload = to_wire_root(type(value), to_canonical(value))
     return len(json.dumps(payload, sort_keys=True).encode("utf-8"))
-
