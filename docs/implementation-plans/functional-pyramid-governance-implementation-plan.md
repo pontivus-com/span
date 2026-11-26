@@ -42,9 +42,12 @@ The governing documents are amended in the same Git change as this plan. Before 
 ### S-INIT-01 — Complete one strict classification ingress and pure derivation
 
 **Execution state:** strict classification row/JSON ingress, canonical governing
-order and all-excluded-member rejection implemented in the existing core owner;
-focused tests added, executable verification pending. Binding reconciliation,
-derived artifact/member-intent composition and installation integration remain
+order and all-excluded-member rejection implemented in the existing core owner.
+Focused Actions verification for `5c3ef93062a2`: 43 tests and 30 subtests passed;
+Ruff and zero-error typing passed; Black unchanged. Code-budget measurement:
+33,884 test lines (previous 33,748), attributable to the new evidence.
+The pure source/bootstrap/member-intent projection and authority reconciliation
+are added for the next focused verification. Installation integration remains
 open. The acceptance matrix continues to require executable FA-67–72 evidence;
 a partial change does not close this gate.
 

@@ -30,6 +30,7 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidHealth,
     FunctionalPyramidId,
     FunctionalPyramidLayer,
+    FunctionalPyramidMemberIntent,
     FunctionalPyramidMemberView,
     FunctionalPyramidResolution,
     FunctionalPyramidRouteStatus,
@@ -41,10 +42,14 @@ from span.core.model.functional_pyramid import (
 )
 from span.core.model.investigation import EvidenceRequest, SourceRange
 from span.core.model.primitives import (
+    AuthorityApplicability,
     AuthorityBinding,
     AuthorityKind,
     AuthorityStatus,
+    EvidenceId,
+    EvidenceRef,
     EvidenceScope,
+    EvidenceSourceKind,
     _require_non_empty,
 )
 from span.core.model.surfaces import SurfaceKey, SurfaceKind
@@ -597,6 +602,229 @@ def derive_functional_pyramid_declarations(
                 ),
             )
         ),
+    )
+
+
+def _declaration_bytes(payload: dict[str, object]) -> bytes:
+    """Stable bytes for the two existing untagged declaration carriers."""
+    return (
+        _json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        + "\n"
+    ).encode("utf-8")
+
+
+def _placement_payload(placement: FunctionalDocumentPlacement) -> dict[str, object]:
+    return {
+        "document": {
+            "repository_id": placement.document.repository_id,
+            "document_ref": placement.document.document_ref,
+            "layer": placement.document.layer.value,
+        },
+        "scope": placement.scope,
+    }
+
+
+def encode_functional_pyramid_declaration(
+    repository_id: str, declaration: FunctionalPyramidDeclaration
+) -> bytes:
+    """Encode the exact Version-3 source grammar consumed by the decoder."""
+    entries: list[dict[str, object]] = []
+    for entry in declaration.placements:
+        if entry.placement.declaring_repository_id != repository_id:
+            raise ValueError("declaration placement belongs to a different repository")
+        entries.append(
+            {
+                **_placement_payload(entry.placement),
+                "governing_placements": [
+                    parent
+                    if isinstance(parent, str)
+                    else {
+                        **_placement_payload(parent),
+                        "declaring_repository_id": parent.declaring_repository_id,
+                    }
+                    for parent in entry.governing_placements
+                ],
+            }
+        )
+    return _declaration_bytes(
+        {
+            "version": declaration.version,
+            "source_id": declaration.source_id,
+            "kind": declaration.kind.value,
+            "scope": declaration.scope,
+            "documents": [
+                {"repository_id": item.repository_id, "document_ref": item.document_ref}
+                for item in declaration.documents
+            ],
+            "placements": entries,
+        }
+    )
+
+
+def functional_pyramid_declaration_request(
+    repository_id: str, declaration: FunctionalPyramidDeclaration
+) -> EvidenceRequest:
+    """Address immutable source bytes, not a mutable repository/scope filename."""
+    digest = _hashlib.sha256(
+        encode_functional_pyramid_declaration(repository_id, declaration)
+    ).hexdigest()
+    return EvidenceRequest(locator=f".span/functional-pyramid/{digest}.json")
+
+
+def derive_functional_pyramid_member_intents(
+    derivation: FunctionalPyramidDerivation,
+) -> tuple[FunctionalPyramidMemberIntent, ...]:
+    """Derive the complete member input from validated canonical sources."""
+    findings = evaluate_functional_pyramid_source_structure(derivation.declarations)
+    if findings:
+        raise ValueError(
+            "invalid derived Functional Pyramid: "
+            + "; ".join(finding.detail for finding in findings)
+        )
+    requests: dict[str, list[EvidenceRequest]] = {}
+    for repository_id, declaration in derivation.declarations:
+        requests.setdefault(repository_id, []).append(
+            functional_pyramid_declaration_request(repository_id, declaration)
+        )
+    return tuple(
+        FunctionalPyramidMemberIntent(
+            repository_id=repository_id,
+            declaration_sources=tuple(requests[repository_id]),
+        )
+        for repository_id in sorted(requests)
+    )
+
+
+def encode_functional_pyramid_bootstrap(
+    bootstrap: FunctionalPyramidBootstrap,
+) -> bytes:
+    """Encode the existing Version-2 navigation bootstrap, not a source."""
+    return _declaration_bytes(
+        {
+            "version": bootstrap.version,
+            "declaration_sources": [
+                {
+                    "locator": request.locator,
+                    "ranges": [
+                        {"start_line": item.start_line, "end_line": item.end_line}
+                        for item in request.ranges
+                    ],
+                }
+                for request in bootstrap.declaration_sources
+            ],
+        }
+    )
+
+
+def _binding_key(binding: AuthorityBinding) -> tuple[str, str]:
+    reference = binding.evidence_ref
+    return reference.repository_id, reference.evidence_id.value
+
+
+def _binding_identity(binding: AuthorityBinding) -> FunctionalDocumentIdentity:
+    reference = binding.evidence_ref
+    return FunctionalDocumentIdentity(reference.repository_id, reference.locator)
+
+
+def _classification_binding_matches(
+    binding: AuthorityBinding, row: FunctionalPyramidClassificationRow
+) -> bool:
+    return (
+        binding.authority_kind is row.authority_kind
+        and binding.status is row.authority_status
+        and binding.applicability == AuthorityApplicability()
+        and binding.declared_precedence is None
+    )
+
+
+def _derived_authority_binding(
+    row: FunctionalPyramidClassificationRow,
+    fingerprint: str,
+    existing: AuthorityBinding | None,
+) -> AuthorityBinding:
+    assert row.authority_kind is not None
+    assert row.authority_status is not None
+    digest = _hashlib.sha256(
+        _declaration_bytes(
+            {"repository_id": row.repository_id, "document_ref": row.document_ref}
+        )
+    ).hexdigest()
+    identity = (
+        existing.evidence_ref.evidence_id
+        if existing is not None
+        else EvidenceId(f"authority-document-{digest}")
+    )
+    return AuthorityBinding(
+        evidence_ref=EvidenceRef(
+            evidence_id=identity,
+            repository_id=row.repository_id,
+            source_kind=EvidenceSourceKind.DOCUMENTATION,
+            locator=row.document_ref,
+            revision_or_fingerprint=fingerprint,
+        ),
+        authority_kind=row.authority_kind,
+        status=row.authority_status,
+    )
+
+
+def reconcile_functional_pyramid_bindings(
+    classification: FunctionalPyramidClassification,
+    *,
+    fingerprints: _collections_abc.Mapping[FunctionalDocumentIdentity, str],
+    registered: tuple[AuthorityBinding, ...],
+    previously_owned: tuple[AuthorityBinding, ...],
+) -> tuple[tuple[AuthorityBinding, ...], tuple[AuthorityBinding, ...]]:
+    """Return reconciled bindings and exact FP-owned subset (FD-88A).
+
+    The caller supplies observed source identities and prior accepted ownership
+    evidence, not a naming heuristic. Equivalent independent bindings retain
+    their original evidence identity and values.
+    """
+    current = {_binding_key(binding): binding for binding in registered}
+    old_owned = {_binding_key(binding): binding for binding in previously_owned}
+    if len(current) != len(registered) or len(old_owned) != len(previously_owned):
+        raise ValueError("duplicate authority binding identity")
+    for key, previous in old_owned.items():
+        if previous.evidence_ref.section_or_span is not None:
+            raise ValueError("invalid Functional Pyramid binding ownership evidence")
+        if key in current and current[key] != previous:
+            raise ValueError("Functional Pyramid binding ownership conflict")
+    whole: dict[FunctionalDocumentIdentity, list[AuthorityBinding]] = {}
+    for binding in registered:
+        if binding.evidence_ref.section_or_span is None:
+            whole.setdefault(_binding_identity(binding), []).append(binding)
+    result = {key: value for key, value in current.items() if key not in old_owned}
+    owned: dict[tuple[str, str], AuthorityBinding] = {}
+    for row in classification.rows:
+        document = FunctionalDocumentIdentity(row.repository_id, row.document_ref)
+        fingerprint = fingerprints.get(document)
+        if not fingerprint:
+            raise ValueError(f"classified document is unavailable: {document}")
+        if row.disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
+            continue
+        candidates = whole.get(document, [])
+        if len(candidates) > 1:
+            raise ValueError(f"competing whole-document authority bindings: {document}")
+        existing = candidates[0] if candidates else None
+        if existing is not None and _classification_binding_matches(existing, row):
+            binding = existing
+            is_owned = _binding_key(existing) in old_owned
+        else:
+            if existing is not None and _binding_key(existing) not in old_owned:
+                raise ValueError(f"independent authority binding conflict: {document}")
+            binding = _derived_authority_binding(row, fingerprint, existing)
+            is_owned = True
+        key = _binding_key(binding)
+        if key in result and result[key] != binding:
+            raise ValueError(f"authority binding identity collision: {document}")
+        if key in old_owned and _binding_identity(old_owned[key]) != document:
+            raise ValueError(f"authority binding ownership collision: {document}")
+        result[key] = binding
+        if is_owned:
+            owned[key] = binding
+    return (
+        tuple(result[key] for key in sorted(result)),
+        tuple(owned[key] for key in sorted(owned)),
     )
 
 

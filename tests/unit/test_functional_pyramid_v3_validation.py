@@ -976,6 +976,100 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
             (),
         )
 
+    def test_derived_source_bytes_round_trip_and_are_content_addressed(self) -> None:
+        derivation = fp.derive_functional_pyramid_declarations(
+            m.FunctionalPyramidClassification(rows=self._rows())
+        )
+        members = fp.derive_functional_pyramid_member_intents(derivation)
+        self.assertEqual(len(members), 1)
+        member = members[0]
+        self.assertEqual(len(member.declaration_sources), 2)
+        for (repository, declaration), request in zip(
+            derivation.declarations, member.declaration_sources, strict=True
+        ):
+            payload = fp.encode_functional_pyramid_declaration(
+                repository, declaration
+            )
+            decoded, findings = fp.decode_functional_pyramid_declaration(
+                payload.decode("utf-8"),
+                repository_id=repository,
+                declaration_locator=request.locator,
+            )
+            self.assertEqual(decoded, declaration)
+            self.assertEqual(findings, ())
+            self.assertEqual(
+                request, fp.functional_pyramid_declaration_request(repository, decoded)
+            )
+        bootstrap = m.FunctionalPyramidBootstrap(
+            version=2, declaration_sources=member.declaration_sources
+        )
+        self.assertEqual(
+            fp.decode_functional_pyramid_bootstrap(
+                fp.encode_functional_pyramid_bootstrap(bootstrap).decode("utf-8")
+            ),
+            bootstrap,
+        )
+
+    def test_classification_reconciles_authority_without_claiming_ordinary_ownership(
+        self,
+    ) -> None:
+        classification = m.FunctionalPyramidClassification(rows=self._rows())
+        fingerprints = {
+            m.FunctionalDocumentIdentity(row.repository_id, row.document_ref): "live"
+            for row in classification.rows
+        }
+        independent = _authority("repo-a", "docs/goals.md")
+        legacy = _authority("repo-a", "docs/legacy.md")
+        ordinary = (independent, legacy)
+        bindings, owned = fp.reconcile_functional_pyramid_bindings(
+            classification,
+            fingerprints=fingerprints,
+            registered=ordinary,
+            previously_owned=(),
+        )
+        self.assertIn(independent, bindings)
+        self.assertIn(legacy, bindings)
+        self.assertNotIn(independent, owned)
+        self.assertNotIn(legacy, owned)
+        self.assertEqual(len(owned), 2)
+        self.assertEqual(
+            fp.reconcile_functional_pyramid_bindings(
+                classification,
+                fingerprints=fingerprints,
+                registered=bindings,
+                previously_owned=owned,
+            ),
+            (bindings, owned),
+        )
+        revised = m.FunctionalPyramidClassification(rows=self._rows()[:1])
+        remaining, owned_after = fp.reconcile_functional_pyramid_bindings(
+            revised,
+            fingerprints=fingerprints,
+            registered=bindings,
+            previously_owned=owned,
+        )
+        self.assertEqual(set(remaining), set(ordinary))
+        self.assertEqual(owned_after, ())
+
+    def test_classification_rejects_competing_authority(self) -> None:
+        classification = m.FunctionalPyramidClassification(rows=self._rows())
+        fingerprints = {
+            m.FunctionalDocumentIdentity(row.repository_id, row.document_ref): "live"
+            for row in classification.rows
+        }
+        independent = m.AuthorityBinding(
+            evidence_ref=_evidence("repo-a", "docs/goals.md"),
+            authority_kind=m.AuthorityKind.TERMINOLOGY,
+            status=m.AuthorityStatus.ACCEPTED,
+        )
+        with self.assertRaisesRegex(ValueError, "independent authority binding conflict"):
+            fp.reconcile_functional_pyramid_bindings(
+                classification,
+                fingerprints=fingerprints,
+                registered=(independent,),
+                previously_owned=(),
+            )
+
     def test_strict_classification_document(self) -> None:
         root: dict[str, object] = {
             "repository_id": "repo-a",
