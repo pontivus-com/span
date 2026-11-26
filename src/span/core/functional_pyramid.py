@@ -42,6 +42,8 @@ from span.core.model.functional_pyramid import (
 from span.core.model.investigation import EvidenceRequest, SourceRange
 from span.core.model.primitives import (
     AuthorityBinding,
+    AuthorityKind,
+    AuthorityStatus,
     EvidenceScope,
     _require_non_empty,
 )
@@ -278,6 +280,100 @@ def _decode_document_identity(value: object) -> FunctionalDocumentIdentity:
     )
 
 
+def decode_functional_pyramid_classification(
+    text: str, *, repository_id: str
+) -> FunctionalPyramidClassification:
+    """Decode one repository-owned Version-1 classification (FD-88A).
+
+    Decode exact fields into the existing canonical row model. The repository
+    routing identity is explicit; cross-repository governing identities are
+    resolved only after combining the complete selected member set.
+    """
+    _require_non_empty("classification repository_id", repository_id)
+
+    def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate classification JSON field: {key}")
+            result[key] = value
+        return result
+
+    try:
+        value = _json.loads(text, object_pairs_hook=unique_object)
+    except _json.JSONDecodeError as exc:
+        raise ValueError("Functional Pyramid classification is not valid JSON") from exc
+    raw = _require_json_object(value, frozenset({"version", "rows"}))
+    if type(raw["version"]) is not int or raw["version"] != 1:
+        raise ValueError("classification.version must be 1")
+    common = frozenset({"repository_id", "document_ref", "disposition"})
+    rows: list[FunctionalPyramidClassificationRow] = []
+    for item in _require_json_array(raw["rows"], "classification.rows"):
+        if not isinstance(item, dict):
+            raise ValueError("classification row must be an object")
+        disposition = FunctionalPyramidClassificationDisposition(
+            _require_json_string(item.get("disposition"), "row.disposition")
+        )
+        fields = (
+            common | {"exclusion_reason"}
+            if disposition is FunctionalPyramidClassificationDisposition.EXCLUDE
+            else common
+            | {
+                "layer",
+                "scope",
+                "governing_documents",
+                "authority_kind",
+                "authority_status",
+            }
+        )
+        row = _require_json_object(item, fields)
+        owner = _require_json_string(row["repository_id"], "row.repository_id")
+        if owner != repository_id:
+            raise ValueError("classification row repository identity mismatch")
+        document = _require_json_string(row["document_ref"], "row.document_ref")
+        if disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
+            rows.append(
+                FunctionalPyramidClassificationRow(
+                    repository_id=owner,
+                    document_ref=document,
+                    disposition=disposition,
+                    exclusion_reason=_require_json_string(
+                        row["exclusion_reason"], "row.exclusion_reason"
+                    ),
+                )
+            )
+            continue
+        parents: list[FunctionalDocumentIdentity | str] = []
+        for parent in _require_json_array(
+            row["governing_documents"], "row.governing_documents"
+        ):
+            if isinstance(parent, str):
+                parents.append(parent)
+            else:
+                parents.append(_decode_document_identity(parent))
+        rows.append(
+            FunctionalPyramidClassificationRow(
+                repository_id=owner,
+                document_ref=document,
+                disposition=disposition,
+                layer=FunctionalPyramidLayer(
+                    _require_json_string(row["layer"], "row.layer")
+                ),
+                scope=_require_json_string(row["scope"], "row.scope"),
+                governing_documents=tuple(parents),
+                authority_kind=AuthorityKind(
+                    _require_json_string(row["authority_kind"], "row.authority_kind")
+                ),
+                authority_status=AuthorityStatus(
+                    _require_json_string(
+                        row["authority_status"], "row.authority_status"
+                    )
+                ),
+            )
+        )
+    return FunctionalPyramidClassification(rows=tuple(rows))
+
+
 def decode_functional_pyramid_declaration(
     text: str,
     *,
@@ -407,6 +503,15 @@ def derive_functional_pyramid_declarations(
             continue
         placed[FunctionalDocumentIdentity(row.repository_id, row.document_ref)] = row
 
+    represented = {row.repository_id for row in classification.rows}
+    with_placements = {row.repository_id for row in placed.values()}
+    missing = sorted(represented - with_placements)
+    if missing:
+        raise ValueError(
+            "selected classification repositories require placed documents: "
+            + ", ".join(missing)
+        )
+
     def placement_for(
         row: FunctionalPyramidClassificationRow,
     ) -> FunctionalDocumentPlacement:
@@ -437,7 +542,7 @@ def derive_functional_pyramid_declarations(
                     f"classification: {parent.repository_id}:{parent.document_ref}"
                 ) from None
             resolved.append(placement_for(parent_row))
-        return tuple(resolved)
+        return tuple(sorted(resolved, key=_placement_sort_key))
 
     grouped: dict[tuple[str, str], list[FunctionalPyramidClassificationRow]] = {}
     for row in placed.values():

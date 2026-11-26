@@ -1,5 +1,6 @@
 """Version-3 Functional Pyramid source, membership and route-relevance rules."""
 
+import json
 import unittest
 
 from span.core import functional_pyramid as fp
@@ -660,6 +661,16 @@ def _classification_row(
         scope=scope,
         governing_documents=tuple(governing),
         exclusion_reason=reason,
+        authority_kind=(
+            m.AuthorityKind.REPOSITORY_RULE
+            if disposition is m.FunctionalPyramidClassificationDisposition.PLACE
+            else None
+        ),
+        authority_status=(
+            m.AuthorityStatus.ACCEPTED
+            if disposition is m.FunctionalPyramidClassificationDisposition.PLACE
+            else None
+        ),
     )
 
 
@@ -669,7 +680,7 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
         invariants = m.FunctionalDocumentIdentity("repo-a", "docs/invariants.md")
         return (
             _classification_row(
-                "repo-a", "docs/goals.md", m.FunctionalPyramidLayer.P0, "."
+                "repo-a", "docs/goals.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
             ),
             _classification_row(
                 "repo-a",
@@ -757,6 +768,7 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
                         "area-a/contract.md",
                         m.FunctionalPyramidLayer.P0,
                         "area-a",
+                        "ROOT",
                     ),
                 )
             )
@@ -780,10 +792,10 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
                 "duplicate document",
                 lambda: classification(
                     _classification_row(
-                        "repo-a", "docs/a.md", m.FunctionalPyramidLayer.P0, "."
+                        "repo-a", "docs/a.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
                     ),
                     _classification_row(
-                        "repo-a", "docs/a.md", m.FunctionalPyramidLayer.P0, "."
+                        "repo-a", "docs/a.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
                     ),
                 ),
                 "unique per document",
@@ -884,7 +896,11 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
                 "non-canonical document",
                 lambda: classification(
                     _classification_row(
-                        "repo-a", "./docs/a.md", m.FunctionalPyramidLayer.P0, "."
+                        "repo-a",
+                        "./docs/a.md",
+                        m.FunctionalPyramidLayer.P0,
+                        ".",
+                        "ROOT",
                     )
                 ),
                 "dot, or traversal",
@@ -893,7 +909,7 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
                 "unsupported version",
                 lambda: classification(
                     _classification_row(
-                        "repo-a", "docs/a.md", m.FunctionalPyramidLayer.P0, "."
+                        "repo-a", "docs/a.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
                     ),
                     version=2,
                 ),
@@ -905,11 +921,120 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     build()
 
+    def test_all_excluded_member_cannot_disappear_from_derivation(self) -> None:
+        rows = self._rows() + (
+            _classification_row(
+                "repo-b",
+                "docs/legacy.md",
+                None,
+                None,
+                disposition=m.FunctionalPyramidClassificationDisposition.EXCLUDE,
+                reason="superseded",
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "require placed documents: repo-b"):
+            fp.derive_functional_pyramid_declarations(
+                m.FunctionalPyramidClassification(rows=rows)
+            )
+
+    def test_cross_repository_governing_order_is_deterministic(self) -> None:
+        roots = (
+            _classification_row(
+                "repo-a", "docs/goals.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
+            ),
+            _classification_row(
+                "repo-b", "docs/goals.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
+            ),
+        )
+        parents = (
+            m.FunctionalDocumentIdentity("repo-a", "docs/goals.md"),
+            m.FunctionalDocumentIdentity("repo-b", "docs/goals.md"),
+        )
+
+        def derive(
+            governing: tuple[m.FunctionalDocumentIdentity, ...],
+        ) -> m.FunctionalPyramidDerivation:
+            return fp.derive_functional_pyramid_declarations(
+                m.FunctionalPyramidClassification(
+                    rows=roots
+                    + (
+                        _classification_row(
+                            "repo-a",
+                            "docs/invariants.md",
+                            m.FunctionalPyramidLayer.P1,
+                            ".",
+                            *governing,
+                        ),
+                    )
+                )
+            )
+
+        first = derive(parents)
+        self.assertEqual(first, derive(tuple(reversed(parents))))
+        self.assertEqual(
+            fp.evaluate_functional_pyramid_source_structure(first.declarations),
+            (),
+        )
+
+    def test_strict_classification_document(self) -> None:
+        root: dict[str, object] = {
+            "repository_id": "repo-a",
+            "document_ref": "docs/goals.md",
+            "disposition": "place",
+            "layer": "P0",
+            "scope": ".",
+            "governing_documents": ["ROOT"],
+            "authority_kind": "DECISION_RECORD",
+            "authority_status": "DRAFT",
+        }
+        exclusion: dict[str, object] = {
+            "repository_id": "repo-a",
+            "document_ref": "docs/legacy.md",
+            "disposition": "exclude",
+            "exclusion_reason": "superseded",
+        }
+
+        def decode(
+            rows: list[dict[str, object]], version: object = 1
+        ) -> m.FunctionalPyramidClassification:
+            return fp.decode_functional_pyramid_classification(
+                json.dumps({"version": version, "rows": rows}),
+                repository_id="repo-a",
+            )
+
+        result = decode([root, exclusion])
+        self.assertIs(result.rows[0].authority_kind, m.AuthorityKind.DECISION_RECORD)
+        self.assertIs(result.rows[0].authority_status, m.AuthorityStatus.DRAFT)
+        self.assertIsNone(result.rows[1].authority_kind)
+        invalid: list[tuple[list[dict[str, object]], object]] = [
+            ([root], True),
+            ([root], 1.0),
+            ([root, root], 1),
+            ([{**root, "governing_documents": []}], 1),
+            ([{**root, "repository_id": "repo-b"}], 1),
+            ([{**root, "authority_kind": "unknown"}], 1),
+            ([{**root, "authority_status": None}], 1),
+            ([{**root, "extra": True}], 1),
+            ([{**root, "document_ref": "../goals.md"}], 1),
+            ([{**exclusion, "authority_kind": "DECISION_RECORD"}], 1),
+            ([{**exclusion, "exclusion_reason": " "}], 1),
+            ([{k: v for k, v in root.items() if k != "authority_kind"}], 1),
+            ([{k: v for k, v in root.items() if k != "authority_status"}], 1),
+        ]
+        for rows, version in invalid:
+            with self.subTest(rows=rows, version=version):
+                with self.assertRaises(ValueError):
+                    decode(rows, version)
+        with self.assertRaisesRegex(ValueError, "duplicate classification JSON field"):
+            fp.decode_functional_pyramid_classification(
+                '{"version":1,"version":1,"rows":[]}', repository_id="repo-a"
+            )
+
     def test_missing_governing_document_fails_derivation(self) -> None:
         classification = m.FunctionalPyramidClassification(
             rows=(
                 _classification_row(
-                    "repo-a", "docs/goals.md", m.FunctionalPyramidLayer.P0, "."
+                    "repo-a", "docs/goals.md", m.FunctionalPyramidLayer.P0, ".", "ROOT"
                 ),
                 _classification_row(
                     "repo-a",

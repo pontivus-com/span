@@ -27,11 +27,12 @@ as part of installation. Do not require a commit of generated metadata.
 3. Inspect the returned initialization outcome and exact receipt/status. If
    input is invalid, explain the reported defect to the owner; if operationally
    unavailable, report that blocker. Do not bypass validation.
-4. For accepted writes with actionable effects, retain the receipt selector and
-   use the returned repository-bound contexts and update coordinates to
-   investigate and `record` the affected conclusions. Do not call `reconsider`
-   again for the participation write. Do not mark initialization complete while
-   actionable effects remain or verification is incomplete.
+4. Acceptance is not completion. For accepted writes with actionable effects,
+   retain the receipt selector and use the returned repository-bound contexts
+   and update coordinates to investigate and `record` the affected conclusions.
+   Do not call `reconsider` again for the participation write. Do not mark
+   initialization complete while actionable effects remain or verification is
+   incomplete.
 
 ## Status and explicit lifecycle operations
 
@@ -41,7 +42,12 @@ UNCONFIGURED routes to governed initialization when intended; EXCLUDED remains
 explicit descriptive use unless adoption is requested; ACTIVE + DEGRADED
 requires repair. Explicit separately authorized membership changes, deactivation
 and exclusion retain their existing candidate/record contracts in the MCP
-reference. The public operations remain `ask`, `record`, `reconsider`.
+reference. For a separately authorized membership revision, use
+`FunctionalPyramidCandidateSelector` with the exact intended member set and
+current instance/version, resolve reported defects before candidate validation
+continues, and record only the separately authorized intent. This is not the
+governed installation workflow. The public operations remain `ask`, `record`,
+`reconsider`.
 
 ## Deactivate / exclude
 
@@ -74,8 +80,13 @@ For ACTIVE repositories, the ordinary lifecycle remains unchanged:
 - `reconsider` after implementation or governance edits returns the same
   affected-surface/conclusion projection, including cross-repository effects.
 
+For separately authorized edits to canonical governance documents, edit them
+outside Span and then use `reconsider` for the changed scope; do not repeat
+reconsideration for a participation write itself.
+
 An accepted NORMATIVE record with non-current qualification is retained but does
-not complete the task. Continue investigation/re-establishment until required
+not complete the task. Investigate REASSESSMENT_REQUIRED and UNVERIFIABLE
+conclusions using the returned evidence/context; continue until required
 dispositions are CURRENT or report the named operational blocker.
 
 Semantic curation is independent of Functional Pyramid authority. Curating a

@@ -2,8 +2,8 @@
 
 One row is one canonical document's placement decision. The row carries only
 what Span cannot derive: the owner's layer, directory scope, governing document
-references and place/exclude decision. Sources, membership, placement identity,
-ordering and the bootstrap are derived.
+references, authority kind/status and place/exclude decision. Sources,
+membership, placement identity, ordering and the bootstrap are derived.
 """
 
 from __future__ import annotations
@@ -17,7 +17,11 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidDeclaration,
     FunctionalPyramidLayer,
 )
-from span.core.model.primitives import _require_non_empty
+from span.core.model.primitives import (
+    AuthorityKind,
+    AuthorityStatus,
+    _require_non_empty,
+)
 
 __all__ = [
     "FunctionalPyramidClassification",
@@ -44,6 +48,8 @@ class FunctionalPyramidClassificationRow:
     scope: str | None = None
     governing_documents: tuple[FunctionalDocumentIdentity | str, ...] = ()
     exclusion_reason: str | None = None
+    authority_kind: AuthorityKind | None = None
+    authority_status: AuthorityStatus | None = None
 
     def __post_init__(self) -> None:
         identity = FunctionalDocumentIdentity(self.repository_id, self.document_ref)
@@ -54,11 +60,17 @@ class FunctionalPyramidClassificationRow:
                 self.layer is not None
                 or self.scope is not None
                 or self.governing_documents
+                or self.authority_kind is not None
+                or self.authority_status is not None
             ):
                 raise ValueError(
-                    "an exclude row carries no layer, scope or governing documents"
+                    "an exclude row carries no layer, scope, governing documents "
+                    "or authority"
                 )
-            if not self.exclusion_reason:
+            if (
+                not isinstance(self.exclusion_reason, str)
+                or not self.exclusion_reason.strip()
+            ):
                 raise ValueError("an exclude row requires an exclusion reason")
             return
         if self.exclusion_reason is not None:
@@ -68,6 +80,10 @@ class FunctionalPyramidClassificationRow:
         if not isinstance(self.layer, FunctionalPyramidLayer):
             raise ValueError("row.layer is not a Functional Pyramid layer")
         FunctionalDirectoryScope(self.scope)
+        if not isinstance(self.authority_kind, AuthorityKind):
+            raise ValueError("a place row requires an authority kind")
+        if not isinstance(self.authority_status, AuthorityStatus):
+            raise ValueError("a place row requires an authority status")
 
         governing = self.governing_documents
         for parent in governing:
@@ -81,7 +97,7 @@ class FunctionalPyramidClassificationRow:
         if len(set(governing)) != len(governing):
             raise ValueError("governing documents must be distinct")
         if self.layer is FunctionalPyramidLayer.P0:
-            if governing not in ((), ("ROOT",)):
+            if governing != ("ROOT",):
                 raise ValueError("a P0 row is governed by ROOT, not a document")
         elif not governing:
             raise ValueError("a non-P0 row requires at least one governing document")
@@ -122,7 +138,7 @@ class FunctionalPyramidClassification:
     version: int = 1
 
     def __post_init__(self) -> None:
-        if self.version != 1:
+        if type(self.version) is not int or self.version != 1:
             raise ValueError("classification.version must be 1")
         if not self.rows:
             raise ValueError("classification requires at least one row")

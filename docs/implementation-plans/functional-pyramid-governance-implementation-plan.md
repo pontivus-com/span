@@ -41,6 +41,13 @@ The governing documents are amended in the same Git change as this plan. Before 
 
 ### S-INIT-01 — Complete one strict classification ingress and pure derivation
 
+**Execution state:** strict classification row/JSON ingress, canonical governing
+order and all-excluded-member rejection implemented in the existing core owner;
+focused tests added, executable verification pending. Binding reconciliation,
+derived artifact/member-intent composition and installation integration remain
+open. The acceptance matrix continues to require executable FA-67–72 evidence;
+a partial change does not close this gate.
+
 1. Extend `FunctionalPyramidClassificationRow` using the existing canonical authority-kind/status enums. Place rows require both, explicit `ROOT` for P0, nonempty distinct qualified governing identities otherwise; exclude rows carry no placement or authority fields and a nonblank reason. Use existing strict canonical path and scope validators; reject unknown/missing/mixed fields, unsupported version, duplicate rows, duplicate mappings, noncanonical paths, repository mismatch and malformed identities. No permissive parser or compatibility grammar.
 2. Decode one Version-1 classification file for each selected governed member; map each file to its explicit repository ID and root. Each row belongs to the mapped repository. Resolve parent identities over the entire combined member set. Every selected governed member must produce a valid root source/P0, including members with no place rows. Reject unselected parent references, absent/unreadable files, invalid edges, duplicate placements and invalid authority coverage before effects. Use actual repository source access, not guessed existence or semantic interpretation.
 3. Extend the existing derivation owner, not a new parallel resolver: derive V3 sources, canonical binding inputs and V2 navigation bootstrap/member-intent references. Preserve deterministic source IDs based on repository and scope; locate source bytes by the content identity prescribed in TD §17.2. Bindings use the existing `AuthorityBinding` and `EvidenceRef` shapes; use the canonical evidence identity/digest conventions, exact whole-document location, source kind and row authority status/kind. Evidence content identity is observed from source, never supplied or guessed by the row. No DTOs or new semantic carriers.

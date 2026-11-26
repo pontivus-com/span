@@ -201,14 +201,25 @@ class SpecializedSkillTest(unittest.TestCase):
             "UNVERIFIABLE",
             "CURRENT",
             '"kind": "functional_pyramid"',
-            '"action": "activate"',
             '"action": "exclude"',
         ):
             self.assertIn(required, text, required)
+        # FD-88A replaces caller-managed installation/activation. The
+        # candidate contract remains for separately authorized membership changes.
+        initialization = text.split("## Initialize or revise governed installation")[1]
+        initialization = initialization.split(
+            "## Status and explicit lifecycle operations"
+        )[0]
+        self.assertIn("one file per intended member", initialization)
+        self.assertIn("Span owns every", initialization)
+        self.assertIn("governed `span-install` form", initialization)
+        self.assertIn("do not reconstruct a manual fallback workflow", initialization)
+        self.assertNotIn('"action": "activate"', initialization)
+        self.assertNotIn("FunctionalPyramidCandidateSelector", initialization)
         self.assertIn("Acceptance is not completion", text)
-        self.assertIn("edit them outside Span and then use\n`reconsider`", text)
-        self.assertIn("before candidate validation continues", text)
-        self.assertIn("Do not call\n`reconsider` again", text)
+        self.assertIn("outside Span and then use `reconsider`", text)
+        self.assertIn("before candidate validation", text)
+        self.assertIn("Do not call `reconsider` again", text)
         self.assertIn("Semantic curation is independent", text)
         self.assertIn("does not change participation", text)
 
