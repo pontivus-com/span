@@ -578,7 +578,7 @@ def probe_active_functional_pyramid(
     }
 
 
-def _installed_authority_bindings(
+def installed_authority_bindings(
     data_dir: str | _pathlib.Path,
     repository_id: str,
 ) -> list[object] | None:
@@ -605,10 +605,55 @@ def _installed_authority_bindings(
     return payload if isinstance(payload, list) else None
 
 
+def _initialization_provenance(
+    data_dir: str | _pathlib.Path, repository_id: str, root: str | _pathlib.Path,
+    entry: dict[str, object], *, pyramid_id: object, version: object,
+) -> dict[str, object]:
+    """Verify the actual installed generated configuration against its receipt."""
+    mismatches: list[dict[str, object]] = []
+    artifacts = entry.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("invalid generated artifact provenance")
+    classification = entry.get("classification")
+    classification_digest = entry.get("classification_digest")
+    if not isinstance(classification, str) or not isinstance(classification_digest, str):
+        raise ValueError("invalid classification provenance")
+    inputs = {**artifacts, classification: classification_digest}
+    for locator, expected in inputs.items():
+        path = _pathlib.Path(root) / locator
+        try:
+            actual = _hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            mismatches.append({"locator": locator, "reason": "unreadable"})
+            continue
+        if actual != expected:
+            mismatches.append({"locator": locator, "reason": "digest_mismatch"})
+    refs = _active_member_declaration_refs(data_dir, repository_id)
+    expected_refs = {key: value for key, value in artifacts.items() if key != ".span/functional-pyramid.json"}
+    actual_refs = {} if refs is None else {
+        ref.locator: ref.revision_or_fingerprint for ref in refs
+    }
+    if actual_refs != expected_refs:
+        mismatches.append({"locator": repository_id, "reason": "accepted_declaration_set_differs"})
+    if installed_authority_bindings(data_dir, repository_id) != entry.get("bindings"):
+        mismatches.append({"locator": repository_id, "reason": "installed_binding_set_differs"})
+    participation = _functional_pyramid_participation(data_dir, repository_id)
+    if participation.get("state") != "ACTIVE" or participation.get("pyramid_id") != pyramid_id or participation.get("version") != version:
+        mismatches.append({"locator": repository_id, "reason": "accepted_participation_differs"})
+    if str(_pathlib.Path(root).resolve()) != entry.get("root"):
+        mismatches.append({"locator": repository_id, "reason": "repository_root_differs"})
+    return {
+        "state": "PROVENANCE_MISMATCH" if mismatches else "PROVENANCE_MATCH",
+        "inputs": len(inputs), "mismatches": mismatches,
+    }
+
+
 def probe_governed_provenance(
     data_dir: str | _pathlib.Path,
     repository_id: str,
     root: str | _pathlib.Path,
+    *,
+    pending_setup: bool = False,
 ) -> dict[str, object]:
     """Compare current governed inputs with the retained installation evidence."""
     from span.shell.install.receipt import read_receipt
@@ -616,6 +661,31 @@ def probe_governed_provenance(
     receipt = read_receipt(data_dir)
     if receipt is None:
         return {"state": "PROVENANCE_NOT_RECORDED", "inputs": [], "mismatches": []}
+    from span.shell.install.governed import ACCEPTED, PENDING
+
+    pending = receipt.get(PENDING)
+    if isinstance(pending, dict):
+        if not pending_setup:
+            return {"state": "PENDING_GOVERNED_INITIALIZATION", "inputs": [], "mismatches": []}
+        entries = pending.get("repositories")
+        if isinstance(entries, dict) and repository_id in entries:
+            entry = entries[repository_id]
+            if not isinstance(entry, dict):
+                raise ValueError("invalid pending initialization provenance")
+            return _initialization_provenance(
+                data_dir, repository_id, root, entry,
+                pyramid_id=pending.get("accepted_pyramid_id"),
+                version=pending.get("accepted_version"),
+            )
+    accepted = receipt.get(ACCEPTED)
+    if isinstance(accepted, dict) and repository_id in accepted:
+        recorded = accepted[repository_id]
+        if not isinstance(recorded, dict):
+            raise ValueError("invalid accepted initialization provenance")
+        return _initialization_provenance(
+            data_dir, repository_id, root, recorded,
+            pyramid_id=recorded.get("pyramid_id"), version=recorded.get("version"),
+        )
     facts = receipt.get("preflight_facts")
     entry: dict[str, object] | None = None
     if isinstance(facts, dict):
@@ -670,7 +740,7 @@ def probe_governed_provenance(
             )
 
     if binding_inputs:
-        installed = _installed_authority_bindings(data_dir, repository_id)
+        installed = installed_authority_bindings(data_dir, repository_id)
         if installed is None:
             mismatches.append(
                 {"locator": repository_id, "reason": "installed_bindings_unreadable"}
@@ -711,6 +781,8 @@ def probe_functional_pyramid_repository(
     data_dir: str | _pathlib.Path,
     repository_id: str,
     root: str | _pathlib.Path,
+    *,
+    pending_setup: bool = False,
 ) -> dict[str, object]:
     """Validate local Functional Pyramid configuration without activating it."""
     canonical_root = str(_pathlib.Path(root).resolve())
@@ -725,14 +797,11 @@ def probe_functional_pyramid_repository(
         "declarations": declarations,
         "participation": _functional_pyramid_participation(data_dir, repository_id),
         "provenance": probe_governed_provenance(
-            data_dir, repository_id, canonical_root
+            data_dir, repository_id, canonical_root, pending_setup=pending_setup
         ),
         "activation_readiness": {
-            "status": "requires_candidate",
-            "action": (
-                "validate the complete intended member set with "
-                "FunctionalPyramidCandidateSelector"
-            ),
+            "status": "requires_governed_install",
+            "action": "run span-install with the repository classification input",
         },
     }
 

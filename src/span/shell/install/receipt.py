@@ -102,16 +102,11 @@ def administrative_ownership(data_dir: str | Path) -> Iterator[None]:
         os.close(handle)
 
 
-def write_receipt(data_dir, payload, dry_run=False):
-    """Publish a complete receipt atomically, preserving the previous on failure."""
+def publish_install_bytes(destination: Path, encoded: bytes, *, replace: bool) -> None:
+    """Publish one installation artifact durably; immutable paths never overwrite."""
     import tempfile
 
-    root = Path(data_dir)
-    receipt = root / "install.json"
-    print(f"+ write receipt: {receipt}")
-    if dry_run:
-        return
-    encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    root = destination.parent
     root.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=".install-", suffix=".tmp", dir=root)
     temporary = Path(name)
@@ -120,7 +115,10 @@ def write_receipt(data_dir, payload, dry_run=False):
             stream.write(encoded)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, receipt)
+        if replace:
+            os.replace(temporary, destination)
+        else:
+            os.link(temporary, destination)
         directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory)
@@ -128,6 +126,16 @@ def write_receipt(data_dir, payload, dry_run=False):
             os.close(directory)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def write_receipt(data_dir, payload, dry_run=False):
+    """Publish the existing installation receipt atomically."""
+    receipt = Path(data_dir) / "install.json"
+    print(f"+ write receipt: {receipt}")
+    if dry_run:
+        return
+    encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    publish_install_bytes(receipt, encoded, replace=True)
 
 
 def read_receipt(data_dir):

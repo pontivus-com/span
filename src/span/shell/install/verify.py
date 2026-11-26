@@ -32,7 +32,9 @@ from span.shell.install.venv import (
 )
 
 
-def verify_installation(venv_python, data_dir, repos, dry_run=False, strict=False):
+def verify_installation(
+    venv_python, data_dir, repos, dry_run=False, strict=False, pending_setup=False
+):
     """Observational readiness via a helper module under the installed interpreter.
 
     Never initializes, migrates, rebuilds or invokes a semantic operation.
@@ -50,6 +52,8 @@ def verify_installation(venv_python, data_dir, repos, dry_run=False, strict=Fals
     ]
     if strict:
         cmd.append("--strict")
+    if pending_setup:
+        cmd.append("--pending-setup")
     for repo in repos:
         cmd += ["--repo", str(repo)]
     out = _run(cmd, dry_run=dry_run)

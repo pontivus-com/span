@@ -54,107 +54,42 @@ _REPO_FILES = {
     + "\n",
 }
 
+def _classification_file(declaring, area):
+    def identity(locator):
+        return {
+            "declaring_repository_id": declaring,
+            "repository_id": "repo-b",
+            "document_ref": locator,
+        }
+
+    rows = []
+    for layer, locator, scope, parent in (
+        ("P0", "rules/p0-v1.md", ".", None),
+        ("P1", "rules/p1.md", ".", "rules/p0-v1.md"),
+        ("P2S", "rules/p2s.md", area, "rules/p1.md"),
+        ("P2W", "rules/p2w.md", area, "rules/p2s.md"),
+    ):
+        rows.append({
+            **identity(locator),
+            "disposition": "place",
+            "layer": layer,
+            "scope": scope,
+            "governing_documents": ["ROOT"] if parent is None else [identity(parent)],
+            "authority_kind": "CONTRACT_SPECIFICATION" if layer == "P2S" else "REPOSITORY_RULE",
+            "authority_status": "ACCEPTED",
+        })
+    rows.append({
+        **identity("rules/p0-v2.md"),
+        "disposition": "exclude",
+        "exclusion_reason": "not yet adopted",
+    })
+    return _json.dumps({"version": 1, "rows": rows}, sort_keys=True) + "\n"
+
+
 _GOVERNED_A_FILES = {
     "README.md": "# governed A\n",
     "src/alpha.py": "VALUE = 1\n",
-    "docs/functional-pyramid.json": _json.dumps(
-        {
-            "version": 3,
-            "source_id": "repo-a:repository",
-            "kind": "repository",
-            "scope": ".",
-            "documents": [
-                {"repository_id": "repo-b", "document_ref": "rules/p0-v1.md"},
-                {"repository_id": "repo-b", "document_ref": "rules/p1.md"},
-            ],
-            "placements": [
-                {
-                    "document": {
-                        "repository_id": "repo-b",
-                        "document_ref": "rules/p0-v1.md",
-                        "layer": "P0",
-                    },
-                    "scope": ".",
-                    "governing_placements": ["ROOT"],
-                },
-                {
-                    "document": {
-                        "repository_id": "repo-b",
-                        "document_ref": "rules/p1.md",
-                        "layer": "P1",
-                    },
-                    "scope": ".",
-                    "governing_placements": [
-                        {
-                            "declaring_repository_id": "repo-a",
-                            "document": {
-                                "repository_id": "repo-b",
-                                "document_ref": "rules/p0-v1.md",
-                                "layer": "P0",
-                            },
-                            "scope": ".",
-                        }
-                    ],
-                },
-            ],
-        },
-        sort_keys=True,
-    )
-    + "\n",
-    "docs/functional-pyramid-src.json": _json.dumps(
-        {
-            "version": 3,
-            "source_id": "repo-a:src",
-            "kind": "area",
-            "scope": "src",
-            "documents": [
-                {"repository_id": "repo-b", "document_ref": "rules/p2s.md"},
-                {"repository_id": "repo-b", "document_ref": "rules/p2w.md"},
-            ],
-            "placements": [
-                {
-                    "document": {
-                        "repository_id": "repo-b",
-                        "document_ref": "rules/p2s.md",
-                        "layer": "P2S",
-                    },
-                    "scope": "src",
-                    "governing_placements": [
-                        {
-                            "declaring_repository_id": "repo-a",
-                            "document": {
-                                "repository_id": "repo-b",
-                                "document_ref": "rules/p1.md",
-                                "layer": "P1",
-                            },
-                            "scope": ".",
-                        }
-                    ],
-                },
-                {
-                    "document": {
-                        "repository_id": "repo-b",
-                        "document_ref": "rules/p2w.md",
-                        "layer": "P2W",
-                    },
-                    "scope": "src",
-                    "governing_placements": [
-                        {
-                            "declaring_repository_id": "repo-a",
-                            "document": {
-                                "repository_id": "repo-b",
-                                "document_ref": "rules/p2s.md",
-                                "layer": "P2S",
-                            },
-                            "scope": "src",
-                        }
-                    ],
-                },
-            ],
-        },
-        sort_keys=True,
-    )
-    + "\n",
+    "docs/classification.json": _classification_file("repo-a", "src"),
     "docs/invalid-functional-pyramid.json": "{not-json\n",
 }
 
@@ -165,105 +100,9 @@ _GOVERNED_B_FILES = {
     "rules/p1.md": "P1 authority.\n",
     "rules/p2s.md": "Shared P2 contract authority.\n",
     "rules/p2w.md": "Workflow P2 contract authority.\n",
-    "docs/functional-pyramid.json": _json.dumps(
-        {
-            "version": 3,
-            "source_id": "repo-b:repository",
-            "kind": "repository",
-            "scope": ".",
-            "documents": [
-                {"repository_id": "repo-b", "document_ref": "rules/p0-v1.md"},
-                {"repository_id": "repo-b", "document_ref": "rules/p1.md"},
-            ],
-            "placements": [
-                {
-                    "document": {
-                        "repository_id": "repo-b",
-                        "document_ref": "rules/p0-v1.md",
-                        "layer": "P0",
-                    },
-                    "scope": ".",
-                    "governing_placements": ["ROOT"],
-                },
-                {
-                    "document": {
-                        "repository_id": "repo-b",
-                        "document_ref": "rules/p1.md",
-                        "layer": "P1",
-                    },
-                    "scope": ".",
-                    "governing_placements": [
-                        {
-                            "declaring_repository_id": "repo-b",
-                            "document": {
-                                "repository_id": "repo-b",
-                                "document_ref": "rules/p0-v1.md",
-                                "layer": "P0",
-                            },
-                            "scope": ".",
-                        }
-                    ],
-                },
-            ],
-        },
-        sort_keys=True,
-    )
-    + "\n",
-    "docs/functional-pyramid-rules.json": _json.dumps(
-        {
-            "version": 3,
-            "source_id": "repo-b:rules",
-            "kind": "area",
-            "scope": "rules",
-            "documents": [
-                {"repository_id": "repo-b", "document_ref": "rules/p2s.md"},
-                {"repository_id": "repo-b", "document_ref": "rules/p2w.md"},
-            ],
-            "placements": [
-                {
-                    "document": {
-                        "repository_id": "repo-b",
-                        "document_ref": "rules/p2s.md",
-                        "layer": "P2S",
-                    },
-                    "scope": "rules",
-                    "governing_placements": [
-                        {
-                            "declaring_repository_id": "repo-b",
-                            "document": {
-                                "repository_id": "repo-b",
-                                "document_ref": "rules/p1.md",
-                                "layer": "P1",
-                            },
-                            "scope": ".",
-                        }
-                    ],
-                },
-                {
-                    "document": {
-                        "repository_id": "repo-b",
-                        "document_ref": "rules/p2w.md",
-                        "layer": "P2W",
-                    },
-                    "scope": "rules",
-                    "governing_placements": [
-                        {
-                            "declaring_repository_id": "repo-b",
-                            "document": {
-                                "repository_id": "repo-b",
-                                "document_ref": "rules/p2s.md",
-                                "layer": "P2S",
-                            },
-                            "scope": "rules",
-                        }
-                    ],
-                },
-            ],
-        },
-        sort_keys=True,
-    )
-    + "\n",
+    "docs/classification.json": _classification_file("repo-b", "rules"),
 }
+
 
 _SOURCE_SET = ("src", "pyproject.toml", "README.md")
 
@@ -578,75 +417,13 @@ dispose();
         repo_a: _pathlib.Path,
         repo_b: _pathlib.Path,
         data_dir: _pathlib.Path,
-    ) -> str:
-        """Initialize the governed candidate through the installed production path."""
+        *,
+        governed: bool = True,
+    ) -> tuple[str, list[str], dict[str, str]]:
+        """Use the same sole installer entry for ordinary and governed setup."""
         self.assertFalse(data_dir.exists())
-        runtime_root = self.tmp / "governed-runtime"
+        runtime_root = data_dir.parent / (data_dir.name + "-runtime")
         runtime_root.mkdir(parents=True, exist_ok=True)
-        bindings_path = runtime_root / "repo-b-authority-bindings.json"
-        bootstrap_a = runtime_root / "repo-a-functional-pyramid-bootstrap.json"
-        bootstrap_b = runtime_root / "repo-b-functional-pyramid-bootstrap.json"
-        bootstrap_payload_a = _json.dumps(
-            {
-                "version": 2,
-                "declaration_sources": [
-                    {"locator": "docs/functional-pyramid.json", "ranges": []},
-                    {"locator": "docs/functional-pyramid-src.json", "ranges": []},
-                ],
-            },
-            sort_keys=True,
-        )
-        bootstrap_payload_b = _json.dumps(
-            {
-                "version": 2,
-                "declaration_sources": [
-                    {"locator": "docs/functional-pyramid.json", "ranges": []},
-                    {"locator": "docs/functional-pyramid-rules.json", "ranges": []},
-                ],
-            },
-            sort_keys=True,
-        )
-        bootstrap_a.write_text(bootstrap_payload_a + "\n", encoding="utf-8")
-        bootstrap_b.write_text(bootstrap_payload_b + "\n", encoding="utf-8")
-        code = (
-            "import hashlib, json\n"
-            "from pathlib import Path\n"
-            "from span.core import model as m\n"
-            f"repo = Path({str(repo_b.resolve())!r})\n"
-            f"out = Path({str(bindings_path)!r})\n"
-            "def binding(evidence_id, locator):\n"
-            "    digest = hashlib.sha256((repo / locator).read_bytes()).hexdigest()\n"
-            "    return m.AuthorityBinding(\n"
-            "        evidence_ref=m.EvidenceRef(\n"
-            "            evidence_id=m.EvidenceId(evidence_id),\n"
-            "            repository_id=repo.name,\n"
-            "            source_kind=m.EvidenceSourceKind.DOCUMENTATION,\n"
-            "            locator=locator,\n"
-            "            revision_or_fingerprint=f'sha256:{digest}',\n"
-            "        ),\n"
-            "        authority_kind=m.AuthorityKind.REPOSITORY_RULE,\n"
-            "        status=m.AuthorityStatus.ACCEPTED,\n"
-            "    )\n"
-            "items = [\n"
-            "    binding('authority-p0-v1', 'rules/p0-v1.md'),\n"
-            "    binding('authority-p0-v2', 'rules/p0-v2.md'),\n"
-            "    binding('authority-p1', 'rules/p1.md'),\n"
-            "    binding('authority-p2s', 'rules/p2s.md'),\n"
-            "    binding('authority-p2w', 'rules/p2w.md'),\n"
-            "]\n"
-            "out.write_text(json.dumps([m.to_canonical(item) for item in items]), "
-            "encoding='utf-8')\n"
-        )
-        generated = _subprocess.run(
-            [self.isolated_python, "-c", code],
-            cwd=str(self.tmp),
-            capture_output=True,
-            text=True,
-            timeout=120,
-            env=self._env(),
-        )
-        self.assertEqual(generated.returncode, 0, generated.stderr[-4000:])
-
         install_exe = _pathlib.Path(self.exe).with_name("span-install")
         repo_root = _pathlib.Path(__file__).resolve().parents[2]
         venv_dir = runtime_root / "venv"
@@ -656,54 +433,73 @@ dispose();
         env = self._env()
         env["HOME"] = str(isolated_home)
         env["XDG_CONFIG_HOME"] = str(runtime_root / "config")
-
-        installed = _subprocess.run(
-            [
-                str(install_exe),
-                "--repo",
-                str(repo_a),
-                "--repo",
-                str(repo_b),
-                "--authority-bindings-file",
-                repo_b.name,
-                str(bindings_path),
-                "--functional-pyramid-bootstrap-file",
-                repo_a.name,
-                str(bootstrap_a),
-                "--functional-pyramid-bootstrap-file",
-                repo_b.name,
-                str(bootstrap_b),
-                "--data-dir",
-                str(data_dir),
-                "--venv-dir",
-                str(venv_dir),
-                "--bin-dir",
-                str(bin_dir),
-                "--span-repo",
-                str(repo_root),
-                "--no-codex",
-                "--no-claude",
-                "--no-hooks",
-                "--no-skills",
-            ],
-            cwd=str(self.tmp),
-            capture_output=True,
-            text=True,
-            timeout=900,
-            env=env,
-        )
-        self.assertEqual(
-            installed.returncode,
-            0,
-            (installed.stderr or installed.stdout)[-12000:],
-        )
+        ordinary = [
+            str(install_exe),
+            "--repo", str(repo_a), "--repo", str(repo_b),
+            "--data-dir", str(data_dir),
+            "--venv-dir", str(venv_dir),
+            "--bin-dir", str(bin_dir),
+            "--span-repo", str(repo_root),
+            "--no-codex", "--no-claude", "--no-hooks", "--no-skills",
+        ]
+        command = ordinary + [
+            "--functional-pyramid-classification-file", repo_a.name, str(repo_a / "docs/classification.json"),
+            "--functional-pyramid-classification-file", repo_b.name, str(repo_b / "docs/classification.json"),
+        ]
+        self._execute_installer(command if governed else ordinary, env)
         runtime_exe = venv_dir / "bin" / "span-mcp"
         self.assertTrue(runtime_exe.is_file())
         self.assertTrue((data_dir / f"{repo_a.name}.db").is_file())
         self.assertTrue((data_dir / f"{repo_b.name}.db").is_file())
-        self.assertTrue((repo_a / ".span" / "functional-pyramid.json").is_file())
-        self.assertTrue((repo_b / ".span" / "functional-pyramid.json").is_file())
-        return str(runtime_exe)
+        for root in (repo_a, repo_b):
+            self.assertEqual((root / ".span" / "functional-pyramid.json").is_file(), governed)
+        return str(runtime_exe), command, env
+
+    def _execute_installer(self, command, env):
+        installed = _subprocess.run(
+            command, cwd=str(self.tmp), capture_output=True, text=True,
+            timeout=900, env=env,
+        )
+        self.assertEqual(
+            installed.returncode, 0,
+            (installed.stderr or installed.stdout)[-12000:],
+        )
+        return installed
+
+    def test_installed_document_only_governed_initialization(self):
+        root = self.tmp / "document-only"
+        repo_a, repo_b = root / "repo-a", root / "repo-b"
+        for repo, files in ((repo_a, _GOVERNED_A_FILES), (repo_b, _GOVERNED_B_FILES)):
+            repo.mkdir(parents=True)
+            _write_files(repo, files)
+            self.assertFalse((repo / ".span").exists())
+        data_dir = root / "data"
+        runtime_exe, command, env = self._install_governed_runtime(repo_a, repo_b, data_dir)
+        receipt = _json.loads((data_dir / "install.json").read_text())
+        self.assertNotIn("pending_governed_initialization", receipt)
+        entries = receipt["governed_initialization"]
+        self.assertEqual(set(entries), {"repo-a", "repo-b"})
+        self.assertEqual(entries["repo-a"]["version"], 1)
+        self.assertEqual(entries["repo-b"]["version"], 1)
+        self.assertEqual(entries["repo-a"]["pyramid_id"], entries["repo-b"]["pyramid_id"])
+        self.assertEqual(entries["repo-a"]["bindings"], [])
+        self.assertEqual(len(entries["repo-b"]["bindings"]), 4)
+        self.assertEqual(len(entries["repo-a"]["artifacts"]), 3)
+        self.assertTrue(receipt["verify"]["acceptance_ok"])
+        for repo in receipt["verify"]["repos"]:
+            self.assertEqual(repo["functional_pyramid"]["participation"]["state"], "ACTIVE")
+            self.assertEqual(repo["functional_pyramid"]["provenance"]["state"], "PROVENANCE_MATCH")
+        before = entries["repo-a"]["participation_results"]
+        # The sole input may be reformatted without creating another version.
+        path = repo_a / "docs/classification.json"
+        path.write_text(_json.dumps(_json.loads(path.read_text()), indent=2))
+        self._execute_installer(command, env)
+        repeated = _json.loads((data_dir / "install.json").read_text())
+        entry = repeated["governed_initialization"]["repo-a"]
+        self.assertEqual(entry["version"], 1)
+        self.assertEqual(entry["participation_results"], before)
+        self.assertTrue(repeated["verify"]["acceptance_ok"])
+        self.assertTrue(_pathlib.Path(runtime_exe).is_file())
 
     def test_installed_cross_repository_governance_journey(self):
         root = self.tmp / "governed"
@@ -714,7 +510,9 @@ dispose();
         _write_files(repo_a, _GOVERNED_A_FILES)
         _write_files(repo_b, _GOVERNED_B_FILES)
         data_dir = self.tmp / "governed-data"
-        runtime_exe = self._install_governed_runtime(repo_a, repo_b, data_dir)
+        runtime_exe, command, env = self._install_governed_runtime(
+            repo_a, repo_b, data_dir, governed=False
+        )
 
         probe = _pathlib.Path(__file__).with_name(
             "functional_pyramid_governed_probe.py"
@@ -729,12 +527,13 @@ dispose();
                 str(data_dir),
                 repo_a.name,
                 repo_b.name,
+                _json.dumps(command),
             ],
             cwd=str(self.tmp),
             capture_output=True,
             text=True,
-            timeout=300,
-            env=self._env(),
+            timeout=900,
+            env=env,
         )
         self.assertEqual(proc.returncode, 0, (proc.stderr or proc.stdout)[-8000:])
         observed = _json.loads(proc.stdout.strip().splitlines()[-1])
@@ -750,6 +549,7 @@ dispose();
 
         self.assertFalse(observed["pre_status_error"])
         self.assertEqual(observed["pre_status_state"], "UNCONFIGURED")
+        self.assertEqual(observed["manual_activation_kind"], "Rejected")
         self.assertFalse(observed["candidate_error"])
         self.assertTrue(observed["candidate_ready"])
         self.assertFalse(observed["activated_error"])
@@ -815,7 +615,7 @@ dispose();
         self.assertEqual(observed["fresh_reuse_kind"], "Answer")
         self.assertFalse(observed["snapshot_before_error"])
         self.assertTrue(observed["snapshot_before_has_route"])
-        self.assertIn("authority-p0-v1", observed["snapshot_before_authority_ids"])
+        self.assertIn("rules/p0-v1.md", observed["snapshot_before_authority_locators"])
 
         self.assertFalse(observed["changed_error"])
         self.assertIn("repo-a", observed["changed_surface_repositories"])
@@ -825,7 +625,7 @@ dispose();
         self.assertEqual(observed["reestablished_qualification"], "CURRENT")
         self.assertFalse(observed["snapshot_after_error"])
         self.assertTrue(observed["snapshot_after_has_route"])
-        self.assertIn("authority-p0-v2", observed["snapshot_after_authority_ids"])
+        self.assertIn("rules/p0-v2.md", observed["snapshot_after_authority_locators"])
         self.assertFalse(observed["ask_after_error"])
         self.assertEqual(observed["ask_after_kind"], "Answer")
         self.assertFalse(observed["corrected_error"])
@@ -890,15 +690,13 @@ dispose();
         self.assertEqual(observed["fp_candidate_kind"], "FunctionalPyramidCandidate")
         self.assertTrue(observed["fp_activation_ready"])
         self.assertFalse(observed["fp_activate_error"])
-        self.assertEqual(observed["fp_activate_kind"], "FunctionalPyramidRecorded")
+        self.assertEqual(observed["fp_activate_kind"], "Rejected")
         self.assertFalse(observed["fp_status_after_error"])
-        self.assertEqual(observed["fp_status_after_state"], "ACTIVE")
-        self.assertEqual(observed["fp_status_after_health"], "VALID")
+        self.assertEqual(observed["fp_status_after_state"], "UNCONFIGURED")
+        self.assertIsNone(observed["fp_status_after_health"])
         self.assertFalse(observed["fp_receipt_error"])
-        self.assertEqual(
-            observed["fp_receipt_kind"], "RetrievedFunctionalPyramidReceipt"
-        )
-        self.assertEqual(observed["fp_receipt_action"], "activate")
+        self.assertEqual(observed["fp_receipt_kind"], "Rejected")
+        self.assertIsNone(observed["fp_receipt_action"])
 
     def test_fresh_process_reuses_without_state(self):
         work = self.tmp / "reuse"

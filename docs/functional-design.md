@@ -519,6 +519,8 @@ documentation completeness. *(G1, G8, A2, A3, F11, F12, L14)*
 **FD-85 — Activation and revision revalidate current source and commit
 atomically.**
 A Functional Pyramid write never trusts a previous candidate-validation result.
+New activation is owned exclusively by governed installation (FD-88A);
+MCP may replay an accepted activation, not initialize another instance.
 It re-runs the corresponding FD-84 ACTIVATE/REVISE validation against current
 source, derives the candidate graph identity/findings, and commits only when
 `activation_ready=true`. Rejection commits no participation/version change.

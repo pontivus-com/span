@@ -204,12 +204,12 @@ Reload OpenCode after changing its MCP configuration.
 For plugin scope, path selection, relocation, and upgrade rules, see
 [Advanced OpenCode configuration](#advanced-opencode-configuration).
 
-## Governed installation (Beta-5 target; pending implementation)
+## Governed installation (Beta-5)
 
 Provide the repository-owned Functional Pyramid classification document described
 in [lifecycle §7.1](lifecycle-contract.md#71-functional-pyramid-initializationadoption-lifecycle)
 and [technical design §17.2](technical-design.md#172-functional-pyramid-initialization-import).
-The target command is:
+The sole initialization command is:
 
 ```bash
 span-install --repo /work/repo-a \
@@ -221,8 +221,8 @@ explicitly selected member. Span performs all mechanical initialization and
 reports the verified outcome or exact blocker/semantic-effect handoff. Do not
 prepare or commit derived declaration, bootstrap or binding files or issue a
 separate activation command. Ordinary installation without governed input
-remains non-activating. This syntax is the target contract, not a claim that
-this development head has implemented it.
+remains non-activating. The generated Version-3 sources and Version-2 navigation bootstrap are internal;
+there is no raw bootstrap setup option or fresh MCP activation path.
 
 ## Optional ordinary project-authority configuration
 

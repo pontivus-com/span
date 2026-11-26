@@ -100,7 +100,7 @@ class StoreProbeTest(unittest.TestCase):
             self.assertTrue(report["declarations"]["valid"])
             self.assertEqual(report["participation"]["state"], "UNAVAILABLE")
             self.assertEqual(
-                report["activation_readiness"]["status"], "requires_candidate"
+                report["activation_readiness"]["status"], "requires_governed_install"
             )
             self.assertEqual(list(data.iterdir()), [])
             self.assertFalse(any(root.rglob("*")))

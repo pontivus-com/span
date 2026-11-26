@@ -174,14 +174,14 @@ def _add_authority_arguments(parser) -> None:
         "an explicit empty list clears them.",
     )
     parser.add_argument(
-        "--functional-pyramid-bootstrap-file",
+        "--functional-pyramid-classification-file",
         action="append",
         nargs=2,
         default=[],
         metavar=("REPOSITORY_ID", "PATH"),
-        help="Repository-qualified explicit Version-2 Functional Pyramid bootstrap "
-        "(repeatable). The file is validated before mutation and installed only "
-        "as <repo>/.span/functional-pyramid.json; Span never generates one.",
+        help="The sole Functional Pyramid initialization input (repeatable, one "
+        "Version-1 classification per selected governed member). Span derives "
+        "all internal metadata, provisions authority and establishes participation.",
     )
 
 

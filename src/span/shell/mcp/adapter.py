@@ -428,8 +428,16 @@ def _call_functional_pyramid(
         action = request.action
         if not isinstance(action, m.FunctionalPyramidAction):
             raise ValueError("Functional Pyramid record requires its declared action")
+        request_id = m.RequestId(request.request_id)
+        if action is m.FunctionalPyramidAction.ACTIVATE and service.receipt(
+            m.FunctionalPyramidReceiptSelector(request_id)
+        ) is None:
+            raise RecordingValidationError(
+                "new participation must be initialized by span-install",
+                public_cause="initialize the Functional Pyramid using span-install and the classification document",
+            )
         return service.record(
-            request_id=m.RequestId(request.request_id),
+            request_id=request_id,
             action=action,
             members=request.members,
             pyramid_id=(

@@ -31,6 +31,9 @@ def parse_args(argv=None):
         action="store_true",
         help="exit non-zero when structural or provenance acceptance fails",
     )
+    parser.add_argument(
+        "--pending-setup", action="store_true", help=argparse.SUPPRESS
+    )
     return parser.parse_args(argv)
 
 
@@ -116,6 +119,7 @@ def main(argv=None):
                     data_dir,
                     repository_id,
                     canonical_root,
+                    pending_setup=args.pending_setup,
                 ),
             }
         )
@@ -125,11 +129,28 @@ def main(argv=None):
         bool(repo["store"].get("ready"))
         and bool(repo["functional_pyramid"]["declarations"].get("valid"))
         and repo["functional_pyramid"]["provenance"].get("state")
-        != "PROVENANCE_MISMATCH"
+        not in ("PROVENANCE_MISMATCH", "PENDING_GOVERNED_INITIALIZATION")
         for repo in repos
     )
+    from span.shell.install.governed import PENDING
+    from span.shell.install.receipt import read_receipt
+
+    receipt = read_receipt(data_dir) or {}
+    pending = receipt.get(PENDING)
+    pending_ok = pending is None
+    if args.pending_setup and isinstance(pending, dict):
+        pending_entries = pending.get("repositories")
+        pending_ok = (
+            isinstance(pending_entries, dict)
+            and set(pending_entries).issubset(roots_by_repository)
+            and all(
+                repo["functional_pyramid"]["provenance"].get("state") == "PROVENANCE_MATCH"
+                for repo in repos
+                if repo["functional_pyramid"]["repository_id"] in pending_entries
+            )
+        )
     acceptance_ok = (
-        bool(installation.get("ready"))
+        pending_ok and bool(installation.get("ready"))
         and active.get("status") in ("valid", "not_active")
         and repositories_accept
     )

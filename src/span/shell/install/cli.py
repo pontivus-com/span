@@ -63,9 +63,9 @@ from span.shell.install.paths import (
 )
 from span.shell.install.preflight import (
     load_authority_files,
-    load_functional_pyramid_bootstraps,
     preflight_facts,
 )
+from span.shell.install import governed
 from span.shell.install.receipt import (
     administrative_ownership,
     read_receipt,
@@ -324,7 +324,6 @@ def _initialize_repositories(
     env: _Environment,
     authority_seeds: dict[str, tuple[m.EvidenceRef, ...]],
     authority_bindings: dict[str, tuple[m.AuthorityBinding, ...]],
-    functional_pyramid_bootstraps: dict[str, bytes],
 ) -> tuple[m.InitializeRepositoryResult, ...]:
     """Initialize selected repositories through the canonical setup owner."""
     if env.dry:
@@ -353,18 +352,7 @@ def _initialize_repositories(
                 f"repository initialization failed for {repository_id!r}: {exc}"
             ) from None
         try:
-            bootstrap = functional_pyramid_bootstraps.get(repository_id)
-            if bootstrap is not None:
-                destination = target / ".span" / "functional-pyramid.json"
-                if not destination.exists():
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    destination.write_bytes(bootstrap)
             results.append(result)
-        except OSError as exc:
-            raise SystemExit(
-                f"Functional Pyramid bootstrap installation failed for "
-                f"{repository_id!r}: {exc}"
-            ) from None
         finally:
             close_repository_runtime(runtime)
     return tuple(results)
@@ -422,7 +410,12 @@ def _sync_runtime_distribution(
     return source_venv_sync, data_backup, post_install_verified
 
 
-def _provision_runtime(env: _Environment) -> _RuntimeState:
+def _provision_runtime(
+    env: _Environment,
+    prior: dict[str, object],
+    pending: dict[str, object] | None,
+    artifacts: dict[tuple[str, str], bytes],
+) -> _RuntimeState:
     """Install/reuse runtime, then execute explicit repository initialization."""
     args = env.args
     check_prereqs()
@@ -437,14 +430,10 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
         args.authority_bindings_file,
         dry_run=env.dry,
     )
-    functional_pyramid_bootstraps = load_functional_pyramid_bootstraps(
-        env.targets,
-        args.functional_pyramid_bootstrap_file,
-        dry_run=env.dry,
-    )
+    if pending is not None:
+        authority_bindings.update(governed.bindings_for(pending))
     preflight = preflight_facts(
         env.targets,
-        bootstrap_files=args.functional_pyramid_bootstrap_file,
         binding_files=args.authority_bindings_file,
     )
     print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
@@ -463,12 +452,17 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
     if not env.dry and env.targets and data_backup is None:
         data_backup = backup_data_dir(env.data_dir, dry_run=False)
 
+    if pending is not None and not env.dry:
+        governed.retain_pending(env.data_dir, prior, pending, data_backup)
+        governed.publish(pending, artifacts, bootstrap=False)
     initializations = _initialize_repositories(
         env,
         authority_seeds,
         authority_bindings,
-        functional_pyramid_bootstraps,
     )
+    if pending is not None and not env.dry:
+        governed.establish(env.data_dir, pending)
+        governed.publish(pending, artifacts, bootstrap=True)
     return _RuntimeState(
         target_census=target_census,
         initializations=initializations,
@@ -927,18 +921,50 @@ def _mutating_invocation(env: _Environment) -> bool:
 
 def _execute(env: _Environment) -> None:
     args = env.args
+    prior_receipt = read_receipt(env.data_dir)
+    prior = prior_receipt or {}
+    mappings = args.functional_pyramid_classification_file
+    if governed.PENDING in prior and _mutating_invocation(env) and not mappings and args.restore_backup is None:
+        raise SystemExit("incomplete governed initialization; resume the same classification input or explicitly restore a verified backup")
+    if mappings and any((
+        args.list_orphans, args.backup, args.backup_repository,
+        args.load_repository_backup, args.reap_repository_backups,
+        args.restore_backup, args.reap_backups, args.verify_backup,
+        args.verify_repository_backup, args.transition_store, args.transition_phase,
+        args.transition_root, args.uninstall, args.purge, args.verify_only,
+        args.snapshot_census, args.compare_census,
+    )):
+        raise SystemExit("classification input belongs only to the governed install operation")
     if _run_one_shot(env):
         return
-    prior_receipt = read_receipt(env.data_dir)
+    pending = None
+    artifacts: dict[tuple[str, str], bytes] = {}
+    if mappings:
+        try:
+            pending, artifacts = governed.prepare(
+                env.data_dir, env.targets, mappings, args.authority_bindings_file, prior
+            )
+        except (OSError, ValueError, KeyError) as exc:
+            raise SystemExit(f"governed initialization preflight rejected: {exc}") from None
+    elif governed.PENDING in prior:
+        print("incomplete governed initialization; observation only")
     scope = None
     if not args.no_hooks:
-        scope, _ = resolve_opencode_scope(args.opencode_plugin_scope, prior_receipt)
-    state = _provision_runtime(env)
+        scope_receipt = prior_receipt
+        if governed.PENDING in prior and not prior.get("host_registration"):
+            scope_receipt = None
+        scope, _ = resolve_opencode_scope(args.opencode_plugin_scope, scope_receipt)
+    state = _provision_runtime(env, prior, pending, artifacts)
     host_registration = _register_hosts(env, scope, prior_receipt)
-    report = verify_installation(state.venv_python, env.data_dir, env.targets, env.dry)
+    report = verify_installation(
+        state.venv_python, env.data_dir, env.targets, env.dry,
+        strict=pending is not None, pending_setup=pending is not None,
+    )
     receipt = _build_receipt(env, state, host_registration, report)
+    if not env.dry:
+        governed.finalize(receipt, prior, pending)
     write_receipt(env.data_dir, receipt, dry_run=env.dry)
-    print("install complete.")
+    print("install plan only." if env.dry else "install complete.")
 
 
 def main(argv=None):

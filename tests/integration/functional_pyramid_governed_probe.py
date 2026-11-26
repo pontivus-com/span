@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import traceback
 
@@ -53,7 +54,7 @@ def _has_route_support(value) -> bool:
     )
 
 
-def _authority_ids(value, repository_id):
+def _authority_locators(value, repository_id):
     found = set()
     for item in _dicts(value):
         evidence = item.get("evidence_ref")
@@ -61,9 +62,9 @@ def _authority_ids(value, repository_id):
             continue
         if evidence.get("repository_id") != repository_id:
             continue
-        evidence_id = _value(evidence.get("evidence_id"))
-        if evidence_id:
-            found.add(evidence_id)
+        locator = evidence.get("locator")
+        if locator:
+            found.add(locator)
     return sorted(found)
 
 
@@ -105,7 +106,15 @@ def _surface_repositories(result):
     return sorted(set(repositories))
 
 
-async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
+def _install(command, data_dir, repository_id):
+    result = subprocess.run(command, capture_output=True, text=True, timeout=600)
+    if result.returncode:
+        raise RuntimeError("governed install failed: " + (result.stderr or result.stdout)[-8000:])
+    receipt = json.loads((pathlib.Path(data_dir) / "install.json").read_text())
+    return receipt["governed_initialization"][repository_id]["participation_results"][-1]
+
+
+async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
@@ -189,32 +198,16 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 },
             )
 
-            members = [
-                {
-                    "repository_id": repo_a_id,
-                    "declaration_sources": [
-                        {"locator": "docs/functional-pyramid.json", "ranges": []},
-                        {"locator": "docs/functional-pyramid-src.json", "ranges": []},
-                    ],
-                },
-                {
-                    "repository_id": repo_b_id,
-                    "declaration_sources": [
-                        {"locator": "docs/functional-pyramid.json", "ranges": []},
-                        {"locator": "docs/functional-pyramid-rules.json", "ranges": []},
-                    ],
-                },
-            ]
-            candidate, candidate_error = await _call(
-                session,
-                "ask",
-                {
-                    "selector": {
-                        "$type": "FunctionalPyramidCandidateSelector",
-                        "action": "activate",
-                        "members": members,
-                    }
-                },
+            manual_activation, _ = await _call(
+                session, "record", {
+                    "request_id": "manual-activation-forbidden",
+                    "kind": "functional_pyramid",
+                    "action": "activate",
+                    "members": [{
+                        "repository_id": repo_a_id,
+                        "declaration_sources": [{"locator": "docs/invalid-functional-pyramid.json", "ranges": []}],
+                    }],
+                }
             )
             pre_created, pre_created_error = await _call(
                 session,
@@ -238,15 +231,29 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 _value(pre_affected[0].get("conclusion_id")) if pre_affected else None
             )
 
-            activated, activated_error = await _call(
-                session,
-                "record",
+            activated = _install(command, data_dir, repo_a_id)
+            activated_error = False
+            activation_id = _value(activated["receipt_selector"]["request_id"])
+            members = [
                 {
-                    "request_id": "governed-activate",
-                    "kind": "functional_pyramid",
-                    "action": "activate",
-                    "members": members,
-                },
+                    "repository_id": member["repository_id"],
+                    "declaration_sources": [
+                        {"locator": ref["locator"], "ranges": []}
+                        for ref in member["declaration_refs"]
+                    ],
+                }
+                for member in activated["members"]
+            ]
+            candidate, candidate_error = await _call(
+                session, "ask", {
+                    "selector": {
+                        "$type": "FunctionalPyramidCandidateSelector",
+                        "action": "revise",
+                        "members": members,
+                        "pyramid_id": activated["pyramid_id"],
+                        "expected_version": activated["version"],
+                    }
+                }
             )
 
             activation_receipt_before, activation_receipt_before_error = await _call(
@@ -255,7 +262,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 {
                     "selector": {
                         "$type": "FunctionalPyramidReceiptSelector",
-                        "request_id": {"value": "governed-activate"},
+                        "request_id": {"value": activation_id},
                     }
                 },
             )
@@ -263,7 +270,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 session,
                 "record",
                 {
-                    "request_id": "governed-activate",
+                    "request_id": activation_id,
                     "kind": "functional_pyramid",
                     "action": "activate",
                     "members": members,
@@ -295,7 +302,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 {
                     "selector": {
                         "$type": "FunctionalPyramidReceiptSelector",
-                        "request_id": {"value": "governed-activate"},
+                        "request_id": {"value": activation_id},
                     }
                 },
             )
@@ -303,7 +310,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 session,
                 "record",
                 {
-                    "request_id": "governed-activate",
+                    "request_id": activation_id,
                     "kind": "functional_pyramid",
                     "action": "activate",
                     "members": members,
@@ -447,34 +454,26 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 },
             )
 
-            declaration_path = pathlib.Path(repo_a) / "docs/functional-pyramid.json"
-            declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
-            for document in declaration.get("documents", []):
-                if document["document_ref"] == "rules/p0-v1.md":
-                    document["document_ref"] = "rules/p0-v2.md"
-            for placement in declaration["placements"]:
-                document = placement["document"]
-                if document["document_ref"] == "rules/p0-v1.md":
-                    document["document_ref"] = "rules/p0-v2.md"
-                for governing in placement["governing_placements"]:
-                    if not isinstance(governing, dict):
-                        continue
-                    governing_document = governing["document"]
-                    if governing_document["document_ref"] == "rules/p0-v1.md":
-                        governing_document["document_ref"] = "rules/p0-v2.md"
-            declaration_path.write_text(
-                json.dumps(declaration, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-
-            changed, changed_error = await _call(
-                session,
-                "reconsider",
-                {
-                    "repository_id": repo_a_id,
-                    "changed_paths": ["docs/functional-pyramid.json"],
-                },
-            )
+            # Change the repository-owned classification, never a generated source.
+            for repository in (repo_a, repo_b):
+                classification_path = pathlib.Path(repository) / "docs/classification.json"
+                classification = json.loads(classification_path.read_text())
+                for row in classification["rows"]:
+                    locator = row["document_ref"]
+                    if locator == "rules/p0-v1.md":
+                        row["document_ref"] = "rules/p0-v2.md"
+                    elif locator == "rules/p0-v2.md":
+                        row["document_ref"] = "rules/p0-v1.md"
+                    for parent in row.get("governing_documents", []):
+                        if isinstance(parent, dict) and parent["document_ref"] == "rules/p0-v1.md":
+                            parent["document_ref"] = "rules/p0-v2.md"
+                classification_path.write_text(json.dumps(classification, sort_keys=True) + "\n")
+            revision_result = _install(command, data_dir, repo_a_id)
+            changed = {
+                "surfaces": revision_result["dependent_effects"],
+                "reestablishment_contexts": revision_result["reestablishment_contexts"],
+            }
+            changed_error = False
             context_a = _context_for(changed, repo_a_id)
             reestablished, reestablished_error = await _call(
                 session,
@@ -623,6 +622,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "mixed_candidate_error": mixed_candidate_error,
                 "mixed_validation_reasons": _validation_reasons(mixed_candidate),
                 "mixed_graph_reasons": _graph_reasons(mixed_candidate),
+                "manual_activation_kind": manual_activation.get("$type"),
                 "candidate_error": candidate_error,
                 "candidate_ready": candidate.get("activation_ready"),
                 "activated_error": activated_error,
@@ -691,7 +691,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "fresh_reuse_kind": fresh_reuse.get("$type"),
                 "snapshot_before_error": snapshot_before_error,
                 "snapshot_before_has_route": _has_route_support(snapshot_before),
-                "snapshot_before_authority_ids": _authority_ids(
+                "snapshot_before_authority_locators": _authority_locators(
                     snapshot_before, repo_b_id
                 ),
                 "changed_error": changed_error,
@@ -703,7 +703,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 ).get("state"),
                 "snapshot_after_error": snapshot_after_error,
                 "snapshot_after_has_route": _has_route_support(snapshot_after),
-                "snapshot_after_authority_ids": _authority_ids(
+                "snapshot_after_authority_locators": _authority_locators(
                     snapshot_after, repo_b_id
                 ),
                 "ask_after_error": ask_after_error,
@@ -736,7 +736,7 @@ def _print_exception_tree(error):
 
 
 def main(argv):
-    if len(argv) != 7:
+    if len(argv) != 8:
         print(
             "usage: functional_pyramid_governed_probe.py "
             "<span-mcp> <repo-a> <repo-b> <data-dir> <repo-a-id> <repo-b-id>",
@@ -752,6 +752,7 @@ def main(argv):
                 argv[4],
                 argv[5],
                 argv[6],
+                json.loads(argv[7]),
             )
         )
     except BaseException as exc:

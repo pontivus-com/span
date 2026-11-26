@@ -1,0 +1,48 @@
+name: Temporary governed initialization verification
+on:
+  push:
+    branches: ['release/1.0.0-beta5']
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install test tooling
+        run: python -m pip install -e '.[test,dev]'
+      - name: Format and measure
+        run: |
+          black src tests
+          git diff -- src tests
+          python - <<'PY'
+          import json, runpy
+          print(json.dumps(runpy.run_path('tests/unit/test_code_budget.py')['measure'](), sort_keys=True))
+          PY
+      - name: Static checks
+        run: |
+          ruff check .
+          python scripts/typecheck.py
+      - name: Focused unit tests
+        if: always()
+        run: python -m pytest -q tests/unit/test_functional_pyramid_v3_validation.py tests/unit/test_functional_pyramid_service.py tests/unit/test_reconsider.py tests/unit/test_administrative_readiness.py tests/unit/test_install.py tests/unit/test_skills.py
+      - name: Provision indexer
+        if: always()
+        run: |
+          version=$(grep -m1 'STRUCTURAL_INDEXER_VERSION = ' src/span/shell/install/constants.py | cut -d'"' -f2)
+          package=$(grep -m1 'STRUCTURAL_INDEXER_PACKAGE = ' src/span/shell/install/constants.py | cut -d'"' -f2)
+          npm install --prefix "$RUNNER_TEMP/span-tools" --no-audit --no-fund "$package@$version"
+          echo "SPAN_GRAFT_BIN=$RUNNER_TEMP/span-tools/node_modules/.bin/graft" >> "$GITHUB_ENV"
+      - name: Installed document-only journey
+        if: always()
+        run: python -m pytest -q tests/integration/test_installed_mcp.py -k 'document_only_governed_initialization or cross_repository_governance_journey or installed_lifecycle_over_stdio'

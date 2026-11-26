@@ -544,7 +544,10 @@ document; a non-empty `EvidenceRequest.ranges` selection is partial and
 therefore invalid for Functional Pyramid declaration validation.
 
 - `activate` creates one new pyramid instance from UNCONFIGURED/EXCLUDED
-  repositories after revalidating every member and declaration.
+  repositories after revalidating every member and declaration. Fresh activation
+  is exclusively invoked by governed installation (§7.1); MCP record can replay
+  an already accepted exact activation receipt, but must reject a new activation
+  intent. Candidate inspection is non-mutating and is not an installer.
 - `revise` compare-and-sets one existing instance version and atomically
   replaces its complete member intent. Repositories removed by an accepted
   revision become UNCONFIGURED; removal does not invent an explicit
