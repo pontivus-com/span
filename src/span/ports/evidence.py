@@ -86,6 +86,17 @@ class EvidenceSource(_typing.Protocol):
         """
         ...
 
+    def fingerprints(
+        self, repository_id: str, locators: tuple[str, ...]
+    ) -> dict[str, str]:
+        """Content fingerprints for exact locators this source can serve.
+
+        The single-file companion to ``list_inventory_entries`` with
+        ``fingerprint_locators``: it applies the same membership rule and
+        reads only the requested locators, never enumerating the repository.
+        """
+        ...
+
     def list_inventory_entries(
         self,
         repository_id: str,

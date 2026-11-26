@@ -98,6 +98,17 @@ class EvidenceSourceBase(ABC):
         self._check_repository(repository_id)
         return self._is_servable(locator)
 
+    def fingerprints(
+        self, repository_id: str, locators: tuple[str, ...]
+    ) -> dict[str, str]:
+        """Fingerprint exact servable locators without enumerating inventory."""
+        self._check_repository(repository_id)
+        return {
+            locator: self._fingerprint(locator)
+            for locator in dict.fromkeys(locators)
+            if self._is_servable(locator)
+        }
+
     def list_inventory_entries(
         self,
         repository_id: str,

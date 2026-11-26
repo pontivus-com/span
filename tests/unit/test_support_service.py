@@ -858,6 +858,9 @@ class SupportServiceTest(unittest.TestCase):
             def list_inventory_entries(self, *args, **kwargs):
                 raise RuntimeError("support provider down")
 
+            def fingerprints(self, *args, **kwargs):
+                raise RuntimeError("support provider down")
+
         failing = SupportService(
             store=self.store,
             evidence=FailingEvidence(),

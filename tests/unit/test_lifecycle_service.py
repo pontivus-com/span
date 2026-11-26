@@ -80,6 +80,9 @@ class _CurrentEvidence:
     def list_inventory_entries(self, repository_id, scope, fingerprint_locators=()):
         return (), {locator: _SOURCE_DIGEST for locator in fingerprint_locators}
 
+    def fingerprints(self, repository_id, locators):
+        return {locator: _SOURCE_DIGEST for locator in locators}
+
 
 class _Authority:
     def __init__(self) -> None:

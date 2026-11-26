@@ -289,12 +289,9 @@ class SupportService:
         if record is not None:
             locator = record.evidence.locator
             if record.whole_file or not record.delivered_ranges:
-                _, fingerprints = self._evidence.list_inventory_entries(
-                    record.repository_id,
-                    m.EvidenceScope(),
-                    (locator,),
-                )
-                observed = fingerprints.get(locator)
+                observed = self._evidence.fingerprints(
+                    record.repository_id, (locator,)
+                ).get(locator)
                 expected = record.content_digest.value
             else:
                 unit = self._evidence.read_exact(
@@ -372,12 +369,10 @@ class SupportService:
             declared = None
         observed: str | None = None
         if declared is not None:
-            _, fingerprints = evidence.list_inventory_entries(
-                reference.repository_id,
-                m.EvidenceScope(),
-                (declared.evidence_ref.locator,),
-            )
-            observed = fingerprints.get(declared.evidence_ref.locator)
+            locator = declared.evidence_ref.locator
+            observed = evidence.fingerprints(
+                reference.repository_id, (locator,)
+            ).get(locator)
         return _rules.authority_state(
             recorded=binding,
             declared=declared,
