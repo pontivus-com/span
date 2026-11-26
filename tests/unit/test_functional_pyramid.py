@@ -113,13 +113,10 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
             m.FunctionalPyramidView(
                 pyramid_id=m.FunctionalPyramidId("p"),
                 version=m.FunctionalPyramidVersion(1),
-                health=m.FunctionalPyramidHealth.VALID,
                 status=m.FunctionalPyramidRouteStatus.RESOLVED,
                 directory=".",
                 semantic_scope=m.EvidenceScope(),
                 placements=(),
-                routes=(),
-                provenance=(),
                 declared_layers=(),
                 absent_layers=tuple(m.FunctionalPyramidLayer),
             )

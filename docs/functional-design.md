@@ -280,7 +280,7 @@ global ACTIVE health may still be `DEGRADED`.
 **FD-69 — Multi-path and broad-scope resolution preserve provenance.**
 When a semantic scope contains several explicit paths, Span resolves each path
 or path boundary under FD-62, unions identical placements for presentation, and
-preserves scope-to-placement-to-document provenance for each input. A
+preserves scope-to-placement-to-document provenance internally for each input. A
 repository-wide scope selects every placement rather than an invented list of
 files. A placement shared by several scope members appears once but remains
 traceable from every applicable member. *(G4, F11)*
@@ -361,13 +361,17 @@ through authority support, not duplicated into route identity. This separation
 allows Span to state whether *what applies* changed independently from whether
 *an applicable authority itself* changed. *(F1, F11, F12)*
 
-**FD-74 — The projection returns document references, never a copied authority.**
+**FD-74 — The projection returns applicable document references, never a copied authority.**
 The Functional Pyramid view returns repository-qualified canonical document
-references, placements, layers, authority status, governing document references,
-reverse dependencies, declared/absent layers and provenance. It contains no rule
-IDs and does not copy, summarize, chunk, embed or cache document prose. Ordinary
-evidence admission reads the canonical document when substantive content is
-needed. *(G6, F1, F11, L11, L12)*
+references, their placements and layers, route status, the declared/absent layer
+summary and unresolved findings. It does not return governing edges, reverse
+dependencies, per-path provenance or authority-binding payloads; those are
+internal resolution state used by record-time authority support and
+reconsideration. A reverse-dependency projection is a separate document-scope
+selection under FD-88 and is never part of a directory or semantic-scope answer.
+It contains no rule IDs and does not copy, summarize, chunk, embed or cache
+document prose. Ordinary evidence admission reads the canonical document when
+substantive content is needed. *(G6, F1, F11, L11, L12)*
 
 **FD-75 — Normative support is server-derived from the complete route.**
 When a new or revised conclusion has `assertion_nature=NORMATIVE` and its
@@ -601,9 +605,11 @@ silently drops the relationship. *(G1, G7, G8, F11, F12, L13)*
 
 **FD-88 — Governing traversal is bidirectional over one declared graph.**
 Upward orientation follows directory or scope → placement → governing placement
-to ROOT under FD-68. For a selected canonical document scope, Span derives the
-reverse view from those same declaration edges: direct/transitive dependent
-placements and the declared placements that reference them. Reverse traversal is
+to ROOT under FD-68. The reverse view is a separate selection over a canonical
+document scope: direct/transitive dependent placements and the declared
+placements that reference them. It is not part of a directory or semantic-scope
+answer and is served only when a caller asks the impact question. The reverse
+index remains internal resolution state for reconsideration. Reverse traversal is
 navigation/impact orientation only; it does not predict what a proposed edit
 will do and never creates a second dependency registry. *(G3, G7, F4, F11, L15,
 L16)*
@@ -1354,7 +1360,7 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     unrelated directory scopes; each directory receives it only where its own
     declared scope contains that directory.
 14. **Multi-path and broad semantic scope.** Resolution unions placements across
-    path-derived directories while preserving per-path provenance. The view's
+    path-derived directories while preserving per-path provenance internally. The view's
     `declared_layers` is the ordered union of layers in that complete route
     closure and `absent_layers` is its fixed-layer complement; neither summary
     is interpreted as per-path completeness. A repository-wide semantic
@@ -1397,9 +1403,10 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 22. **Applicability change.** Changing a placement's scope, layer, document
     identity, governing edges or material member bindings requires reassessment
     through route support even when implementation/document content is unchanged.
-23. **Reverse authority navigation.** Asking an exact canonical document scope
-    exposes its declared downstream document/placement relationships without
-    predicting a proposed edit or copying document content.
+23. **Reverse authority navigation.** A separate exact canonical document
+    selection — never a directory or ordinary surface ask — exposes its declared
+    downstream document/placement relationships without predicting a proposed
+    edit or copying document content.
 24. **Cross-repository reconsideration.** A governing change in repository A
     returns affected normative understanding in repository B when the same
     pyramid document relationships connect them; the caller does not enumerate B. The Changed
@@ -1421,7 +1428,8 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     dispute → disposition, start/resume and completion. Functional Pyramid behavior is additive at those
     same moments and introduces no second ordinary-development lifecycle.
 29. **Governance-source edit lifecycle.** Before editing a canonical document,
-    the current downstream document relationships are obtainable; after the edit, reconsider
+    the separate document-impact selection makes the current downstream document
+    relationships obtainable; after the edit, reconsider
     reports cross-repository authority/route effects and record closes the
     affected dispositions.
 30. **Lifecycle-compliance hooks.** Session start/resume/compact exercises

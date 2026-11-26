@@ -566,7 +566,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertIsInstance(view, m.FunctionalPyramidView)
         assert isinstance(view, m.FunctionalPyramidView)
         self.assertEqual(
-            tuple(route.placement.document.document_ref for route in view.routes),
+            tuple(placement.document.document_ref for placement in view.placements),
             ("docs/foundation.md", "docs/design.md"),
         )
 

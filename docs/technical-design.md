@@ -641,14 +641,16 @@ selector, route identity and `FunctionalRouteSupport`. Existing `EvidenceRequest
 `ChangedSurface`/`ChangedConclusion` and `InvestigationContextRef` remain
 their current owners and are reused.
 
-The public route projection uses the exact Layer-2 carriers
-`FunctionalDocumentPlacement`, `FunctionalDocumentRoute`,
-`FunctionalRouteProvenance`, `FunctionalPyramidFinding`,
+The public read projection uses the exact Layer-2 carriers
+`FunctionalDocumentPlacement`, `FunctionalPyramidFinding`,
 `FunctionalPyramidValidationFinding`, `FunctionalPyramidView` and
 `FunctionalPyramidUnavailable`; their field sets are not re-decided in the
-wire/shell layer. Declaration carriers remain distinct from resolved route
-carriers: declarations hold repository-owned whole-document placements, while
-resolved document routes reuse the existing `AuthorityBinding`.
+wire/shell layer. `FunctionalDocumentRoute` and `FunctionalRouteProvenance` are
+internal resolution carriers used by directory resolution, record-time authority
+support and reconsideration; they are never serialized into an answer.
+Declaration carriers remain distinct from resolved route carriers:
+declarations hold repository-owned whole-document placements, while resolved
+routes reuse the existing `AuthorityBinding`.
 
 `FunctionalPyramidDirectorySelector` is the public exact-directory selection
 inside `ask`. It carries `repository_id` and normalized repository-relative
@@ -887,6 +889,71 @@ Unit tests that do not need a real installation may inject explicit typed
 deterministic capabilities representing the intended participation state. They
 must not obtain legacy behavior by omitting Functional Pyramid dependencies.
 
+### 17.1 Functional Pyramid read API
+
+**Authority:** G1, G7, G8; F11, F12; L11–L13; FD-54–FD-57, FD-74, FD-86, FD-88.
+
+One operation answers one question. A field is public only when the consumer
+question requires it. Internal resolution state is never serialized into an
+answer, and no read result carries another read result's data.
+
+| Operation | Question | Answer |
+| --- | --- | --- |
+| `ask` + `FunctionalPyramidSelector` | Is this repository governed? | participation state, version, live health, members |
+| `ask` + `FunctionalPyramidDirectorySelector` | Which documents govern this directory? | route `status`, ordered `placements`, `declared_layers`, `absent_layers`, `unresolved` |
+| `ask` + `FunctionalPyramidCandidateSelector` | Would this activation or revision be valid? | validation findings, graph findings, activation readiness |
+| `ask` + `FunctionalPyramidReceiptSelector` | What was accepted for this write? | the exact installation receipt |
+| `record` (functional_pyramid) | Change participation | receipt and dependent effects |
+| `reconsider` | What must be re-established? | changed surfaces and conclusions |
+
+The directory answer is exactly:
+
+```json
+{
+  "pyramid_id": "...",
+  "version": 5,
+  "directory": "workflows/contract_integrity_audit",
+  "status": "RESOLVED",
+  "placements": [
+    {
+      "declaring_repository_id": "...",
+      "document": {
+        "repository_id": "...",
+        "document_ref": "AGENTS.md",
+        "layer": "P0"
+      },
+      "scope": "."
+    }
+  ],
+  "declared_layers": ["P0", "P1"],
+  "absent_layers": ["P2S", "P2W", "P3", "P4"],
+  "unresolved": []
+}
+```
+
+It contains no `routes`, `downstream_placements`, `governing_placements`,
+`authority` binding payload, per-path `provenance` or instance `health`. An
+ordinary surface or reference `ask` carries this same compact projection for the
+surface's directory; it never carries internal resolution carriers.
+
+Internal-only, never serialized:
+
+- the forward placement closure and its governing edges, used by `record` to
+  derive authority-support dependencies;
+- the reverse index of dependent placements, used by `reconsider` and
+  Functional Pyramid change propagation;
+- per-path provenance, retained to preserve multi-path identity and route
+  support;
+- `AuthorityBinding` payloads, evaluated through ordinary support rules.
+
+A document-impact selection (`document → dependents`) is a separate API. It has
+no consumer today and is implemented only when an explicit caller question
+requires it; FD-88 defines its direction and its non-predictive semantics.
+
+When the document list exceeds the response budget, `placements` is paged or
+omitted with an explicit `truncated` marker and recovery under FD-55–FD-57.
+`unresolved` is never truncated.
+
 ### 18. Pure resolver, health and support evaluation
 
 **Authority:** G1, G3, G4, G7; F1, F2, F11, F12; L12–L16; FD-9–FD-16,
@@ -905,7 +972,9 @@ already has one owning surface under FD-6, so support re-evaluation recovers tha
 canonical owner from the retained understanding and combines it with the
 dependency's persisted semantic EvidenceScope.
 
-It returns the canonical governing projection and route identity. FD-62 and
+It returns one internal resolution — the placement closure, routes, per-path
+provenance and route identity — from which the service composes the public
+compact view (technical design §17.1). FD-62 and
 FD-68 exclusively own the resolver decision procedure and ordering; this layer
 does not duplicate that procedure.
 

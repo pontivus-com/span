@@ -17,6 +17,7 @@ from span.service.continuation import ContinuationCursor, encode_continuation
 from span.service.evidence import EvidenceService
 from span.service.support import SupportService
 from span.shell.sqlite_store.lifecycle import LifecycleStore
+from tests.support.functional_pyramid import functional_pyramid_view
 
 NOW = datetime.datetime(2026, 11, 1, 12, 0, tzinfo=datetime.timezone.utc)
 RETENTION = m.LifecycleRetention(
@@ -43,39 +44,6 @@ def _unconfigured_orientation(
 ) -> m.FunctionalPyramidParticipation:
     return m.FunctionalPyramidParticipation(
         m.FunctionalPyramidParticipationState.UNCONFIGURED
-    )
-
-
-def _functional_pyramid_view(
-    scope: m.EvidenceScope,
-    *,
-    pyramid_id: str = "fp",
-    status: m.FunctionalPyramidRouteStatus = m.FunctionalPyramidRouteStatus.RESOLVED,
-) -> m.FunctionalPyramidView:
-    unresolved: tuple[m.FunctionalPyramidFinding, ...] = ()
-    health = m.FunctionalPyramidHealth.VALID
-    if status is m.FunctionalPyramidRouteStatus.UNRESOLVED:
-        health = m.FunctionalPyramidHealth.DEGRADED
-        unresolved = (
-            m.FunctionalPyramidFinding(
-                reason=m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
-                repository_id="repo-1",
-                detail="canonical Functional Pyramid document is unavailable",
-                recovery="restore the declared canonical document",
-            ),
-        )
-    return m.FunctionalPyramidView(
-        pyramid_id=m.FunctionalPyramidId(pyramid_id),
-        version=m.FunctionalPyramidVersion(1),
-        health=health,
-        status=status,
-        semantic_scope=scope,
-        placements=(),
-        routes=(),
-        provenance=(),
-        unresolved=unresolved,
-        declared_layers=(),
-        absent_layers=tuple(m.FunctionalPyramidLayer),
     )
 
 
@@ -260,6 +228,58 @@ class AnswerServiceTest(unittest.TestCase):
                 reference=reference,
             )
         )
+
+    def test_oversized_governing_view_is_truncated_not_refused(self) -> None:
+        (self.root / "src/c.py").write_text("c\n", encoding="utf-8")
+        placements = tuple(
+            m.FunctionalDocumentPlacement(
+                "repo-1",
+                m.FunctionalDocumentRef(
+                    repository_id="repo-1",
+                    document_ref=f"docs/foundation-{index}.md",
+                    layer=m.FunctionalPyramidLayer.P0,
+                ),
+                ".",
+            )
+            for index in range(1200)
+        )
+        view = m.FunctionalPyramidView(
+            pyramid_id=m.FunctionalPyramidId("fp"),
+            version=m.FunctionalPyramidVersion(1),
+            status=m.FunctionalPyramidRouteStatus.RESOLVED,
+            semantic_scope=m.EvidenceScope(paths=("src/c.py",)),
+            placements=placements,
+            declared_layers=(m.FunctionalPyramidLayer.P0,),
+            absent_layers=tuple(
+                layer
+                for layer in m.FunctionalPyramidLayer
+                if layer is not m.FunctionalPyramidLayer.P0
+            ),
+        )
+
+        def orientation(
+            _repository_id: str,
+            _surface: m.SurfaceKey,
+            _scope: m.EvidenceScope | None,
+        ) -> m.FunctionalPyramidView:
+            return view
+
+        service = AnswerService(
+            store=self.store,
+            support=self.support,
+            evidence=EvidenceService(store=self.store, evidence=self.evidence),
+            functional_pyramid_orientation=orientation,
+        )
+        result = service.ask(m.AskRequest(repository_id="repo-1", reference="src/c.py"))
+        self.assertIsInstance(result, m.Gap)
+        self.assertTrue(result.truncated)
+        self.assertIsInstance(result.functional_pyramid, m.FunctionalPyramidView)
+        governing = result.functional_pyramid
+        assert isinstance(governing, m.FunctionalPyramidView)
+        self.assertTrue(governing.truncated)
+        self.assertTrue(governing.omitted)
+        self.assertLess(len(governing.placements), len(placements))
+        self.assertEqual(governing.unresolved, ())
 
     def test_declared_surface_status_counts_unexamined_members(self) -> None:
         (self.root / "src/b.py").write_text("b\n", encoding="utf-8")
@@ -1201,7 +1221,7 @@ class AnswerServiceTest(unittest.TestCase):
             self.assertEqual(repository_id, "repo-1")
             self.assertEqual(surface.locator, "src/missing.py")
             seen.append(semantic_scope)
-            return _functional_pyramid_view(
+            return functional_pyramid_view(
                 semantic_scope,
                 pyramid_id="fp-cold",
             )
@@ -1272,7 +1292,7 @@ class AnswerServiceTest(unittest.TestCase):
         )
 
         def unresolved(scope: m.EvidenceScope) -> m.FunctionalPyramidView:
-            return _functional_pyramid_view(
+            return functional_pyramid_view(
                 scope,
                 pyramid_id="fp-mixed",
                 status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
@@ -1322,7 +1342,7 @@ class AnswerServiceTest(unittest.TestCase):
         ) -> m.FunctionalPyramidView:
             self.assertEqual(repository_id, "repo-1")
             self.assertEqual(surface.locator, "src/a.py")
-            return _functional_pyramid_view(
+            return functional_pyramid_view(
                 semantic_scope,
                 pyramid_id="fp-mixed",
                 status=m.FunctionalPyramidRouteStatus.UNRESOLVED,

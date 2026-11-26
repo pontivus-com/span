@@ -243,7 +243,7 @@ class FunctionalPyramidService:
     ) -> (
         m.FunctionalPyramidParticipation
         | m.FunctionalPyramidUnavailable
-        | tuple[m.FunctionalPyramidView, m.FunctionalRouteIdentity]
+        | m.FunctionalPyramidResolution
     ):
         """Resolve the current repository route through the installation state."""
         try:
@@ -292,7 +292,7 @@ class FunctionalPyramidService:
                     public_cause="the exact repository-relative directory is not present",
                 )
             context = self._load_active_context(members)
-            view, _ = _fp.resolve_functional_pyramid_directory_route(
+            resolution = _fp.resolve_functional_pyramid_directory_route(
                 pyramid_id=pyramid_id,
                 version=version,
                 members=context.current_members,
@@ -303,7 +303,7 @@ class FunctionalPyramidService:
                 authority_bindings=context.authority_bindings,
                 declaration_findings=context.findings,
             )
-            return view
+            return resolution.view
         except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid governance cannot be evaluated",
@@ -334,14 +334,14 @@ class FunctionalPyramidService:
         assert pyramid_id is not None
         assert version is not None
         try:
-            view, _ = self.resolve(
+            resolution = self.resolve(
                 pyramid_id=pyramid_id,
                 version=version,
                 members=members,
                 surface=surface,
                 semantic_scope=semantic_scope,
             )
-            return view
+            return resolution.view
         except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid governance cannot be evaluated",
@@ -364,9 +364,8 @@ class FunctionalPyramidService:
             surface,
             dependency.semantic_scope,
         )
-        if isinstance(current, tuple):
-            view, route_identity = current
-            return view, route_identity
+        if isinstance(current, m.FunctionalPyramidResolution):
+            return current.view, current.identity
         return current, None
 
     def changed_route_identities(
@@ -1128,7 +1127,7 @@ class FunctionalPyramidService:
                         ):
                             continue
                         try:
-                            view, identity = self.resolve(
+                            resolution = self.resolve(
                                 pyramid_id=pyramid_id,
                                 version=proposed_version,
                                 members=new_members,
@@ -1139,8 +1138,9 @@ class FunctionalPyramidService:
                             changed.add(dependency.route_identity)
                             continue
                         if (
-                            view.status is not m.FunctionalPyramidRouteStatus.RESOLVED
-                            or identity != dependency.route_identity
+                            resolution.view.status
+                            is not m.FunctionalPyramidRouteStatus.RESOLVED
+                            or resolution.identity != dependency.route_identity
                         ):
                             changed.add(dependency.route_identity)
         return tuple(sorted(changed, key=lambda item: item.value))
@@ -1605,7 +1605,7 @@ class FunctionalPyramidService:
         members: tuple[m.FunctionalPyramidMemberView, ...],
         surface: m.SurfaceKey,
         semantic_scope: m.EvidenceScope,
-    ) -> tuple[m.FunctionalPyramidView, m.FunctionalRouteIdentity]:
+    ) -> m.FunctionalPyramidResolution:
         """Load current declarations and resolve one route."""
         context = self._load_active_context(members)
         return _fp.resolve_functional_pyramid_route(

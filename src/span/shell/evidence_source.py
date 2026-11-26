@@ -131,11 +131,7 @@ class EvidenceSourceBase(ABC):
         in_tree = set(all_paths)
         return (
             tuple((path, f"ev-{path}") for path in paths if path in in_tree),
-            {
-                locator: self._fingerprint(locator)
-                for locator in dict.fromkeys(fingerprint_locators)
-                if locator in in_tree
-            },
+            self.fingerprints(repository_id, fingerprint_locators),
         )
 
     def inventory_evidence(

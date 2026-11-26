@@ -608,15 +608,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
 
             fp_a = ask_a.get("functional_pyramid", {})
             owner_fp = owner_ask.get("functional_pyramid", {})
-            owner_routes = owner_fp.get("routes", [])
-            owner_downstream_documents = sorted(
-                {
-                    placement.get("document", {}).get("document_ref")
-                    for route in owner_routes
-                    for placement in route.get("downstream_placements", [])
-                    if placement.get("document", {}).get("document_ref")
-                }
-            )
+            read_exposes_internal = {
+                key: key in owner_fp for key in ("routes", "provenance", "health")
+            }
             directory_src_fp = directory_src
             directory_root_fp = directory_root
             return {
@@ -666,24 +660,23 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 "ask_a_error": ask_a_error,
                 "ask_a_route_status": fp_a.get("status"),
                 "ask_a_documents": [
-                    route.get("placement", {}).get("document", {}).get("document_ref")
-                    for route in fp_a.get("routes", [])
+                    placement.get("document", {}).get("document_ref")
+                    for placement in fp_a.get("placements", [])
                 ],
                 "directory_src_error": directory_src_error,
                 "directory_src_route_status": directory_src_fp.get("status"),
                 "directory_src_documents": [
-                    route.get("placement", {}).get("document", {}).get("document_ref")
-                    for route in directory_src_fp.get("routes", [])
+                    placement.get("document", {}).get("document_ref")
+                    for placement in directory_src_fp.get("placements", [])
                 ],
                 "directory_root_error": directory_root_error,
                 "directory_root_documents": [
-                    route.get("placement", {}).get("document", {}).get("document_ref")
-                    for route in directory_root_fp.get("routes", [])
+                    placement.get("document", {}).get("document_ref")
+                    for placement in directory_root_fp.get("placements", [])
                 ],
-                "ask_a_rule_authority_ids": _authority_ids(fp_a, repo_b_id),
+                "read_exposes_internal": read_exposes_internal,
                 "owner_ask_error": owner_ask_error,
                 "owner_route_status": owner_fp.get("status"),
-                "owner_downstream_documents": owner_downstream_documents,
                 "created_error": created_error,
                 "created_qualification": created.get("qualification", {}).get("state"),
                 "captured_ask_error": captured_ask_error,

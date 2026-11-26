@@ -503,18 +503,19 @@ class FunctionalRouteProvenance:
 
 @_dataclass(frozen=True)
 class FunctionalPyramidView:
+    """The compact public governing projection (technical design §17.1)."""
+
     pyramid_id: FunctionalPyramidId
     version: FunctionalPyramidVersion
-    health: FunctionalPyramidHealth
     status: FunctionalPyramidRouteStatus
     placements: tuple[FunctionalDocumentPlacement, ...]
-    routes: tuple[FunctionalDocumentRoute, ...]
-    provenance: tuple[FunctionalRouteProvenance, ...]
     declared_layers: tuple[FunctionalPyramidLayer, ...]
     absent_layers: tuple[FunctionalPyramidLayer, ...]
     directory: str | None = None
     semantic_scope: EvidenceScope | None = None
     unresolved: tuple[FunctionalPyramidFinding, ...] = ()
+    truncated: bool = False
+    omitted: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if (self.directory is None) == (self.semantic_scope is None):
@@ -534,6 +535,10 @@ class FunctionalPyramidView:
             raise ValueError("UNRESOLVED FunctionalPyramidView requires findings")
         if len(set(self.placements)) != len(self.placements):
             raise ValueError("FunctionalPyramidView placements must be distinct")
+        if self.truncated != bool(self.omitted):
+            raise ValueError(
+                "FunctionalPyramidView truncation requires exactly omitted entries"
+            )
         if len(set(self.declared_layers)) != len(self.declared_layers):
             raise ValueError("declared_layers must be distinct")
         if len(set(self.absent_layers)) != len(self.absent_layers):
@@ -544,6 +549,21 @@ class FunctionalPyramidView:
             FunctionalPyramidLayer
         ):
             raise ValueError("declared_layers and absent_layers must cover every layer")
+
+
+@_dataclass(frozen=True)
+class FunctionalPyramidResolution:
+    """Internal routing state paired with the compact public view.
+
+    Never serialized into an answer (technical design §17.1). Routes and
+    provenance remain the owner of record-time authority support,
+    reconsideration and multi-path identity.
+    """
+
+    view: FunctionalPyramidView
+    identity: FunctionalRouteIdentity
+    routes: tuple[FunctionalDocumentRoute, ...] = ()
+    provenance: tuple[FunctionalRouteProvenance, ...] = ()
 
 
 @_dataclass(frozen=True)

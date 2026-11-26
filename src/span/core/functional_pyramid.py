@@ -24,6 +24,7 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidId,
     FunctionalPyramidLayer,
     FunctionalPyramidMemberView,
+    FunctionalPyramidResolution,
     FunctionalPyramidRouteStatus,
     FunctionalPyramidSourceKind,
     FunctionalPyramidVersion,
@@ -1204,12 +1205,7 @@ def _resolve(
     index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
     structural: tuple[FunctionalPyramidFinding, ...],
     authority_bindings: dict[tuple[str, str], AuthorityBinding],
-) -> tuple[FunctionalPyramidView, FunctionalRouteIdentity]:
-    health = (
-        FunctionalPyramidHealth.VALID
-        if not structural
-        else FunctionalPyramidHealth.DEGRADED
-    )
+) -> FunctionalPyramidResolution:
     provenance: list[FunctionalRouteProvenance] = []
     direct: set[FunctionalDocumentPlacement] = set()
     for directory, semantic_portion in seeds:
@@ -1290,22 +1286,21 @@ def _resolve(
         closure=closure,
         index=index,
     )
-    return (
-        FunctionalPyramidView(
+    return FunctionalPyramidResolution(
+        view=FunctionalPyramidView(
             pyramid_id=pyramid_id,
             version=version,
-            health=health,
             status=status,
             directory=directory_selection,
             semantic_scope=semantic_selection,
             placements=closure,
-            routes=routes,
-            provenance=tuple(provenance),
             unresolved=unresolved,
             declared_layers=declared,
             absent_layers=absent,
         ),
-        identity,
+        identity=identity,
+        routes=routes,
+        provenance=tuple(provenance),
     )
 
 
@@ -1320,7 +1315,7 @@ def resolve_functional_pyramid_route(
     available_repositories: frozenset[str],
     authority_bindings: dict[tuple[str, str], AuthorityBinding],
     declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
-) -> tuple[FunctionalPyramidView, FunctionalRouteIdentity]:
+) -> FunctionalPyramidResolution:
     """Resolve the exact effective semantic scope through document placements."""
     index, structural = _graph_findings(
         members,
@@ -1355,7 +1350,7 @@ def resolve_functional_pyramid_directory_route(
     available_repositories: frozenset[str],
     authority_bindings: dict[tuple[str, str], AuthorityBinding],
     declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
-) -> tuple[FunctionalPyramidView, FunctionalRouteIdentity]:
+) -> FunctionalPyramidResolution:
     """Resolve one exact directory as a point in the repository tree."""
     normalized = normalize_directory_scope(directory)
     index, structural = _graph_findings(

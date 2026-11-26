@@ -370,9 +370,9 @@ class SupportService:
         observed: str | None = None
         if declared is not None:
             locator = declared.evidence_ref.locator
-            observed = evidence.fingerprints(
-                reference.repository_id, (locator,)
-            ).get(locator)
+            observed = evidence.fingerprints(reference.repository_id, (locator,)).get(
+                locator
+            )
         return _rules.authority_state(
             recorded=binding,
             declared=declared,

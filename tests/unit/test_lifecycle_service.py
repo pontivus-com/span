@@ -2886,6 +2886,8 @@ class LifecycleServiceTest(unittest.TestCase):
         def support_route(dependency, surface):
             self.assertEqual(surface.repository_id, "repo-1")
             current = route_for_scope(dependency.semantic_scope)
+            if isinstance(current, m.FunctionalPyramidResolution):
+                return current.view, current.identity
             if isinstance(current, tuple):
                 return current
             return current, None
@@ -2943,25 +2945,19 @@ class LifecycleServiceTest(unittest.TestCase):
         absent_layers = tuple(
             layer for layer in m.FunctionalPyramidLayer if layer not in declared_layers
         )
-        return (
-            m.FunctionalPyramidView(
+        return m.FunctionalPyramidResolution(
+            view=m.FunctionalPyramidView(
                 pyramid_id=m.FunctionalPyramidId("fp-1"),
                 version=m.FunctionalPyramidVersion(1),
-                health=(
-                    m.FunctionalPyramidHealth.VALID
-                    if not unresolved
-                    else m.FunctionalPyramidHealth.DEGRADED
-                ),
                 status=status,
                 semantic_scope=scope,
                 placements=placements,
-                routes=routes,
-                provenance=(),
                 unresolved=unresolved,
                 declared_layers=declared_layers,
                 absent_layers=absent_layers,
             ),
-            m.FunctionalRouteIdentity(route_id),
+            identity=m.FunctionalRouteIdentity(route_id),
+            routes=routes,
         )
 
     def _latest_supported_content(

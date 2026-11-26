@@ -1017,11 +1017,66 @@ class AnswerService:
         limit = self._policy.max_response_bytes
         if _encoded_size(result) <= limit:
             return result
+        trimmed = self._fit_functional_pyramid(result, limit)
+        if trimmed is not None:
+            return trimmed
         if isinstance(result, m.Answer):
             return self._fit_answer(result, limit)
         if isinstance(result, m.Gap):
             return self._fit_gap(result, limit)
         return self._refuse(result, limit)
+
+    def _fit_functional_pyramid(
+        self, result: m.AskResult, limit: int
+    ) -> m.AskResult | None:
+        """Bound the governing document list, never its unresolved state.
+
+        Placements are ordered P0 through P4, so the largest fitting prefix
+        keeps the foundational layers. The omission is one constant-size
+        statement, not one entry per document, so naming what was dropped
+        cannot itself exhaust the budget (FD-55–FD-57). `unresolved` is never
+        dropped.
+        """
+        if not isinstance(result, (m.Answer, m.Gap)):
+            return None
+        view = result.functional_pyramid
+        if not isinstance(view, m.FunctionalPyramidView) or not view.placements:
+            return None
+        total = len(view.placements)
+
+        def candidate(kept: int) -> m.AskResult:
+            dropped = total - kept
+            omitted: tuple[str, ...] = ()
+            if dropped:
+                omitted = (
+                    f"{dropped} trailing governing document placements omitted "
+                    "beyond the response budget",
+                )
+            return _dataclasses.replace(
+                result,
+                functional_pyramid=_dataclasses.replace(
+                    view,
+                    placements=view.placements[:kept],
+                    truncated=bool(omitted),
+                    omitted=omitted,
+                ),
+                truncated=bool(result.omitted) or bool(omitted),
+                omitted=tuple(result.omitted) + omitted,
+            )
+
+        if _encoded_size(candidate(total)) <= limit:
+            return candidate(total)
+        low, high = 0, total - 1
+        best: m.AskResult | None = None
+        while low <= high:
+            middle = (low + high) // 2
+            built = candidate(middle)
+            if _encoded_size(built) <= limit:
+                best = built
+                low = middle + 1
+            else:
+                high = middle - 1
+        return best
 
     def _fit_answer(self, answer: m.Answer, limit: int) -> m.AskResult:
         conclusions = list(answer.conclusions)

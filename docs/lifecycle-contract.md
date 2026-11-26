@@ -47,7 +47,7 @@ derivation; this layer references rather than restates Layers 0–1.
 | **Functional Pyramid participation state** | Durable repository participation is exactly `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`. Only an accepted Functional Pyramid `record` changes it. |
 | **Functional Pyramid health** | Live qualification of an ACTIVE pyramid: `VALID` or `DEGRADED`, computed from present declarations/member availability and never persisted by a hidden read-time transition. |
 | **Functional Pyramid totality** | An ACTIVE member governs every directory in its repository. A mandatory repository-root-scoped P0 placement guarantees that every directory resolves to at least the foundational documents. Span reports declared and absent layers; it never returns an uncovered-path outcome and never invents documentation. |
-| **Functional Pyramid view** | The governing projection for a directory or semantic scope, including applicable document placements, canonical document references, governing relationships, provenance, reverse dependencies and unresolved branches. |
+| **Functional Pyramid view** | The governing projection for one directory or semantic scope: the applicable whole-document placements, the declared/absent layer summary and unresolved findings. Governing edges, reverse dependencies, per-path provenance and authority-binding payloads are internal resolution state, not part of this projection. |
 | **Route support** | Server-derived support binding a normative conclusion to the exact Functional Pyramid route that applied when the conclusion was established. |
 
 An understanding may be unsupported or captured-but-uncurated. An **Answer is
@@ -245,7 +245,7 @@ replay against the same live context returns the same page across restart.
 | `RetrievedFunctionalPyramidReceipt` | Exact immutable installation-scoped Functional Pyramid receipt retrieval |
 | `EvidencePage` | A continuation page for previously selected evidence |
 | `FunctionalPyramidStatus` | Exact durable participation/instance state and live health for a Functional Pyramid selector |
-| `FunctionalPyramidView` | Applicable document branches and their qualification for a directory lookup |
+| `FunctionalPyramidView` | Applicable document placements and the declared/absent layer summary for a directory or semantic-scope lookup |
 | `FunctionalPyramidParticipation` | UNCONFIGURED or EXCLUDED participation for a directory lookup |
 | `FunctionalPyramidUnavailable` | Operational inability to resolve the directory's governance |
 | `FunctionalPyramidCandidate` | Pure action-aware ACTIVATE/REVISE validation with complete validation/graph findings and activation readiness |
@@ -257,24 +257,24 @@ Surface/current-understanding `Answer` and `Gap` carry
 FunctionalPyramidParticipation`. A registered repository that has never been
 configured returns `FunctionalPyramidParticipation(state=UNCONFIGURED)`; an
 explicitly non-participating repository returns `state=EXCLUDED`. An ACTIVE
-member returns a `FunctionalPyramidView` carrying its live health or explicit
-operational unavailability. A route's unresolved governance remains inside the view and is
+member returns a `FunctionalPyramidView` carrying its route status, applicable
+documents and unresolved findings, or explicit operational unavailability. A
+route's unresolved governance remains inside the view and is
 not mislabeled as operational failure.
 
-`FunctionalPyramidView` carries the pyramid identity/version,
-`health: VALID | DEGRADED`, route `status: RESOLVED | UNRESOLVED`,
-the requested directory or selected semantic scope, all applicable document
-placements, the referenced documents from P0 through the deepest applicable
-layer, and the declared/absent layer summary. It preserves the declared
-document relationships and provenance from the selection through placements to
-every applicable branch. A canonical document can be shared by branches without
-losing any of those relationships. A directory's result includes every
-placement whose declared scope contains that directory, whether the scope is
-the directory itself or an ancestor. A placement confined to another directory
-is included only if it is an applicable ancestor placement or an applicable
-document references it as governing.
+`FunctionalPyramidView` carries the pyramid identity/version, route
+`status: RESOLVED | UNRESOLVED`, the requested directory or selected semantic
+scope, all applicable whole-document placements, the declared/absent layer
+summary and the unresolved findings. It does not carry governing edges, reverse
+dependencies, per-path provenance or authority-binding payloads; those are
+internal resolution state. A canonical document can be shared by branches
+without duplicating a placement. A directory's result includes every placement
+whose declared scope contains that directory, whether the scope is the directory
+itself or an ancestor. A placement confined to another directory is included
+only if it is an applicable ancestor placement or an applicable document
+references it as governing.
 
-The nested public route carriers are exact:
+The nested carriers are exact:
 
 - `FunctionalDocumentRef` carries `repository_id: str`,
   `document_ref: str`, and
@@ -290,17 +290,18 @@ The nested public route carriers are exact:
   canonical document occupies exactly one layer and one scope in its declaring
   repository; a repeated identity, a second layer or a second scope is a typed
   duplicate finding, not a second participation.
-- `FunctionalDocumentRoute` carries `placement: FunctionalDocumentPlacement`,
-  `authority: AuthorityBinding`,
-  `governing_placements: tuple[FunctionalDocumentPlacement | "ROOT", ...]`,
-  and `downstream_placements: tuple[FunctionalDocumentPlacement, ...]`.
-- `FunctionalRouteProvenance` carries one exact selected directory or
-  `EvidenceScope`, the applicable placement identities and, for a multi-path
-  semantic scope, the path or boundary that selected them.
+- `FunctionalDocumentRoute` is internal resolution state, not a public view
+  field. It pairs one placement with its `authority`, `governing_placements` and
+  `downstream_placements` for record-time authority support, directory
+  resolution and reconsideration.
+- `FunctionalRouteProvenance` is internal resolution state. It carries one exact
+  selected directory or `EvidenceScope`, the applicable placement identities
+  and, for a multi-path semantic scope, the path or boundary that selected them.
+  It is not serialized into a public answer.
 - `FunctionalPyramidView` carries exactly one selection. `directory` is set for
   directory lookup and `semantic_scope` is set for ordinary surface obtain.
-  It also carries `placements`, `provenance`, `unresolved`,
-  `declared_layers`, and `absent_layers`.
+  It also carries `placements`, `unresolved`, `declared_layers`, and
+  `absent_layers`.
 
 An unresolved finding identifies a repository plus the applicable placement or
 whole-document coordinates. A structural finding without a placement still makes
@@ -312,17 +313,17 @@ remains `RESOLVED` even while global ACTIVE health is `DEGRADED`. Rule
 identifiers and rule anchors are not part of any declaration, route, finding,
 provenance or support carrier.
 
-When the selected scope owns a canonical pyramid document, the projection
-exposes its declared reverse document dependencies so an authority change can be
-oriented before editing. Every directory in an ACTIVE member resolves to the
-declared placements whose scope contains it. A directory without a narrower
+A reverse-dependency projection exists only for a selected canonical document
+scope and is a separate selection; a directory or semantic-scope view never
+exposes downstream placements. Every directory in an ACTIVE member resolves to
+the declared placements whose scope contains it. A directory without a narrower
 placement still resolves to its declared ancestor placements, including the
 mandatory repository-root P0 placement; there is no empty-governance or
 uncovered-path result. `RESOLVED` requires no structural unresolved relationship
 in the returned route. `UNRESOLVED` requires at least one typed unresolved
 relationship. Absent layers are reported, not treated as unresolved. The view
-carries canonical references and relationships. Substantive content remains in
-the canonical documents.
+carries canonical references; governing relationships remain internal resolution
+state. Substantive content remains in the canonical documents.
 
 `FunctionalPyramidUnavailable` carries exactly non-empty
 `failure: str` and `recovery: str` when the declared graph could not be
@@ -1239,7 +1240,7 @@ stateDiagram-v2
 | Investigate | explicit evidence admission + source reading establishes empirical understanding | follow returned canonical owner references only when governing meaning is needed; governing prose stays at its source and is not copied into Span |
 | Conclude | `record(kind="understanding")` retains agent-authored meaning as CAPTURED when semantic meaning is created or changed | a conformance judgment is NORMATIVE, and every NORMATIVE conclusion in an ACTIVE repository automatically receives route support and every applicable authority dependency; capture does not itself publish shared knowledge |
 | Reuse | `ask(surface/reference)` or exact recorded-question/current selectors reuse retained understanding only when the exact revision is CURATED and support is CURRENT | governing applicability is re-resolved on read so curation, semantic currency and governing currency remain independent |
-| Edit | the agent edits externally; Span never predicts or authors the change; after edit use `reconsider(changed_scope)` | before an authority-source edit, ordinary `ask` can expose current declared downstream dependencies; after edit the same reconsider call evaluates authority/route effects |
+| Edit | the agent edits externally; Span never predicts or authors the change; after edit use `reconsider(changed_scope)` | before an authority-source edit, the separate document-impact selection exposes current declared downstream dependencies; after edit the same reconsider call evaluates authority/route effects |
 | Re-align | `reconsider` preserves containment/direct/indirect semantics and returns bounded re-establishment context | direct support evaluation additionally includes authority and Functional Pyramid route support; dependency traversal may cross member repositories while returned surfaces remain repository-owned |
 | Re-establish | existing `confirm/correct/replace/withdraw/add` recording and history/CAS/replay semantics | refreshed normative revisions receive freshly server-derived route/authority support; support-only confirm may preserve prior curation, while semantic correction/replacement becomes CAPTURED and requires later curation for shared reuse |
 | Dispute | `reconsider(challenge)` then `record` disposition | normative challenged conclusions retain the same governing-support rules; no Functional-Pyramid-specific dispute operation exists |

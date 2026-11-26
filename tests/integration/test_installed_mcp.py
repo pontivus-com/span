@@ -794,13 +794,12 @@ dispose();
             observed["directory_root_documents"],
             ["rules/p0-v1.md", "rules/p1.md"],
         )
-        self.assertIn("authority-p0-v1", observed["ask_a_rule_authority_ids"])
-        self.assertIn("authority-p2s", observed["ask_a_rule_authority_ids"])
-        self.assertIn("authority-p2w", observed["ask_a_rule_authority_ids"])
-
         self.assertFalse(observed["owner_ask_error"])
         self.assertEqual(observed["owner_route_status"], "RESOLVED")
-        self.assertIn("rules/p2w.md", observed["owner_downstream_documents"])
+        self.assertEqual(
+            observed["read_exposes_internal"],
+            {"routes": False, "provenance": False, "health": False},
+        )
 
         self.assertFalse(observed["created_error"])
         self.assertEqual(observed["created_qualification"], "CURRENT")

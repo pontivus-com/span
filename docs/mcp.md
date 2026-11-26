@@ -72,11 +72,14 @@ same tool:
 
 - `FunctionalPyramidSelector` names exactly one `repository_id` or `pyramid_id`
   and returns exact UNCONFIGURED/EXCLUDED/ACTIVE status.
-- `FunctionalPyramidDirectorySelector` returns the governing projection for one
-  existing repository-relative directory, including `.` for the root. It
-  returns every declared document placement whose scope contains that
-  directory, including ancestor and root placements; no directory in an ACTIVE
-  repository returns an uncovered or empty governing result.
+- `FunctionalPyramidDirectorySelector` returns the governing document list for
+  one existing repository-relative directory, including `.` for the root: the
+  ordered placements (document reference, layer, scope), the declared/absent
+  layer summary and any unresolved findings. It includes every declared
+  placement whose scope contains that directory, including ancestor and root
+  placements; no directory in an ACTIVE repository returns an uncovered or
+  empty governing result. Internal resolution state (routes, downstream
+  dependencies, per-path provenance, authority bindings) is never returned.
 - `FunctionalPyramidCandidateSelector` validates an ACTIVATE or REVISE proposal
   without persisting participation. Each member's `declaration_sources` name
   whole-document Version-3 sources; the optional bootstrap remains Version-2
@@ -87,9 +90,9 @@ same tool:
 
 Ordinary surface/reference `Answer` and `Gap` results also carry the
 `functional_pyramid` projection. Inactive repositories project participation;
-ACTIVE repositories project the governing view for the exact semantic scope or
-an explicit Functional Pyramid unavailability result. Governance is never
-inferred from the question text.
+ACTIVE repositories project the same compact governing document list for the
+surface's directory, or an explicit Functional Pyramid unavailability result.
+Governance is never inferred from the question text.
 
 
 Forms (exactly one):

@@ -14,6 +14,7 @@ from span.core import model as m
 from span.service.support import SupportService
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.sqlite_store.lifecycle import LifecycleStore
+from tests.support.functional_pyramid import functional_pyramid_view
 
 NOW = datetime.datetime(2026, 10, 31, 12, 0, tzinfo=datetime.timezone.utc)
 RETENTION = m.LifecycleRetention(
@@ -27,39 +28,6 @@ def _write(root: pathlib.Path, relative: str, content: str) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-
-
-def _functional_pyramid_view(
-    scope: m.EvidenceScope,
-    *,
-    pyramid_id: str,
-    status: m.FunctionalPyramidRouteStatus = m.FunctionalPyramidRouteStatus.RESOLVED,
-) -> m.FunctionalPyramidView:
-    unresolved: tuple[m.FunctionalPyramidFinding, ...] = ()
-    health = m.FunctionalPyramidHealth.VALID
-    if status is m.FunctionalPyramidRouteStatus.UNRESOLVED:
-        health = m.FunctionalPyramidHealth.DEGRADED
-        unresolved = (
-            m.FunctionalPyramidFinding(
-                reason=m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
-                repository_id="repo-1",
-                detail="canonical Functional Pyramid document is unavailable",
-                recovery="restore the declared canonical document",
-            ),
-        )
-    return m.FunctionalPyramidView(
-        pyramid_id=m.FunctionalPyramidId(pyramid_id),
-        version=m.FunctionalPyramidVersion(1),
-        health=health,
-        status=status,
-        semantic_scope=scope,
-        placements=(),
-        routes=(),
-        provenance=(),
-        unresolved=unresolved,
-        declared_layers=(),
-        absent_layers=tuple(m.FunctionalPyramidLayer),
-    )
 
 
 class SupportServiceTest(unittest.TestCase):
@@ -708,7 +676,7 @@ class SupportServiceTest(unittest.TestCase):
         def current_route(recorded, surface):
             seen.append(surface)
             return (
-                _functional_pyramid_view(
+                functional_pyramid_view(
                     recorded.semantic_scope,
                     pyramid_id=recorded.pyramid_id.value,
                 ),
@@ -761,7 +729,7 @@ class SupportServiceTest(unittest.TestCase):
                 m.SupportState.REASSESSMENT_REQUIRED,
             ),
             (
-                _functional_pyramid_view(
+                functional_pyramid_view(
                     dependency.semantic_scope,
                     pyramid_id="fp-2",
                 ),
@@ -769,7 +737,7 @@ class SupportServiceTest(unittest.TestCase):
                 m.SupportState.REASSESSMENT_REQUIRED,
             ),
             (
-                _functional_pyramid_view(
+                functional_pyramid_view(
                     dependency.semantic_scope,
                     pyramid_id=dependency.pyramid_id.value,
                 ),
@@ -777,7 +745,7 @@ class SupportServiceTest(unittest.TestCase):
                 m.SupportState.REASSESSMENT_REQUIRED,
             ),
             (
-                _functional_pyramid_view(
+                functional_pyramid_view(
                     dependency.semantic_scope,
                     pyramid_id=dependency.pyramid_id.value,
                     status=m.FunctionalPyramidRouteStatus.UNRESOLVED,
@@ -825,7 +793,7 @@ class SupportServiceTest(unittest.TestCase):
 
         def current_route(recorded, _surface):
             return (
-                _functional_pyramid_view(
+                functional_pyramid_view(
                     recorded.semantic_scope,
                     pyramid_id=recorded.pyramid_id.value,
                 ),

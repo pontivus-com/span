@@ -91,17 +91,17 @@ class SurfaceConformanceTest(unittest.TestCase):
             self.assertIn(name, TOOL_SCHEMAS)
             self.assertIn(name, TOOL_OUTPUT_SCHEMAS)
 
-    def test_document_route_parent_union_matches_compact_wire_grammar(self):
+    def test_functional_pyramid_view_is_compact_and_routes_are_internal(self):
         schema = TOOL_OUTPUT_SCHEMAS["ask"]
-        route = schema["$defs"]["FunctionalDocumentRoute"]
-        branches = route["properties"]["governing_placements"]["items"]["anyOf"]
-        refs = {
-            branch["$ref"]
-            for branch in branches
-            if isinstance(branch, dict) and "$ref" in branch
-        }
-        self.assertIn("#/$defs/FunctionalDocumentPlacement", refs)
-        self.assertNotIn("#/$defs/FunctionalDocumentPlacement__tag", refs)
+        view = schema["$defs"]["FunctionalPyramidView__tag"]
+        properties = set(view["properties"])
+        self.assertTrue(
+            {"placements", "declared_layers", "absent_layers", "unresolved"}
+            <= properties
+        )
+        self.assertFalse({"routes", "provenance", "health"} & properties)
+        self.assertNotIn("FunctionalDocumentRoute", schema["$defs"])
+        self.assertNotIn("FunctionalRouteProvenance", schema["$defs"])
 
     def test_ask_has_no_context_input(self):
         text = json.dumps(TOOL_SCHEMAS["ask"])

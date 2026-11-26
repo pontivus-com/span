@@ -44,7 +44,7 @@ __all__ = ["LifecycleService"]
 _FunctionalPyramidRouteResult = (
     m.FunctionalPyramidParticipation
     | m.FunctionalPyramidUnavailable
-    | tuple[m.FunctionalPyramidView, m.FunctionalRouteIdentity]
+    | m.FunctionalPyramidResolution
 )
 _FunctionalPyramidRouteLookup = _typing.Callable[
     [str, m.SurfaceKey, m.EvidenceScope],
@@ -489,16 +489,17 @@ class LifecycleService:
                 failure=current.failure,
                 recovery=current.recovery,
             )
-        view, route_identity = current
+        resolution = current
+        view = resolution.view
         derived: list[m.SupportDependency] = [
             m.FunctionalRouteSupport(
                 repository_id=repository_id,
                 pyramid_id=view.pyramid_id,
                 semantic_scope=semantic_scope,
-                route_identity=route_identity,
+                route_identity=resolution.identity,
             )
         ]
-        for route in view.routes:
+        for route in resolution.routes:
             dependency = m.AuthoritySupportDependency(authority=route.authority)
             if dependency not in derived:
                 derived.append(dependency)

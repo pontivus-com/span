@@ -400,7 +400,7 @@ class FunctionalPyramidRouteRelevanceTest(unittest.TestCase):
         repository_id: str = "repo-a",
         members: tuple[m.FunctionalPyramidMemberView, ...] | None = None,
     ) -> m.FunctionalPyramidView:
-        view, _ = fp.resolve_functional_pyramid_directory_route(
+        view = fp.resolve_functional_pyramid_directory_route(
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=members or (_member(repository_id),),
@@ -423,7 +423,7 @@ class FunctionalPyramidRouteRelevanceTest(unittest.TestCase):
                     repository_id, "docs/shared.md"
                 ),
             },
-        )
+        ).view
         return view
 
     def test_placement_less_finding_affects_its_area_only(self) -> None:
@@ -579,7 +579,7 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
             fp.evaluate_functional_pyramid_source_structure(declarations), ()
         )
 
-        view, _ = fp.resolve_functional_pyramid_directory_route(
+        view = fp.resolve_functional_pyramid_directory_route(
             pyramid_id=m.FunctionalPyramidId("example"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -596,13 +596,13 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
                     "repo-a", "area-a/contract.md"
                 ),
             },
-        )
+        ).view
         self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
         self.assertIn(contract, view.placements)
         self.assertIn(goals, view.placements)
         self.assertIn(m.FunctionalPyramidLayer.P2W, view.absent_layers)
 
-        shared_view, _ = fp.resolve_functional_pyramid_directory_route(
+        shared_view = fp.resolve_functional_pyramid_directory_route(
             pyramid_id=m.FunctionalPyramidId("example"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -617,12 +617,12 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
                 ),
                 ("repo-a", "areas/shared.md"): _authority("repo-a", "areas/shared.md"),
             },
-        )
+        ).view
         self.assertEqual(shared_view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
         self.assertIn(shared, shared_view.placements)
         self.assertIn(goals, shared_view.placements)
 
-        narrowless, _ = fp.resolve_functional_pyramid_directory_route(
+        narrowless = fp.resolve_functional_pyramid_directory_route(
             pyramid_id=m.FunctionalPyramidId("example"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -636,7 +636,7 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
                     "repo-a", "docs/invariants.md"
                 ),
             },
-        )
+        ).view
         self.assertEqual(narrowless.status, m.FunctionalPyramidRouteStatus.RESOLVED)
         self.assertEqual(narrowless.placements, (goals, invariants))
 
