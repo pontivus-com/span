@@ -779,25 +779,29 @@ structural findings. A reference whose repository is not an instance member is
 `UNKNOWN_DOCUMENT`. Declarations contain no rule IDs, rule anchors, section
 placements or copied canonical document content.
 
-Version-1 rule declarations proposed as Version-2 candidate input are rejected
-as `INVALID_DECLARATION_SOURCE` with detail identifying unsupported declaration
-version 1. There is no grouping or compatibility adapter from rule owners to
-placements. Such an adapter would omit applicable documents that have no rule
-entry and would preserve the wrong identity model.
+Version-1 rule declarations and Version-2 document declarations proposed as
+Version-3 candidate input are rejected as `INVALID_DECLARATION_SOURCE` with
+detail identifying the unsupported declaration version. There is no grouping or
+compatibility adapter from rule owners or Version-2 placements to Version-3
+sources. Such an adapter would omit applicable documents that have no rule
+entry, translate a second placement model, or preserve the wrong identity model.
 
 Strict declaration decoding is two-stage without introducing a second carrier.
-The source-level decoder first establishes valid JSON/version and structurally
-recoverable placement entries using local parsed values only. A source that
-cannot reach that point yields candidate `INVALID_DECLARATION_SOURCE`. For each
-recoverable entry, the canonical `FunctionalDirectoryScope` constructor then
-validates the raw scope. Failure emits
-`FunctionalPyramidFinding(reason=INVALID_PLACEMENT_SCOPE)` with the available
-repository/declaration coordinates and does not construct a
+The Version-3 source-level decoder first establishes valid JSON, `version: 3`, a
+non-empty `source_id`, a known `kind`, a canonical source `scope`, the
+layer-independent document membership set, and structurally recoverable placement
+entries using local parsed values only. Unknown fields, an unknown version, an
+unknown kind, an empty source identity and a malformed source scope are source
+decoding failures. A source that cannot reach that point yields candidate
+`INVALID_DECLARATION_SOURCE`. For each recoverable entry, the canonical
+`FunctionalDirectoryScope` constructor then validates the raw placement scope.
+Failure emits `FunctionalPyramidFinding(reason=INVALID_PLACEMENT_SCOPE)` with the
+available repository/declaration coordinates and does not construct a
 `FunctionalDocumentPlacement`. Only successfully normalized entries become
 canonical placements. The shell does not own this classification.
 
 The `FunctionalPyramidDeclarationPort` reads only the exact bootstrap/declaration
-sources named by member intent across registered repositories. Version-2
+sources named by member intent across registered repositories. Version-3
 declaration sources are whole documents: each member
 `EvidenceRequest.ranges` must be empty. A non-empty ranges tuple is rejected as
 `INVALID_DECLARATION_SOURCE` before declaration parsing; the port never treats
@@ -808,6 +812,15 @@ Its shell implementation resolves repository roots through the existing
 capability. Strict whole-document decoding creates the canonical carriers;
 semantic graph validation remains pure core/service behavior. No directory
 scan, similarity search, file-name inference or model call participates.
+
+Source-set topology, membership consistency, placement-scope equality,
+placement-identity uniqueness, governing-edge legality, cycles and root totality
+are pure structural checks over decoded sources. The complete
+declaring-repository validator owns cross-source uniqueness; the source-local
+validator owns within-source membership and placement consistency. Installation
+preflight consumes the decoder's structural findings and performs every pure
+structural check that does not require installed authority bindings; it does not
+implement a partial candidate validator.
 
 No persisted graph index is authoritative in the beta. Any in-memory or
 persisted acceleration is a rebuildable projection of current member intent and
@@ -1206,8 +1219,9 @@ The exact mechanism is:
    Pyramid participation. It may establish the authority state required by
    candidate validation but never ACTIVATEs/REVISEs/DEACTIVATEs/EXCLUDEs a
    pyramid and creates no cross-repository setup transaction. When the explicit
-   bootstrap option is present, the installer validates exact Version-2 content
-   and writes it only to `.span/functional-pyramid.json`. An absent destination
+   bootstrap option is present, the installer validates the exact Version-2
+   bootstrap shape and every Version-3 declaration source it selects, and writes
+   the bootstrap only to `.span/functional-pyramid.json`. An absent destination
    may be created, identical bytes are a no-op, and different existing bytes
    reject before mutation. Declaration sources named by that bootstrap must
    already be repository-owned files. Initialization never generates a
@@ -1399,33 +1413,37 @@ curation approval. Repository registration and Functional Pyramid participation
 remain separate. Repository-portable backups carry repository lifecycle state,
 not installation-level participation state.
 
-The Beta-5 declaration cutover is explicit. Version-1 rule declarations are
-never decoded into, grouped into or adapted as Version-2 document placements.
-Before revising an ACTIVE instance, the operator creates Version-2 placements
-with explicit directory scopes from the repository's approved canonical
-document corpus, assigns at least one root-scoped P0 placement, validates the
-complete candidate in isolation and takes the ordinary verified backup required
-for an existing installation.
+The declaration cutover is explicit and version-local. Version-1 rule
+declarations are never decoded into, grouped into or adapted as document
+placements, and Version-2 declarations are never translated into Version-3
+sources. Before revising an ACTIVE instance, the operator authors Version-3
+sources with explicit source identity, kind, scope and document membership from
+the repository's approved canonical document corpus, assigns at least one
+root-scoped P0 placement, validates the complete candidate in isolation and takes
+the ordinary verified backup required for an existing installation.
 
-Opening an installation that still has an ACTIVE Version-1 member intent does
-not rewrite participation. The member remains ACTIVE; current health represents
-the undecodable declaration as FD-71 `INVALID_DECLARATION`, and route
+Opening an installation that still has an ACTIVE Version-1 or Version-2 member
+intent does not rewrite participation. The member remains ACTIVE; current health
+represents the undecodable declaration as FD-71 `INVALID_DECLARATION`, and route
 orientation that depends on it is structurally UNRESOLVED. A proposed Version-1
-source remains candidate `INVALID_DECLARATION_SOURCE`.
+or Version-2 source remains candidate `INVALID_DECLARATION_SOURCE`.
 
-The Version-2 REVISE cutover does not need an old declaration adapter. After the
-replacement candidate passes ordinary Version-2 validation, service composition
+The Version-1 REVISE cutover does not need an old declaration adapter. After the
+replacement candidate passes ordinary current validation, service composition
 enumerates the old-side route-dependent set from retained canonical support:
 every retained current normative conclusion revision whose
 `FunctionalRouteSupport` references the target pyramid identity is an affected
 route dependency. The
 write combines that exact set with ordinary participation effects, commits the
-new Version-2 member intent atomically, retains historical receipts and semantic
+new member intent atomically, retains historical receipts and semantic
 conclusions, and returns those dependent effects for evidence-near
 re-establishment. Because the route identity model changes from rule routes to
 document routes, none of those old route dependencies is assumed equal to a new
 route without re-establishment. This path never parses Version-1 rule semantics
-and never fabricates an old placement graph.
+and never fabricates an old placement graph. A Version-2 → Version-3 revision
+does not use this forced-route-reassessment treatment: declaration organisation
+and version change alone do not invalidate retained routes, and the existing
+effective route-change and support mechanisms remain authoritative.
 
 If an old stored support payload itself cannot be decoded after the carrier
 removal, the schema-15 transition preserves the owning conclusion and records
@@ -1434,7 +1452,7 @@ conclusion/pyramid coordinates for the cutover enumeration. Runtime open never
 silently rewrites support. No schema transition may invent placement scope,
 document placement or a governing-document relationship. Declaration defects
 other than the explicitly unsupported Version-1 format remain ordinary blockers
-and cannot use this cutover path.
+and cannot use this Version-1 cutover path.
 
 The former Beta-1 package/release identity and schema-13→14 transition are
 historical and are retained in the

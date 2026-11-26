@@ -78,7 +78,10 @@ same tool:
   directory, including ancestor and root placements; no directory in an ACTIVE
   repository returns an uncovered or empty governing result.
 - `FunctionalPyramidCandidateSelector` validates an ACTIVATE or REVISE proposal
-  without persisting participation.
+  without persisting participation. Each member's `declaration_sources` name
+  whole-document Version-3 sources; the optional bootstrap remains Version-2
+  navigation only. See the
+  [neutral worked example](functional-pyramid-example.md).
 - `FunctionalPyramidReceiptSelector` retrieves the exact installation-scoped
   acceptance receipt for a Functional Pyramid write.
 

@@ -13,6 +13,7 @@ import json
 import pathlib
 
 from span.shell.readiness import (
+    probe_active_functional_pyramid,
     probe_functional_pyramid_installation_store,
     probe_functional_pyramid_repository,
     probe_store,
@@ -25,6 +26,11 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(prog="span-install-verify")
     parser.add_argument("--data-dir", required=True)
     parser.add_argument("--repo", action="append", default=[])
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit non-zero when structural or provenance acceptance fails",
+    )
     return parser.parse_args(argv)
 
 
@@ -94,9 +100,11 @@ def main(argv=None):
     args = parse_args(argv)
     data_dir = pathlib.Path(args.data_dir)
     repos = []
+    roots_by_repository: dict[str, str] = {}
     for target in args.repo:
         repository_id = repository_id_from_config(target)
         canonical_root = canonical_root_from_config(target)
+        roots_by_repository[repository_id] = canonical_root
         readiness = probe_store(data_dir, repository_id)
         repos.append(
             {
@@ -111,20 +119,36 @@ def main(argv=None):
                 ),
             }
         )
+    installation = probe_functional_pyramid_installation_store(data_dir)
+    active = probe_active_functional_pyramid(data_dir, roots_by_repository)
+    repositories_accept = all(
+        bool(repo["store"].get("ready"))
+        and bool(repo["functional_pyramid"]["declarations"].get("valid"))
+        and repo["functional_pyramid"]["provenance"].get("state")
+        != "PROVENANCE_MISMATCH"
+        for repo in repos
+    )
+    acceptance_ok = (
+        bool(installation.get("ready"))
+        and active.get("status") in ("valid", "not_active")
+        and repositories_accept
+    )
     print(
         json.dumps(
             {
                 "build_identity": _build_identity(),
                 "data_dir": str(data_dir),
                 "restart_required": True,
-                "functional_pyramid": probe_functional_pyramid_installation_store(
-                    data_dir
-                ),
+                "acceptance_ok": acceptance_ok,
+                "functional_pyramid": installation,
+                "active_functional_pyramid": active,
                 "repos": repos,
             },
             sort_keys=True,
         )
     )
+    if args.strict and not acceptance_ok:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

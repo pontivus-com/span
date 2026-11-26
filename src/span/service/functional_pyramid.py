@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses as _dataclasses
 import datetime as _datetime
 import typing as _typing
 
@@ -32,6 +33,18 @@ from span.service.support import SupportService
 
 _DeclarationEntry = tuple[str, m.FunctionalPyramidDeclaration]
 _AuthorityMap = dict[tuple[str, str], m.AuthorityBinding]
+
+
+@_dataclasses.dataclass(frozen=True)
+class _ActiveContext:
+    """One live declaration and authority evaluation shared by one ask."""
+
+    current_members: tuple[m.FunctionalPyramidMemberView, ...]
+    declarations: tuple[_DeclarationEntry, ...]
+    available: frozenset[str]
+    authority_bindings: _AuthorityMap
+    findings: tuple[m.FunctionalPyramidFinding, ...]
+
 
 _RepositoryPaths = _typing.Callable[
     [tuple[str, ...]],
@@ -154,10 +167,13 @@ class FunctionalPyramidService:
             repository_runtime=self._runtime,
         )
 
-    def status(
-        self, selector: m.FunctionalPyramidSelector
-    ) -> m.FunctionalPyramidStatus:
-        """Project exact durable participation plus live ACTIVE health (FD-83)."""
+    def _active_participation(self, selector: m.FunctionalPyramidSelector) -> tuple[
+        m.FunctionalPyramidParticipationState,
+        m.FunctionalPyramidId | None,
+        m.FunctionalPyramidVersion | None,
+        tuple[m.FunctionalPyramidMemberView, ...],
+    ]:
+        """Resolve durable participation and its current member intent (FD-83)."""
         state = self._require_state()
         pyramid_id = selector.pyramid_id
         if selector.repository_id is not None:
@@ -177,7 +193,7 @@ class FunctionalPyramidService:
                     if state.is_excluded(repository_id)
                     else m.FunctionalPyramidParticipationState.UNCONFIGURED
                 )
-                return m.FunctionalPyramidStatus(state=participation)
+                return participation, None, None, ()
 
         assert pyramid_id is not None
         version = state.pyramid_version(pyramid_id)
@@ -191,6 +207,24 @@ class FunctionalPyramidService:
                 ),
             )
         members = state.pyramid_members(pyramid_id, version)
+        return (
+            m.FunctionalPyramidParticipationState.ACTIVE,
+            pyramid_id,
+            version,
+            members,
+        )
+
+    def status(
+        self, selector: m.FunctionalPyramidSelector
+    ) -> m.FunctionalPyramidStatus:
+        """Project exact durable participation plus live ACTIVE health (FD-83)."""
+        participation, pyramid_id, version, members = self._active_participation(
+            selector
+        )
+        if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
+            return m.FunctionalPyramidStatus(state=participation)
+        assert pyramid_id is not None
+        assert version is not None
         health, findings = self.health(members)
         return m.FunctionalPyramidStatus(
             state=m.FunctionalPyramidParticipationState.ACTIVE,
@@ -213,17 +247,17 @@ class FunctionalPyramidService:
     ):
         """Resolve the current repository route through the installation state."""
         try:
-            status = self.status(
+            participation, pyramid_id, version, members = self._active_participation(
                 m.FunctionalPyramidSelector(repository_id=repository_id)
             )
-            if status.state is not m.FunctionalPyramidParticipationState.ACTIVE:
-                return m.FunctionalPyramidParticipation(status.state)
-            assert status.pyramid_id is not None
-            assert status.version is not None
+            if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
+                return m.FunctionalPyramidParticipation(participation)
+            assert pyramid_id is not None
+            assert version is not None
             return self.resolve(
-                pyramid_id=status.pyramid_id,
-                version=status.version,
-                members=status.members,
+                pyramid_id=pyramid_id,
+                version=version,
+                members=members,
                 surface=surface,
                 semantic_scope=semantic_scope,
             )
@@ -241,13 +275,13 @@ class FunctionalPyramidService:
         | m.FunctionalPyramidView
     ):
         """Resolve one exact repository-relative directory through current state."""
-        status = self.status(
+        participation, pyramid_id, version, members = self._active_participation(
             m.FunctionalPyramidSelector(repository_id=selector.repository_id)
         )
-        if status.state is not m.FunctionalPyramidParticipationState.ACTIVE:
-            return m.FunctionalPyramidParticipation(status.state)
-        assert status.pyramid_id is not None
-        assert status.version is not None
+        if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
+            return m.FunctionalPyramidParticipation(participation)
+        assert pyramid_id is not None
+        assert version is not None
         try:
             if not self._declarations.directory_exists(
                 selector.repository_id, selector.directory
@@ -257,22 +291,17 @@ class FunctionalPyramidService:
                     public_identity=selector.directory,
                     public_cause="the exact repository-relative directory is not present",
                 )
-            current_members, declarations, available, source_findings = (
-                self._load_active_members(status.members)
-            )
-            authorities, authority_findings = self._authority_bindings(
-                current_members, declarations, available
-            )
+            context = self._load_active_context(members)
             view, _ = _fp.resolve_functional_pyramid_directory_route(
-                pyramid_id=status.pyramid_id,
-                version=status.version,
-                members=current_members,
+                pyramid_id=pyramid_id,
+                version=version,
+                members=context.current_members,
                 repository_id=selector.repository_id,
                 directory=selector.directory,
-                declarations=declarations,
-                available_repositories=available,
-                authority_bindings=authorities,
-                declaration_findings=source_findings + authority_findings,
+                declarations=context.declarations,
+                available_repositories=context.available,
+                authority_bindings=context.authority_bindings,
+                declaration_findings=context.findings,
             )
             return view
         except (OSError, FunctionalPyramidRepositoryUnavailable):
@@ -292,21 +321,23 @@ class FunctionalPyramidService:
         | m.FunctionalPyramidUnavailable
     ):
         """Project ordinary ask orientation without requiring ACTIVE-only scope early."""
-        status = self.status(m.FunctionalPyramidSelector(repository_id=repository_id))
-        if status.state is not m.FunctionalPyramidParticipationState.ACTIVE:
-            return m.FunctionalPyramidParticipation(status.state)
+        participation, pyramid_id, version, members = self._active_participation(
+            m.FunctionalPyramidSelector(repository_id=repository_id)
+        )
+        if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
+            return m.FunctionalPyramidParticipation(participation)
         if semantic_scope is None:
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid semantic scope cannot be resolved",
                 recovery="select a canonical file, symbol, service, or domain surface",
             )
-        assert status.pyramid_id is not None
-        assert status.version is not None
+        assert pyramid_id is not None
+        assert version is not None
         try:
             view, _ = self.resolve(
-                pyramid_id=status.pyramid_id,
-                version=status.version,
-                members=status.members,
+                pyramid_id=pyramid_id,
+                version=version,
+                members=members,
                 surface=surface,
                 semantic_scope=semantic_scope,
             )
@@ -1273,15 +1304,16 @@ class FunctionalPyramidService:
                         _validation_finding(
                             m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
                             repository_id,
-                            "Functional Pyramid declaration violates the Version-2 contract",
-                            "replace the named source with a valid Version-2 declaration",
+                            "Functional Pyramid declaration violates the Version-3 contract",
+                            "replace the named source with a valid Version-3 declaration",
                             declaration_locator=request.locator,
                         )
                     )
                 else:
                     detail = (
-                        "ACTIVE Functional Pyramid declaration uses unsupported Version 1"
-                        if exc.unsupported_version == 1
+                        "ACTIVE Functional Pyramid declaration uses unsupported "
+                        f"Version {exc.unsupported_version}"
+                        if exc.unsupported_version in (1, 2)
                         else "ACTIVE Functional Pyramid declaration cannot be decoded"
                     )
                     graph.append(
@@ -1289,7 +1321,7 @@ class FunctionalPyramidService:
                             m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
                             repository_id,
                             detail,
-                            "revise the ACTIVE instance with valid Version-2 declarations",
+                            "revise the ACTIVE instance with valid Version-3 declarations",
                             declaration_locator=request.locator,
                         )
                     )
@@ -1381,6 +1413,24 @@ class FunctionalPyramidService:
             tuple(graph),
         )
 
+    def _load_active_context(
+        self, members: tuple[m.FunctionalPyramidMemberView, ...]
+    ) -> _ActiveContext:
+        """Load declarations and authority once for one ask."""
+        current_members, declarations, available, source_findings = (
+            self._load_active_members(members)
+        )
+        authorities, authority_findings = self._authority_bindings(
+            current_members, declarations, available
+        )
+        return _ActiveContext(
+            current_members=current_members,
+            declarations=declarations,
+            available=available,
+            authority_bindings=authorities,
+            findings=source_findings + authority_findings,
+        )
+
     def _load_active_members(
         self, members: tuple[m.FunctionalPyramidMemberView, ...]
     ) -> tuple[
@@ -1437,6 +1487,7 @@ class FunctionalPyramidService:
         findings: list[m.FunctionalPyramidFinding] = []
         evaluated_documents: set[tuple[str, str]] = set()
         unavailable_documents: set[tuple[str, str]] = set()
+        repository_bindings: dict[str, tuple[m.AuthorityBinding, ...]] = {}
 
         for placement in sorted(
             placements,
@@ -1477,12 +1528,9 @@ class FunctionalPyramidService:
                 continue
             runtime = self._runtime(document.repository_id)
             if key not in evaluated_documents:
-                source = runtime.evidence.read_exact(
-                    document.repository_id,
-                    m.EvidenceRequest(document.document_ref),
-                    None,
-                )
-                if isinstance(source, m.EvidenceSourceFailure):
+                if not runtime.evidence.is_servable(
+                    document.repository_id, document.document_ref
+                ):
                     unavailable_documents.add(key)
                 evaluated_documents.add(key)
             if key in unavailable_documents:
@@ -1496,11 +1544,15 @@ class FunctionalPyramidService:
                     )
                 )
 
+            candidates = repository_bindings.get(document.repository_id)
+            if candidates is None:
+                candidates = tuple(
+                    runtime.store.load_authority_bindings(document.repository_id)
+                )
+                repository_bindings[document.repository_id] = candidates
             candidates = tuple(
                 binding
-                for binding in runtime.store.load_authority_bindings(
-                    document.repository_id
-                )
+                for binding in candidates
                 if binding.evidence_ref.locator == document.document_ref
             )
             canonical = tuple(
@@ -1555,37 +1607,27 @@ class FunctionalPyramidService:
         semantic_scope: m.EvidenceScope,
     ) -> tuple[m.FunctionalPyramidView, m.FunctionalRouteIdentity]:
         """Load current declarations and resolve one route."""
-        current_members, declarations, available, source_findings = (
-            self._load_active_members(members)
-        )
-        authorities, authority_findings = self._authority_bindings(
-            current_members, declarations, available
-        )
+        context = self._load_active_context(members)
         return _fp.resolve_functional_pyramid_route(
             pyramid_id=pyramid_id,
             version=version,
-            members=current_members,
+            members=context.current_members,
             surface=surface,
             semantic_scope=semantic_scope,
-            declarations=declarations,
-            available_repositories=available,
-            authority_bindings=authorities,
-            declaration_findings=source_findings + authority_findings,
+            declarations=context.declarations,
+            available_repositories=context.available,
+            authority_bindings=context.authority_bindings,
+            declaration_findings=context.findings,
         )
 
     def health(
         self, members: tuple[m.FunctionalPyramidMemberView, ...]
     ) -> tuple[m.FunctionalPyramidHealth, tuple[m.FunctionalPyramidFinding, ...]]:
         """Evaluate live structural health from current declarations."""
-        current_members, declarations, available, source_findings = (
-            self._load_active_members(members)
-        )
-        _, authority_findings = self._authority_bindings(
-            current_members, declarations, available
-        )
+        context = self._load_active_context(members)
         return _fp.evaluate_functional_pyramid_health(
-            current_members,
-            declarations,
-            available,
-            source_findings + authority_findings,
+            context.current_members,
+            context.declarations,
+            context.available,
+            context.findings,
         )

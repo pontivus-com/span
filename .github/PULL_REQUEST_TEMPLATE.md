@@ -19,3 +19,5 @@ behavior, or a documented contract? If yes, link the updated document.
 - [ ] The change is scoped to one behavior or contract
 - [ ] Public docs are updated where the contract changed
 - [ ] No secrets, absolute workspace paths, or proprietary fixtures were added
+- [ ] No installation-specific repository, product, customer, document or path
+      identifiers were added to Span (separation rule)

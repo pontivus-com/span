@@ -44,6 +44,10 @@ class EvidenceSourceBase(ABC):
     def _repository_state(self) -> m.RepositoryState:
         """Operational state metadata reported with inventory pages."""
 
+    @abstractmethod
+    def _is_servable(self, locator: str) -> bool:
+        """Whether one locator names existing text the backend serves."""
+
     # -- shared mechanics -------------------------------------------------
 
     def _check_repository(self, repository_id: str) -> None:
@@ -84,6 +88,15 @@ class EvidenceSourceBase(ABC):
         )
 
     # -- port operations --------------------------------------------------
+
+    def is_servable(self, repository_id: str, locator: str) -> bool:
+        """Whether one exact locator names existing text this source serves.
+
+        Reuses the backend's own membership rule for that one locator. It does
+        not enumerate the inventory and does not read the content.
+        """
+        self._check_repository(repository_id)
+        return self._is_servable(locator)
 
     def list_inventory_entries(
         self,
@@ -205,7 +218,7 @@ class EvidenceSourceBase(ABC):
                 m.EvidenceSourceFailureKind.MISSING,
                 f"unknown evidence locator: {request.locator}",
             )
-        if request.locator not in set(self._paths()):
+        if not self.is_servable(repository_id, request.locator):
             return m.EvidenceSourceFailure(
                 request,
                 m.EvidenceSourceFailureKind.UNREADABLE,

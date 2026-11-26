@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections as _collections
 import collections.abc as _collections_abc
 import hashlib as _hashlib
 import json as _json
@@ -11,6 +12,7 @@ from span.core import containment as _containment
 from span.core.model.functional_pyramid import (
     FunctionalDirectoryScope,
     FunctionalDocumentDeclaration,
+    FunctionalDocumentIdentity,
     FunctionalDocumentPlacement,
     FunctionalDocumentRef,
     FunctionalDocumentRoute,
@@ -23,6 +25,7 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidLayer,
     FunctionalPyramidMemberView,
     FunctionalPyramidRouteStatus,
+    FunctionalPyramidSourceKind,
     FunctionalPyramidVersion,
     FunctionalPyramidView,
     FunctionalRouteIdentity,
@@ -255,26 +258,60 @@ def _decode_placement(
     )
 
 
+def _decode_document_identity(value: object) -> FunctionalDocumentIdentity:
+    raw = _require_json_object(value, frozenset({"repository_id", "document_ref"}))
+    return FunctionalDocumentIdentity(
+        repository_id=_require_json_string(
+            raw["repository_id"], "FunctionalDocumentIdentity.repository_id"
+        ),
+        document_ref=_require_json_string(
+            raw["document_ref"], "FunctionalDocumentIdentity.document_ref"
+        ),
+    )
+
+
 def decode_functional_pyramid_declaration(
     text: str,
     *,
     repository_id: str,
     declaration_locator: str,
 ) -> tuple[FunctionalPyramidDeclaration, tuple[FunctionalPyramidFinding, ...]]:
-    """Strictly decode one Version-2 declaration and retain scope graph findings.
+    """Strictly decode one Version-3 declaration and retain scope findings.
 
-    JSON/version/structural failures raise ValueError and are owned by the
-    declaration-source validation path. Once a placement's non-scope coordinates
-    are recoverable, a non-canonical scope is returned exclusively as
-    INVALID_PLACEMENT_SCOPE and no invalid canonical placement is built.
+    JSON/version/kind/source-scope/membership-shape failures raise ValueError and
+    are owned by the declaration-source validation path. Once a placement entry's
+    non-scope coordinates are recoverable, a non-canonical placement scope is
+    returned exclusively as INVALID_PLACEMENT_SCOPE and no invalid canonical
+    placement is built.
     """
     try:
         value = _json.loads(text)
     except _json.JSONDecodeError as exc:
         raise ValueError("Functional Pyramid declaration is not valid JSON") from exc
-    raw = _require_json_object(value, frozenset({"version", "placements"}))
-    if raw["version"] != 2:
-        raise ValueError("Functional Pyramid declaration version must be 2")
+    raw = _require_json_object(
+        value,
+        frozenset({"version", "source_id", "kind", "scope", "documents", "placements"}),
+    )
+    if raw["version"] != 3:
+        raise ValueError("Functional Pyramid declaration version must be 3")
+    source_id = _require_json_string(raw["source_id"], "declaration source_id")
+    kind_token = _require_json_string(raw["kind"], "declaration kind")
+    try:
+        kind = FunctionalPyramidSourceKind(kind_token)
+    except ValueError as exc:
+        raise ValueError("unknown Functional Pyramid source kind") from exc
+    source_scope_token = _require_json_string(raw["scope"], "declaration scope")
+    try:
+        source_scope = normalize_directory_scope(source_scope_token)
+    except ValueError as exc:
+        raise ValueError(
+            "Functional Pyramid declaration source scope is not canonical "
+            "repository-relative directory scope"
+        ) from exc
+    documents = tuple(
+        _decode_document_identity(item)
+        for item in _require_json_array(raw["documents"], "declaration documents")
+    )
 
     declarations: list[FunctionalDocumentDeclaration] = []
     findings: list[FunctionalPyramidFinding] = []
@@ -325,7 +362,14 @@ def decode_functional_pyramid_declaration(
         )
 
     return (
-        FunctionalPyramidDeclaration(version=2, placements=tuple(declarations)),
+        FunctionalPyramidDeclaration(
+            version=3,
+            source_id=source_id,
+            kind=kind,
+            scope=source_scope,
+            documents=documents,
+            placements=tuple(declarations),
+        ),
         _ordered_findings(findings),
     )
 
@@ -385,6 +429,7 @@ def _indexes(
 ]:
     by_placement: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration] = {}
     findings: list[FunctionalPyramidFinding] = []
+    seen: set[FunctionalDocumentPlacement] = set()
     for repository_id, declaration in declarations:
         for entry in declaration.placements:
             placement = entry.placement
@@ -399,24 +444,24 @@ def _indexes(
                     )
                 )
                 continue
-            previous = by_placement.get(placement)
-            if previous is not None and previous != entry:
+            if placement in seen:
                 findings.append(
                     _finding(
                         FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_PLACEMENT,
-                        "one placement identity has conflicting governing relationships",
+                        "one placement identity is declared more than once",
                         "retain one canonical declaration for the placement identity",
                         repository_id=repository_id,
                         placement=placement,
                     )
                 )
                 continue
-            by_placement.setdefault(placement, entry)
+            seen.add(placement)
+            by_placement[placement] = entry
     return by_placement, _ordered_findings(findings)
 
 
 def _member_availability_findings(
-    members: tuple[FunctionalPyramidMemberView, ...],
+    member_ids: frozenset[str],
     available_repositories: frozenset[str],
 ) -> tuple[FunctionalPyramidFinding, ...]:
     return tuple(
@@ -424,10 +469,10 @@ def _member_availability_findings(
             FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
             "active Functional Pyramid member is unavailable",
             "restore the named member repository",
-            repository_id=member.repository_id,
+            repository_id=repository_id,
         )
-        for member in members
-        if member.repository_id not in available_repositories
+        for repository_id in sorted(member_ids)
+        if repository_id not in available_repositories
     )
 
 
@@ -594,10 +639,237 @@ def _cycle_findings(
     )
 
 
+def _source_set_findings(
+    repository_id: str,
+    declarations: tuple[FunctionalPyramidDeclaration, ...],
+) -> tuple[FunctionalPyramidFinding, ...]:
+    """Enforce S1-S5 source-set topology (FD-66/S-VALIDATE-01)."""
+    findings: list[FunctionalPyramidFinding] = []
+    source_ids = _collections.Counter(
+        declaration.source_id for declaration in declarations
+    )
+    for source_id, count in sorted(source_ids.items()):
+        if count > 1:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                    f"declaration source identity {source_id!r} is declared "
+                    f"{count} times in one declaring repository",
+                    "retain one source identity per declaring repository",
+                    repository_id=repository_id,
+                )
+            )
+    source_scopes = _collections.Counter(
+        declaration.scope for declaration in declarations
+    )
+    for scope, count in sorted(source_scopes.items()):
+        if count > 1:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                    f"declaration source scope {scope!r} is declared {count} times",
+                    "retain one declaration source per scope",
+                    repository_id=repository_id,
+                    directory=scope,
+                )
+            )
+    repository_sources = tuple(
+        declaration
+        for declaration in declarations
+        if declaration.kind is FunctionalPyramidSourceKind.REPOSITORY
+    )
+    if len(repository_sources) != 1:
+        findings.append(
+            _finding(
+                FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                "a declaring repository must have exactly one repository-kind "
+                f"source; observed {len(repository_sources)}",
+                "declare exactly one repository-kind source at scope '.'",
+                repository_id=repository_id,
+            )
+        )
+    for declaration in declarations:
+        if (
+            declaration.kind is FunctionalPyramidSourceKind.REPOSITORY
+            and declaration.scope != "."
+        ):
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                    "a repository-kind source must have scope '.'",
+                    "move the repository-kind source to scope '.'",
+                    repository_id=repository_id,
+                    directory=declaration.scope,
+                )
+            )
+        if (
+            declaration.kind is FunctionalPyramidSourceKind.AREA
+            and declaration.scope == "."
+        ):
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                    "an area-kind source must have a non-root scope",
+                    "declare the area source at its canonical directory scope",
+                    repository_id=repository_id,
+                    directory=declaration.scope,
+                )
+            )
+    return tuple(findings)
+
+
+def _source_local_findings(
+    repository_id: str,
+    declaration: FunctionalPyramidDeclaration,
+) -> tuple[FunctionalPyramidFinding, ...]:
+    """Enforce S6 (within source), S8, S9 and S10 for one source."""
+    findings: list[FunctionalPyramidFinding] = []
+    source_scope = declaration.scope
+    for identity, count in sorted(
+        _collections.Counter(declaration.documents).items(),
+        key=lambda item: (item[0].repository_id, item[0].document_ref),
+    ):
+        if count > 1:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_SOURCE,
+                    f"{identity.repository_id}:{identity.document_ref} is listed "
+                    f"{count} times in source {declaration.source_id!r}",
+                    "list the canonical document exactly once in the source",
+                    repository_id=repository_id,
+                    directory=source_scope,
+                )
+            )
+    listed = set(declaration.documents)
+    for entry in declaration.placements:
+        placement = entry.placement
+        identity = placement.document.identity
+        if placement.scope != source_scope:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.DOCUMENT_SCOPE_MISMATCH,
+                    f"{identity.repository_id}:{identity.document_ref} is placed at "
+                    f"{placement.scope!r} but belongs to source "
+                    f"{declaration.source_id!r} at {source_scope!r}",
+                    "correct the placement scope or the declaration source",
+                    repository_id=repository_id,
+                    placement=placement,
+                    directory=source_scope,
+                )
+            )
+        if identity not in listed:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.UNLISTED_AREA_DOCUMENT,
+                    f"{identity.repository_id}:{identity.document_ref} is placed in "
+                    f"source {declaration.source_id!r} but is absent from its "
+                    "document membership",
+                    "list the document in the source or remove the placement",
+                    repository_id=repository_id,
+                    placement=placement,
+                    directory=source_scope,
+                )
+            )
+    placed_at_source_scope = {
+        entry.placement.document.identity
+        for entry in declaration.placements
+        if entry.placement.scope == source_scope
+    }
+    for identity in sorted(
+        listed, key=lambda item: (item.repository_id, item.document_ref)
+    ):
+        if identity not in placed_at_source_scope:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.MISSING_AREA_DOCUMENT,
+                    f"{identity.repository_id}:{identity.document_ref} is listed in "
+                    f"source {declaration.source_id!r} but has no placement at "
+                    f"{source_scope!r}",
+                    "place the listed document at the source scope",
+                    repository_id=repository_id,
+                    directory=source_scope,
+                )
+            )
+    return tuple(findings)
+
+
+def _complete_membership_findings(
+    repository_id: str,
+    declarations: tuple[FunctionalPyramidDeclaration, ...],
+) -> tuple[FunctionalPyramidFinding, ...]:
+    """Enforce cross-source membership and document identity uniqueness."""
+    findings: list[FunctionalPyramidFinding] = []
+    scopes_by_identity: dict[FunctionalDocumentIdentity, list[str]] = {}
+    placements_by_identity: dict[
+        FunctionalDocumentIdentity, list[FunctionalDocumentPlacement]
+    ] = {}
+    for declaration in declarations:
+        for identity in declaration.documents:
+            scopes_by_identity.setdefault(identity, []).append(declaration.scope)
+        for entry in declaration.placements:
+            placements_by_identity.setdefault(
+                entry.placement.document.identity, []
+            ).append(entry.placement)
+    for identity in sorted(
+        scopes_by_identity, key=lambda item: (item.repository_id, item.document_ref)
+    ):
+        delivered_scopes = sorted(set(scopes_by_identity[identity]))
+        if len(delivered_scopes) <= 1:
+            continue
+        for scope in delivered_scopes:
+            findings.append(
+                _finding(
+                    FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_SOURCE,
+                    f"{identity.repository_id}:{identity.document_ref} is listed in "
+                    "more than one declaration source: "
+                    + ", ".join(repr(item) for item in delivered_scopes),
+                    "list the canonical document in exactly one source",
+                    repository_id=repository_id,
+                    directory=scope,
+                )
+            )
+    for identity in sorted(
+        placements_by_identity, key=lambda item: (item.repository_id, item.document_ref)
+    ):
+        placements = placements_by_identity[identity]
+        layers = {placement.document.layer for placement in placements}
+        if len(layers) > 1:
+            for placement in placements:
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_LAYER,
+                        f"{identity.repository_id}:{identity.document_ref} is placed "
+                        "at more than one layer: "
+                        + ", ".join(
+                            layer.value for layer in _LAYER_ORDER if layer in layers
+                        ),
+                        "split or extract the content so each document owns one layer",
+                        repository_id=repository_id,
+                        placement=placement,
+                    )
+                )
+        scopes = {placement.scope for placement in placements}
+        if len(scopes) > 1:
+            for placement in placements:
+                findings.append(
+                    _finding(
+                        FunctionalPyramidFindingReason.DUPLICATE_DOCUMENT_SCOPE,
+                        f"{identity.repository_id}:{identity.document_ref} is placed "
+                        "at more than one scope: "
+                        + ", ".join(repr(scope) for scope in sorted(scopes)),
+                        "a canonical document occupies one scope",
+                        repository_id=repository_id,
+                        placement=placement,
+                    )
+                )
+    return tuple(findings)
+
+
 def _root_findings(
-    members: tuple[FunctionalPyramidMemberView, ...],
+    repository_ids: frozenset[str],
     index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
     prior_findings: tuple[FunctionalPyramidFinding, ...],
+    repositories_with_declarations: frozenset[str],
 ) -> tuple[FunctionalPyramidFinding, ...]:
     invalid_scope_repositories = {
         finding.repository_id
@@ -606,11 +878,13 @@ def _root_findings(
         and finding.repository_id is not None
     }
     findings: list[FunctionalPyramidFinding] = []
-    for member in members:
-        if member.repository_id in invalid_scope_repositories:
+    for repository_id in sorted(repository_ids):
+        if repository_id not in repositories_with_declarations:
+            continue
+        if repository_id in invalid_scope_repositories:
             continue
         root_ok = any(
-            placement.declaring_repository_id == member.repository_id
+            placement.declaring_repository_id == repository_id
             and placement.scope == "."
             and placement.document.layer is FunctionalPyramidLayer.P0
             and declaration.governing_placements == ("ROOT",)
@@ -622,11 +896,60 @@ def _root_findings(
                     FunctionalPyramidFindingReason.MISSING_ROOT_PLACEMENT,
                     "member declaration graph has no root-scoped P0 placement governed by ROOT",
                     "declare at least one scope='.' P0 placement governed exactly by ROOT",
-                    repository_id=member.repository_id,
+                    repository_id=repository_id,
                     directory=".",
                 )
             )
     return tuple(findings)
+
+
+def _structural_findings(
+    declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
+    *,
+    member_ids: frozenset[str],
+    available_repositories: frozenset[str],
+    declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
+) -> tuple[
+    dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
+    tuple[FunctionalPyramidFinding, ...],
+]:
+    by_repository: dict[str, list[FunctionalPyramidDeclaration]] = {}
+    for repository_id, declaration in declarations:
+        by_repository.setdefault(repository_id, []).append(declaration)
+    source_findings: list[FunctionalPyramidFinding] = []
+    for repository_id in sorted(by_repository):
+        repository_declarations = tuple(by_repository[repository_id])
+        source_findings.extend(
+            _source_set_findings(repository_id, repository_declarations)
+        )
+        for declaration in repository_declarations:
+            source_findings.extend(_source_local_findings(repository_id, declaration))
+        source_findings.extend(
+            _complete_membership_findings(repository_id, repository_declarations)
+        )
+    index, duplicate_findings = _indexes(declarations)
+    findings = (
+        *declaration_findings,
+        *source_findings,
+        *duplicate_findings,
+        *_member_availability_findings(member_ids, available_repositories),
+        *_placement_graph_findings(
+            index,
+            member_ids=member_ids,
+            available_repositories=available_repositories,
+        ),
+        *_cycle_findings(index),
+    )
+    findings = (
+        *findings,
+        *_root_findings(
+            member_ids,
+            index,
+            findings,
+            frozenset(by_repository),
+        ),
+    )
+    return index, _ordered_findings(findings)
 
 
 def _graph_findings(
@@ -638,21 +961,27 @@ def _graph_findings(
     dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
     tuple[FunctionalPyramidFinding, ...],
 ]:
-    member_ids = frozenset(member.repository_id for member in members)
-    index, duplicate_findings = _indexes(declarations)
-    findings = (
-        *declaration_findings,
-        *duplicate_findings,
-        *_member_availability_findings(members, available_repositories),
-        *_placement_graph_findings(
-            index,
-            member_ids=member_ids,
-            available_repositories=available_repositories,
-        ),
-        *_cycle_findings(index),
+    return _structural_findings(
+        declarations,
+        member_ids=frozenset(member.repository_id for member in members),
+        available_repositories=available_repositories,
+        declaration_findings=declaration_findings,
     )
-    findings = (*findings, *_root_findings(members, index, findings))
-    return index, _ordered_findings(findings)
+
+
+def evaluate_functional_pyramid_source_structure(
+    declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
+    declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
+) -> tuple[FunctionalPyramidFinding, ...]:
+    """Pure structural validation over one declared source set (installer preflight)."""
+    member_ids = frozenset(repository_id for repository_id, _ in declarations)
+    _, findings = _structural_findings(
+        declarations,
+        member_ids=member_ids,
+        available_repositories=member_ids,
+        declaration_findings=declaration_findings,
+    )
+    return findings
 
 
 def evaluate_functional_pyramid_health(
@@ -777,6 +1106,7 @@ def _relevant_findings(
     *,
     repository_id: str,
     closure: tuple[FunctionalDocumentPlacement, ...],
+    selected_directories: tuple[str, ...],
 ) -> tuple[FunctionalPyramidFinding, ...]:
     closure_set = set(closure)
     relevant_repositories = {repository_id}
@@ -791,6 +1121,23 @@ def _relevant_findings(
             continue
         if finding.reason is FunctionalPyramidFindingReason.MISSING_ROOT_PLACEMENT:
             if finding.repository_id == repository_id:
+                selected.append(finding)
+            continue
+        if finding.directory is not None and finding.repository_id is not None:
+            repository_relevant = (
+                finding.repository_id == repository_id
+                or finding.repository_id in relevant_repositories
+            )
+            source_affects_selection = any(
+                directory_scope_contains(finding.directory, directory)
+                for directory in selected_directories
+            )
+            governs_closure = any(
+                placement.declaring_repository_id == finding.repository_id
+                and directory_scope_contains(finding.directory, placement.scope)
+                for placement in closure
+            )
+            if repository_relevant and (source_affects_selection or governs_closure):
                 selected.append(finding)
             continue
         if finding.repository_id in relevant_repositories and finding.reason in (
@@ -880,10 +1227,14 @@ def _resolve(
             )
         )
     closure = _closure(direct, index)
+    selected_directories = tuple(
+        dict.fromkeys("." if directory is None else directory for directory, _ in seeds)
+    )
     unresolved = _relevant_findings(
         structural,
         repository_id=repository_id,
         closure=closure,
+        selected_directories=selected_directories,
     )
     routes = tuple(
         FunctionalDocumentRoute(

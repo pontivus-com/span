@@ -32,11 +32,14 @@ from span.shell.install.venv import (
 )
 
 
-def verify_installation(venv_python, data_dir, repos, dry_run=False):
+def verify_installation(venv_python, data_dir, repos, dry_run=False, strict=False):
     """Observational readiness via a helper module under the installed interpreter.
 
     Never initializes, migrates, rebuilds or invokes a semantic operation.
     An absent or old store reports the explicit setup/transition action.
+    ``strict`` returns a non-zero process outcome when structural or provenance
+    acceptance fails; install-time observation leaves it false so an authorised
+    cutover may be transiently DEGRADED.
     """
     cmd = [
         str(venv_python),
@@ -45,6 +48,8 @@ def verify_installation(venv_python, data_dir, repos, dry_run=False):
         "--data-dir",
         str(data_dir),
     ]
+    if strict:
+        cmd.append("--strict")
     for repo in repos:
         cmd += ["--repo", str(repo)]
     out = _run(cmd, dry_run=dry_run)
@@ -205,7 +210,9 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     print(f"opencode plugin: {plugin_report['status']}")
     if plugin_report.get("reason"):
         print(f"  {plugin_report['reason']}")
-    report = verify_installation(venv_python, data_dir, effective_repos, dry_run)
+    report = verify_installation(
+        venv_python, data_dir, effective_repos, dry_run, strict=True
+    )
     print(f"runtime verification: span-mcp={resolved}")
     readiness = report.get("repos", []) if isinstance(report, dict) else []
     print(f"repository store_readiness: {readiness}")

@@ -174,22 +174,42 @@ route closure, but that relationship never changes which declaration scopes
 matched the selected directory or makes a placement applicable to an unrelated
 directory. *(F11)*
 
-**FD-65 — Placement identity has one declaration owner.**
+**FD-65 — Placement and document identity have one declaration owner.**
 A placement identity names one canonical declaration within the resolved
-repository set. Two non-identical declarations for one identity are unresolved
-duplicate ownership, not merge candidates. An unknown governing placement is
-unresolved. A governing-document cycle is unresolved, and every route that
-depends on the cycle carries that limitation. *(G1, F11)*
+repository set. A repeated typed placement identity is duplicate ownership
+whether its governing relationships are identical or conflicting; it is not a
+merge candidate and produces `DUPLICATE_DOCUMENT_PLACEMENT`. A canonical document
+identity is listed at most once across a declaring repository's complete source
+set, occupies exactly one layer and one scope, and has exactly one placement at
+its source scope. Repetition produces `DUPLICATE_DOCUMENT_SOURCE`,
+`DUPLICATE_DOCUMENT_LAYER` or `DUPLICATE_DOCUMENT_SCOPE` respectively. Duplicate
+validation inspects the complete decoded entry set before any deduplicated index
+is built. An unknown governing placement is unresolved. A governing-document
+cycle is unresolved, and every route that depends on the cycle carries that
+limitation. *(G1, F11)*
 
-**FD-66 — Functional Pyramid nodes are canonical document placements.**
-A document placement has one declaring repository, one repository-qualified
-canonical document reference, one declared layer, one explicit directory scope
-and zero or more direct governing placement references. The same canonical
-document may have several placements when it participates at several layers or
-scopes. The placement identity is its declaring repository, document reference,
-layer and scope. Span never requires, stores or returns individual rule IDs,
-rule anchors or section-level rule placements. Substantive content remains at
-the canonical document. *(G6, F1, F11)*
+**FD-66 — Functional Pyramid sources are Version-3 declaration documents.**
+A Functional Pyramid declaration source has one stable `source_id`, one kind
+(`repository` or `area`), one explicit directory scope, an explicit
+whole-document membership set, and placements. Each participating repository has
+exactly one `repository` source at scope `.`; further sources are `area` sources
+at canonical non-root scopes, including shared-ancestor sources. A placement has
+one declaring repository, one repository-qualified canonical document reference,
+one declared layer, one explicit directory scope equal to its containing source's
+scope, and zero or more direct governing placement references. One canonical
+document has exactly one placement in its declaring repository. Span never
+requires, stores or returns individual rule IDs, rule anchors or section-level
+rule placements. Substantive content remains at the canonical document.
+*(G6, F1, F11)*
+
+Membership uses the layer-independent identity `repository_id` + `document_ref`
+and is derived from each placement's document reference. A source validates that
+every listed document has a placement at the source scope
+(`MISSING_AREA_DOCUMENT`), every placement's document is listed
+(`UNLISTED_AREA_DOCUMENT`), and every placement scope equals the source scope
+(`DOCUMENT_SCOPE_MISMATCH`). The same canonical document may participate in
+different declaring repositories; uniqueness is evaluated within each declaring
+repository.
 
 `document_ref` is one normalized repository-relative whole-file locator. A
 valid placement resolves to exactly one `AuthorityBinding` whose repository and
@@ -248,6 +268,15 @@ No step selects a preferred route when several valid routes apply. A directory
 with no narrower placement still returns its declared ancestor placements,
 including the repository-root P0 placement. *(G1, G7, F11, L12)*
 
+A structural finding that affects this selection makes the route `UNRESOLVED`. A
+finding attached to a placement is relevant when that placement is in the
+selected closure. A finding without a placement is relevant when its
+declaring-repository source scope contains a selected directory or semantic
+portion, or when the selected closure contains a placement in the same declaring
+repository whose scope is contained by the affected source scope. A finding in an
+unrelated repository or unrelated scope does not invalidate the route, although
+global ACTIVE health may still be `DEGRADED`.
+
 **FD-69 — Multi-path and broad-scope resolution preserve provenance.**
 When a semantic scope contains several explicit paths, Span resolves each path
 or path boundary under FD-62, unions identical placements for presentation, and
@@ -275,11 +304,17 @@ not conflated and none is repaired by searching for similar content or by
 binding to another registered repository. *(G1, G7, G8, F11, F12, L13)*
 
 **FD-71 — Unresolved route states are typed and preserved.**
-The Version-1 Beta unresolved-reason vocabulary is closed:
+The unresolved-reason vocabulary is closed:
 
 - `INVALID_DECLARATION`;
 - `INVALID_PLACEMENT_SCOPE`;
 - `DUPLICATE_DOCUMENT_PLACEMENT`;
+- `DUPLICATE_DOCUMENT_SOURCE`;
+- `DUPLICATE_DOCUMENT_LAYER`;
+- `DUPLICATE_DOCUMENT_SCOPE`;
+- `DOCUMENT_SCOPE_MISMATCH`;
+- `MISSING_AREA_DOCUMENT`;
+- `UNLISTED_AREA_DOCUMENT`;
 - `INVALID_DOCUMENT_REFERENCE`;
 - `MISSING_DOCUMENT_AUTHORITY`;
 - `AMBIGUOUS_DOCUMENT_AUTHORITY`;
@@ -291,6 +326,15 @@ The Version-1 Beta unresolved-reason vocabulary is closed:
 - `UNRESOLVED_DOCUMENT_PARENT`;
 - `REPOSITORY_UNAVAILABLE`;
 - `MISSING_ROOT_PLACEMENT`.
+
+The document-source, document-layer, document-scope and area-document reasons
+apply to both repository-kind and area-kind sources. `INVALID_DECLARATION` is the
+source-set topology reason (duplicate source identity or scope, missing or
+multiple repository-kind sources, a repository-kind source at a non-root scope, an
+area-kind source at the root scope, or an ACTIVE source that cannot be decoded).
+`INVALID_DECLARATION_SOURCE` remains a candidate validation reason, and
+`NONCANONICAL_DECLARATION` remains an installer-level provenance failure; neither
+is an FD-71 finding.
 
 Resolvable branches remain visible when another branch is unresolved, but the
 route reports its unresolved state completely. No unresolved branch is dropped
@@ -408,10 +452,11 @@ Functional Pyramid record actions. No source, filesystem, installer, model,
 
 For an ACTIVE instance, live health is computed from current structural state.
 A required ACTIVE declaration source that is missing or cannot be decoded into
-the current declaration model contributes the FD-71 graph reason
+the current Version-3 model contributes the FD-71 graph reason
 `INVALID_DECLARATION`; in particular, an ACTIVE member that still names a
-Version-1 rule declaration remains ACTIVE but is structurally degraded until an
-accepted Version-2 revision. This ACTIVE-state classification is distinct from
+Version-1 or Version-2 declaration remains ACTIVE but is structurally degraded
+until an accepted Version-3 revision. A Version-2 candidate source is rejected as
+`INVALID_DECLARATION_SOURCE`. This ACTIVE-state classification is distinct from
 candidate validation of a proposed source, which uses
 `MISSING_DECLARATION_SOURCE` or `INVALID_DECLARATION_SOURCE`.
 
@@ -452,6 +497,15 @@ normalization is instead `INVALID_PLACEMENT_SCOPE` in `graph_findings`; it is
 never coerced into a canonical placement and never duplicated as a validation
 finding.
 
+Candidate validation decodes each source under the Version-3 contract. A
+Version-2 source is `INVALID_DECLARATION_SOURCE`. It validates source-set topology
+(exactly one repository-kind source at `.`, area-kind sources at canonical
+non-root scopes, unique source identities and scopes), membership/placement
+consistency, and typed placement-identity uniqueness before constructing any
+deduplicated index. The complete declaring-repository validator owns cross-source
+duplicates; source-local validation owns within-source membership and
+placement consistency.
+
 Validation requires, for every member, at least one placement with scope `.`
 and layer `P0` governed by `ROOT` (FD-86). It validates placement identities,
 scope normalization, governing-edge legality including same-repository scope
@@ -488,6 +542,12 @@ FunctionalRouteSupport is bound to the target pyramid identity; those revisions
 require re-establishment because a Version-1 rule-route identity cannot be proven
 equal to the Version-2 document-route identity. No other declaration defect receives
 this cutover treatment, and no Version-1 placement/document graph is fabricated.
+The Version-1 → Version-2 cutover treatment is specific to Version 1. A
+Version-2 ACTIVE source that cannot be decoded under Version 3 becomes `DEGRADED`
+through the ordinary health mechanism, and a replacement Version-3 candidate is
+accepted without translating or reconstructing the Version-2 graph. Declaration
+organisation or version change alone does not invalidate retained routes; the
+existing effective route-change and support mechanisms remain authoritative.
 
 The immutable receipt retains the durable participation
 and dependent-effect coordinates; the public result projects them through the

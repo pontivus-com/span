@@ -29,17 +29,24 @@ cross-repository document authority, explicit-scope selection and structural
 health. The former member-scope/coverage/context acceptance rows are retired
 rather than translated into compatibility behavior.
 
+**Version-3 source amendment (2026-11-26).** The same FA cases additionally
+prove the Version-3 source model: one repository-kind source at root scope, area
+and shared-ancestor sources, explicit membership consistency, placement-scope
+equality, typed duplicate detection before deduplication, Version-2 candidate
+rejection and ACTIVE degradation, and placement-less finding relevance to the
+affected route only.
+
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
 | FA-01 | Unconfigured versus excluded | `test_status_projects_unconfigured_excluded_and_rejects_unknown`; `test_exclude_is_explicit_nonparticipation`; `test_descriptive_recording_does_not_gain_route_support` |
-| FA-02 | Pure action-aware candidate validation | `test_valid_candidate_is_pure_and_ready`; `test_explicit_p2w_to_p2s_governing_edge_is_valid`; `test_revision_candidate_reports_unknown_and_stale_target`; `test_duplicate_unregistered_and_other_active_members_accumulate`; `test_recoverable_bad_scope_is_graph_only` |
+| FA-02 | Pure action-aware candidate validation | `test_valid_candidate_is_pure_and_ready`; `test_explicit_p2w_to_p2s_governing_edge_is_valid`; `test_revision_candidate_reports_unknown_and_stale_target`; `test_duplicate_unregistered_and_other_active_members_accumulate`; `test_recoverable_bad_scope_is_graph_only`; `test_candidate_v2_source_is_validation_error_only` |
 | FA-03 | Activation and replay | `test_activation_commits_members_effects_and_receipt`; `test_activation_replay_is_idempotent_and_conflict_is_rejected`; `test_installed_lifecycle_over_stdio`; `test_installed_cross_repository_governance_journey` |
 | FA-04 | Revision and removal | `test_revision_compare_and_set_and_deactivate`; `test_revision_candidate_reports_unknown_and_stale_target` |
-| FA-05 | Root totality | `test_root_totality_and_additive_ancestor_composition`; `test_missing_root_is_structural_health_finding`; `test_valid_candidate_is_pure_and_ready` |
+| FA-05 | Root totality | `test_root_totality_and_additive_ancestor_composition`; `test_missing_root_is_structural_health_finding`; `test_missing_root_placement`; `test_valid_candidate_is_pure_and_ready` |
 | FA-06 | Inheritance without per-directory declaration | `test_directory_without_own_placement_inherits_all_ancestors`; `test_directory_lookup_returns_document_placements` |
-| FA-07 | Degraded-health recovery | `test_status_keeps_active_v1_instance_active_but_degraded`; `test_unaffected_route_can_resolve_while_health_is_degraded` |
+| FA-07 | Degraded-health recovery | `test_status_keeps_active_v1_instance_active_but_degraded`; `test_status_keeps_active_v2_instance_active_but_degraded`; `test_unaffected_route_can_resolve_while_health_is_degraded` |
 | FA-08 | Cold governed path | `test_cold_governed_path_returns_gap_with_governing_view` |
-| FA-09 | Directory obtain | `test_directory_lookup_returns_document_placements`; `test_directory_lookup_rejects_non_directory`; `test_installed_cross_repository_governance_journey` |
+| FA-09 | Directory obtain | `test_directory_lookup_returns_document_placements`; `test_directory_lookup_rejects_non_directory`; `test_neutral_example_is_structurally_valid_and_resolves`; `test_installed_cross_repository_governance_journey` |
 | FA-10 | Same semantic scope | `test_exact_question_selector_does_not_paraphrase_match`; `test_declared_symbol_boundary_is_exact_functional_pyramid_scope`; `test_document_locator_never_infers_applicability` |
 | FA-11 | Additive composition | `test_root_totality_and_additive_ancestor_composition`; `test_directory_without_own_placement_inherits_all_ancestors` |
 | FA-12 | Sibling and descendant exclusion | `test_descendant_placement_does_not_apply_to_ancestor`; `test_root_totality_and_additive_ancestor_composition` |
@@ -47,7 +54,7 @@ rather than translated into compatibility behavior.
 | FA-14 | Multi-path and broad semantic scope | `test_multi_path_summary_is_union_not_intersection_or_last_path`; `test_repository_wide_semantic_scope_selects_all_placements` |
 | FA-15 | Membership is not applicability | `test_unrelated_member_does_not_change_route_identity`; `test_route_identity_tracks_applicability_not_pyramid_version` |
 | FA-16 | Cross-repository authority | `test_installed_cross_repository_governance_journey` |
-| FA-17 | Document and placement defects | `test_invalid_scope_is_graph_finding_not_source_failure`; `test_narrower_governing_scope_is_invalid`; `test_reverse_p2s_to_p2w_governing_edge_is_invalid`; `test_same_contract_sublayer_governing_edges_are_invalid`; `test_missing_root_is_structural_health_finding` |
+| FA-17 | Document and placement defects | `test_invalid_scope_is_graph_finding_not_source_failure`; `test_narrower_governing_scope_is_invalid`; `test_reverse_p2s_to_p2w_governing_edge_is_invalid`; `test_same_contract_sublayer_governing_edges_are_invalid`; `test_missing_root_is_structural_health_finding`; `test_mismatch_missing_and_unlisted_coexist`; `test_duplicate_membership_within_one_source`; `test_duplicate_membership_across_sources`; `test_duplicate_layer_and_scope`; `test_repeated_placement_identity_is_duplicate_whether_identical`; `test_duplicate_source_identity_and_scope_are_invalid`; `test_multiple_repository_kind_sources_are_invalid`; `test_repository_kind_source_must_be_root_and_area_must_not` |
 | FA-18 | Route versus authority currency | `test_authority_currency_does_not_change_route_identity_or_health`; `test_authority_support_status_and_presence` |
 | FA-19 | Normative create | `test_normative_create_derives_route_and_all_applicable_authorities`; `test_unresolved_governance_is_retained_but_qualified_unverifiable`; `test_mixed_answer_excludes_noncurrent_normative_conclusion` |
 | FA-20 | Descriptive create | `test_descriptive_recording_does_not_gain_route_support` |
@@ -65,8 +72,8 @@ rather than translated into compatibility behavior.
 | FA-32 | One active instance per repository | `test_concurrent_overlapping_activation_serializes_to_one_active_instance`; `test_duplicate_unregistered_and_other_active_members_accumulate` |
 | FA-33 | Three-tool host surface | `test_only_the_three_core_tools_are_registered`; `test_installed_lifecycle_over_stdio` |
 | FA-34 | No uncovered answer | `test_root_totality_and_additive_ancestor_composition`; `test_directory_without_own_placement_inherits_all_ancestors`; `test_installed_cross_repository_governance_journey` |
-| FA-35 | Explicit scope, no placement inference | `test_document_locator_never_infers_applicability`; `test_descendant_placement_does_not_apply_to_ancestor`; `test_invalid_scope_is_graph_finding_not_source_failure` |
-| FA-36 | Health iff structural findings | `test_status_keeps_active_v1_instance_active_but_degraded`; `test_unaffected_route_can_resolve_while_health_is_degraded`; `test_authority_currency_does_not_change_route_identity_or_health` |
+| FA-35 | Explicit scope, no placement inference | `test_document_locator_never_infers_applicability`; `test_descendant_placement_does_not_apply_to_ancestor`; `test_invalid_scope_is_graph_finding_not_source_failure`; `test_mismatched_placement_is_reported_at_its_actual_scope` |
+| FA-36 | Health iff structural findings | `test_status_keeps_active_v1_instance_active_but_degraded`; `test_status_keeps_active_v2_instance_active_but_degraded`; `test_unaffected_route_can_resolve_while_health_is_degraded`; `test_authority_currency_does_not_change_route_identity_or_health`; `test_placement_less_finding_affects_its_area_only`; `test_unrelated_member_defect_does_not_unresolve_a_route`; `test_cross_source_duplicate_reaches_every_affected_route` |
 | FA-37 | Activation of pre-existing normative understanding | `test_newly_active_repository_reassesses_pre_route_normative_revision`; `test_retained_activation_effect_stays_actionable_without_route_support`; `test_installed_cross_repository_governance_journey` |
 | FA-38 | Functional Pyramid write propagation | `test_installation_effect_engine_uses_repository_runtime`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_installed_cross_repository_governance_journey` |
 | FA-39 | Deactivation/removal route state | `test_revision_compare_and_set_and_deactivate`; `test_functional_route_support_distinguishes_route_states` |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import subprocess
@@ -198,6 +199,8 @@ def load_functional_pyramid_bootstraps(
         label="Functional Pyramid bootstrap",
     )
     payloads: dict[str, bytes] = {}
+    declarations: list[tuple[str, m.FunctionalPyramidDeclaration]] = []
+    decode_findings: list[m.FunctionalPyramidFinding] = []
     for repository_id, source_path in mapped.items():
         print(f"+ read Functional Pyramid bootstrap file: {source_path}")
         if dry_run:
@@ -239,16 +242,18 @@ def load_functional_pyramid_bootstraps(
                 )
             try:
                 declaration_text = declaration_path.read_text()
-                _fp.decode_functional_pyramid_declaration(
+                declaration, findings = _fp.decode_functional_pyramid_declaration(
                     declaration_text,
                     repository_id=repository_id,
                     declaration_locator=request.locator,
                 )
             except (OSError, UnicodeError, ValueError) as exc:
                 raise SystemExit(
-                    "Functional Pyramid declaration source is not valid Version-2 "
+                    "Functional Pyramid declaration source is not valid Version-3 "
                     f"content: {repository_id!r}:{request.locator}: {exc}"
                 ) from None
+            declarations.append((repository_id, declaration))
+            decode_findings.extend(findings)
 
         destination = root / ".span" / "functional-pyramid.json"
         if destination.exists():
@@ -264,6 +269,20 @@ def load_functional_pyramid_bootstraps(
                     f"input: {destination}; refusing mutation"
                 )
         payloads[repository_id] = payload
+
+    structural_findings = _fp.evaluate_functional_pyramid_source_structure(
+        tuple(declarations),
+        tuple(decode_findings),
+    )
+    if structural_findings:
+        rendered = "; ".join(
+            f"{finding.reason.value}: {finding.detail}"
+            for finding in structural_findings
+        )
+        raise SystemExit(
+            "Functional Pyramid declaration source set is not structurally valid: "
+            + rendered
+        )
     return payloads
 
 
@@ -284,14 +303,137 @@ def load_seeds(
     return list(_evidence_refs(path, dry_run=dry_run))
 
 
+def _sha256_bytes(path: Path) -> tuple[str | None, str | None]:
+    try:
+        payload = path.read_bytes()
+    except OSError as exc:
+        return None, str(exc)
+    return hashlib.sha256(payload).hexdigest(), None
+
+
+def _repository_locator(root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(path.resolve())
+
+
+def _governed_inputs(
+    root: Path,
+    repository_id: str,
+    bootstrap_source: str | Path | None,
+    binding_source: str | Path | None,
+) -> list[dict[str, object]]:
+    """Record the exact reviewed bootstrap/declaration/binding inputs."""
+    inputs: list[dict[str, object]] = []
+    bootstrap_path: Path | None = None
+    if bootstrap_source is not None:
+        bootstrap_path = Path(bootstrap_source)
+    else:
+        conventional = root / ".span" / "functional-pyramid.json"
+        if conventional.is_file():
+            bootstrap_path = conventional
+    if bootstrap_path is not None and bootstrap_path.is_file():
+        digest, error = _sha256_bytes(bootstrap_path)
+        inputs.append(
+            {
+                "role": "bootstrap",
+                "locator": _repository_locator(root, bootstrap_path),
+                "digest": digest,
+                "error": error,
+            }
+        )
+        try:
+            from span.core import functional_pyramid as _fp
+
+            bootstrap = _fp.decode_functional_pyramid_bootstrap(
+                bootstrap_path.read_text()
+            )
+        except (ImportError, OSError, UnicodeError, ValueError):
+            bootstrap = None
+        if bootstrap is not None:
+            for request in bootstrap.declaration_sources:
+                declaration_path = root / request.locator
+                declaration_digest, declaration_error = _sha256_bytes(declaration_path)
+                inputs.append(
+                    {
+                        "role": "declaration_source",
+                        "locator": request.locator,
+                        "digest": declaration_digest,
+                        "error": declaration_error,
+                    }
+                )
+    if binding_source is not None:
+        binding_path = Path(binding_source)
+        digest, error = _sha256_bytes(binding_path)
+        inputs.append(
+            {
+                "role": "authority_binding",
+                "locator": _repository_locator(root, binding_path),
+                "digest": digest,
+                "error": error,
+            }
+        )
+    return inputs
+
+
 def preflight_facts(
     targets: _typing.Iterable[str | Path],
     seeds_path: str | Path | None = None,
+    *,
+    bootstrap_files: _typing.Iterable[_typing.Sequence[str]] = (),
+    binding_files: _typing.Iterable[_typing.Sequence[str]] = (),
 ) -> dict[str, object]:
-    """Return read-only non-gating repository and legacy seed-file facts."""
+    """Return read-only repository facts and governed-input provenance.
+
+    Provenance is recorded inside this existing fact map. It is not a second
+    manifest authority; verification compares these exact bytes with current
+    installed source state.
+    """
+    try:
+        from span.shell.structural import repository_id_from_config
+    except ImportError:
+        repository_id_from_config = None  # type: ignore[assignment]
+
+    target_paths = {str(target): Path(target) for target in targets}
+    identities: dict[str, str] = {}
+    if repository_id_from_config is not None:
+        for target in target_paths:
+            try:
+                identities[target] = repository_id_from_config(target)
+            except (OSError, ValueError):
+                identities[target] = ""
+    selected = set(identities.values())
+    bootstrap_map = (
+        _repository_mapping(
+            bootstrap_files,
+            selected_repository_ids=selected,
+            label="Functional Pyramid bootstrap",
+        )
+        if bootstrap_files
+        else {}
+    )
+    binding_map = (
+        _repository_mapping(
+            binding_files,
+            selected_repository_ids=selected,
+            label="authority bindings",
+        )
+        if binding_files
+        else {}
+    )
+
     facts: dict[str, object] = {}
-    for target in targets:
-        entry: dict[str, object] = {}
+    for target, root in target_paths.items():
+        repository_id = identities.get(target, "")
+        entry: dict[str, object] = {"repository_id": repository_id}
+        governed_inputs = _governed_inputs(
+            root,
+            repository_id,
+            bootstrap_map.get(repository_id),
+            binding_map.get(repository_id),
+        )
+        entry["governed_inputs"] = governed_inputs
         try:
             head = subprocess.run(
                 ["git", "-C", str(target), "rev-parse", "HEAD"],
@@ -301,6 +443,7 @@ def preflight_facts(
             )
             if head.returncode == 0:
                 entry["git_head"] = head.stdout.strip() or None
+                entry["repository_revision"] = head.stdout.strip() or None
                 status = subprocess.run(
                     ["git", "-C", str(target), "status", "--short"],
                     capture_output=True,
@@ -320,13 +463,15 @@ def preflight_facts(
                     entry["git_head_time"] = None
             else:
                 entry["git_head"] = None
+                entry["repository_revision"] = None
                 entry["git_dirty"] = None
                 entry["git_head_time"] = None
         except (OSError, subprocess.SubprocessError):
             entry["git_head"] = None
+            entry["repository_revision"] = None
             entry["git_dirty"] = None
             entry["git_head_time"] = None
-        facts[str(target)] = entry
+        facts[target] = entry
 
     if seeds_path is not None:
         try:

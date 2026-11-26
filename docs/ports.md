@@ -23,10 +23,17 @@ at composition; there is no optional-manager or legacy-store fallback.
 ## Functional Pyramid and repository-qualified access
 
 `src/span/ports/functional_pyramid.py` carries the typed declaration/state
-capabilities used by the Version-1 installation runtime. Repository access is
+capabilities used by the current installation runtime. Repository access is
 qualified by repository identity; a conclusion in repository A may therefore
 evaluate canonical authority/evidence owned by repository B without copying B
 state into A.
+
+The declaration port reads only exact whole-document Version-3 declaration
+sources and the optional Version-2 navigation bootstrap. It does not infer source
+kind, scope or membership, and it does not own validation. Source-set,
+membership and graph validation is one pure core/service owner; the installer
+consumes that same structural outcome rather than introducing a second validator
+port.
 
 The installation composition supplies the Functional Pyramid route evaluator,
 route-impact resolver, registered-repository resolver and repository-qualified

@@ -16,6 +16,7 @@ from __future__ import annotations
 import datetime as _datetime
 import os as _os
 import pathlib as _pathlib
+import posixpath as _posixpath
 
 from span.core import model as m
 from span.shell.evidence_source import EvidenceSourceBase
@@ -66,6 +67,31 @@ class FilesystemEvidenceSource(EvidenceSourceBase):
 
     def _exists(self, locator: str) -> bool:
         return (self._root / locator).is_file()
+
+    def _is_servable(self, locator: str) -> bool:
+        """Membership rule for one locator, matching the walked inventory."""
+        if not locator or locator.startswith("/"):
+            return False
+        if _posixpath.normpath(locator) != locator:
+            return False
+        candidate = self._root / locator
+        try:
+            relative = candidate.relative_to(self._root)
+        except ValueError:
+            return False
+        parts = relative.parts
+        if not parts or any(part in _SKIP_DIRS or part == ".." for part in parts):
+            return False
+        # os.walk does not descend directory symlinks, so their children are
+        # not inventory members even though the file itself is readable.
+        prefix = self._root
+        for part in parts[:-1]:
+            prefix = prefix / part
+            if prefix.is_symlink():
+                return False
+        if not candidate.is_file():
+            return False
+        return is_probably_text(candidate)
 
     def _read_bytes(self, locator: str) -> bytes:
         candidate = self._root / locator

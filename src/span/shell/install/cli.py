@@ -438,7 +438,11 @@ def _provision_runtime(env: _Environment) -> _RuntimeState:
         args.functional_pyramid_bootstrap_file,
         dry_run=env.dry,
     )
-    preflight = preflight_facts(env.targets)
+    preflight = preflight_facts(
+        env.targets,
+        bootstrap_files=args.functional_pyramid_bootstrap_file,
+        binding_files=args.authority_bindings_file,
+    )
     print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
 
     venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)

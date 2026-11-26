@@ -193,13 +193,15 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
                 {
                     "repository_id": repo_a_id,
                     "declaration_sources": [
-                        {"locator": "docs/functional-pyramid.json", "ranges": []}
+                        {"locator": "docs/functional-pyramid.json", "ranges": []},
+                        {"locator": "docs/functional-pyramid-src.json", "ranges": []},
                     ],
                 },
                 {
                     "repository_id": repo_b_id,
                     "declaration_sources": [
-                        {"locator": "docs/functional-pyramid.json", "ranges": []}
+                        {"locator": "docs/functional-pyramid.json", "ranges": []},
+                        {"locator": "docs/functional-pyramid-rules.json", "ranges": []},
                     ],
                 },
             ]
@@ -447,6 +449,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id):
 
             declaration_path = pathlib.Path(repo_a) / "docs/functional-pyramid.json"
             declaration = json.loads(declaration_path.read_text(encoding="utf-8"))
+            for document in declaration.get("documents", []):
+                if document["document_ref"] == "rules/p0-v1.md":
+                    document["document_ref"] = "rules/p0-v2.md"
             for placement in declaration["placements"]:
                 document = placement["document"]
                 if document["document_ref"] == "rules/p0-v1.md":

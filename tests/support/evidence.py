@@ -29,6 +29,9 @@ class FixtureEvidenceSource(EvidenceSourceBase):
     def _exists(self, locator: str) -> bool:
         return locator in self._files
 
+    def _is_servable(self, locator: str) -> bool:
+        return locator in self._files
+
     def _read_bytes(self, locator: str) -> bytes:
         content = self._files.get(locator)
         if content is None:

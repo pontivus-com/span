@@ -9,15 +9,26 @@ readiness rule instead of owning a second interpretation.
 from __future__ import annotations
 
 import dataclasses as _dataclasses
+import hashlib as _hashlib
+import json as _json
 import pathlib as _pathlib
 import sqlite3 as _sqlite3
+import typing as _typing
 
 from span.shell.sqlite_store.lifecycle import SCHEMA_VERSION
 
+if _typing.TYPE_CHECKING:
+    from span.core import model as _m
+    from span.shell.functional_pyramid import (
+        FilesystemFunctionalPyramidDeclarations,
+    )
+
 __all__ = [
     "StoreReadiness",
+    "probe_active_functional_pyramid",
     "probe_functional_pyramid_installation_store",
     "probe_functional_pyramid_repository",
+    "probe_governed_provenance",
     "probe_store",
     "probe_structural",
 ]
@@ -316,7 +327,7 @@ def _functional_pyramid_declaration_report(
                 {
                     "locator": request.locator,
                     "status": "invalid",
-                    "reason": "declaration violates the Version-2 contract",
+                    "reason": "declaration violates the Version-3 contract",
                 }
             )
             valid = False
@@ -357,6 +368,345 @@ def _functional_pyramid_declaration_report(
     }
 
 
+def _active_member_declaration_refs(
+    data_dir: str | _pathlib.Path,
+    repository_id: str,
+) -> tuple[_m.EvidenceRef, ...] | None:
+    """Read the retained ACTIVE member declaration references, read-only."""
+    installation = probe_functional_pyramid_installation_store(data_dir)
+    if not installation.get("ready"):
+        return None
+    from span.shell.sqlite_store.functional_pyramid import (
+        functional_pyramid_installation_path,
+    )
+
+    path = functional_pyramid_installation_path(data_dir)
+    connection = _sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        row = connection.execute(
+            "SELECT member_json FROM functional_pyramid_active_members"
+            " WHERE repository_id=?",
+            (repository_id,),
+        ).fetchone()
+    except (_sqlite3.Error, TypeError, ValueError):
+        return None
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    from span.core import model as m
+
+    try:
+        member = m.from_canonical(
+            m.FunctionalPyramidMemberView, _json.loads(str(row[0]))
+        )
+    except (m.CanonicalDecodeError, TypeError, ValueError):
+        return None
+    return member.declaration_refs
+
+
+def _declaration_store(
+    repository_id: str, canonical_root: str
+) -> "FilesystemFunctionalPyramidDeclarations":
+    from span.shell.functional_pyramid import FilesystemFunctionalPyramidDeclarations
+
+    def root_for(requested: str) -> str:
+        if requested != repository_id:
+            raise ValueError(f"unexpected repository identity: {requested}")
+        return canonical_root
+
+    return FilesystemFunctionalPyramidDeclarations(root_for)
+
+
+def _active_declaration_report(
+    repository_id: str,
+    canonical_root: str,
+    refs: tuple[_m.EvidenceRef, ...],
+) -> dict[str, object]:
+    from span.core import model as m
+    from span.ports.functional_pyramid import (
+        FunctionalPyramidDeclarationInvalid,
+        FunctionalPyramidRepositoryUnavailable,
+    )
+
+    store = _declaration_store(repository_id, canonical_root)
+    sources: list[dict[str, object]] = []
+    valid = True
+    for ref in refs:
+        locator = ref.locator
+        request = m.EvidenceRequest(locator)
+        try:
+            result = store.read_declaration(repository_id, request)
+        except FunctionalPyramidRepositoryUnavailable:
+            sources.append({"locator": locator, "status": "unavailable"})
+            valid = False
+            continue
+        except FunctionalPyramidDeclarationInvalid:
+            sources.append({"locator": locator, "status": "invalid"})
+            valid = False
+            continue
+        if isinstance(result, m.EvidenceSourceFailure):
+            sources.append(
+                {
+                    "locator": locator,
+                    "status": result.kind.value.lower(),
+                    "reason": result.reason,
+                }
+            )
+            valid = False
+            continue
+        _, _, findings = result
+        sources.append(
+            {
+                "locator": locator,
+                "status": "valid" if not findings else "invalid",
+                "findings": [finding.reason.value for finding in findings],
+            }
+        )
+        if findings:
+            valid = False
+    return {
+        "status": "ready" if valid else "invalid",
+        "configured": True,
+        "selection": "active-members",
+        "valid": valid,
+        "sources": sources,
+        "action": (
+            None if valid else "correct the retained ACTIVE declaration sources"
+        ),
+    }
+
+
+def probe_active_functional_pyramid(
+    data_dir: str | _pathlib.Path,
+    roots_by_repository: dict[str, str | _pathlib.Path],
+) -> dict[str, object]:
+    """Evaluate the complete retained ACTIVE graph without mutation."""
+    installation = probe_functional_pyramid_installation_store(data_dir)
+    if not installation.get("ready"):
+        return {
+            "status": "unavailable",
+            "members": [],
+            "findings": [],
+            "action": installation.get("action"),
+        }
+    from span.core import functional_pyramid as _fp
+    from span.core import model as m
+    from span.ports.functional_pyramid import (
+        FunctionalPyramidDeclarationInvalid,
+        FunctionalPyramidRepositoryUnavailable,
+    )
+
+    declarations: list[tuple[str, _m.FunctionalPyramidDeclaration]] = []
+    findings: list[m.FunctionalPyramidFinding] = []
+    member_reports: list[dict[str, object]] = []
+    for repository_id in sorted(roots_by_repository):
+        canonical_root = str(
+            _pathlib.Path(roots_by_repository[repository_id]).resolve()
+        )
+        refs = _active_member_declaration_refs(data_dir, repository_id)
+        if refs is None:
+            continue
+        member_reports.append(
+            {
+                "repository_id": repository_id,
+                "declaration_refs": [ref.locator for ref in refs],
+            }
+        )
+        store = _declaration_store(repository_id, canonical_root)
+        for ref in refs:
+            locator = ref.locator
+            request = m.EvidenceRequest(locator)
+            try:
+                result = store.read_declaration(repository_id, request)
+            except FunctionalPyramidRepositoryUnavailable:
+                findings.append(
+                    m.FunctionalPyramidFinding(
+                        reason=m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+                        repository_id=repository_id,
+                        declaration_locator=locator,
+                        detail="retained ACTIVE declaration source is unavailable",
+                        recovery="restore the registered member repository",
+                    )
+                )
+                continue
+            except FunctionalPyramidDeclarationInvalid:
+                findings.append(
+                    m.FunctionalPyramidFinding(
+                        reason=m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                        repository_id=repository_id,
+                        declaration_locator=locator,
+                        detail="retained ACTIVE declaration cannot be decoded",
+                        recovery="revise the ACTIVE instance with valid Version-3 sources",
+                    )
+                )
+                continue
+            if isinstance(result, m.EvidenceSourceFailure):
+                findings.append(
+                    m.FunctionalPyramidFinding(
+                        reason=m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+                        repository_id=repository_id,
+                        declaration_locator=locator,
+                        detail="retained ACTIVE declaration source cannot be loaded",
+                        recovery="restore the named declaration source",
+                    )
+                )
+                continue
+            _, declaration, decode_findings = result
+            declarations.append((repository_id, declaration))
+            findings.extend(decode_findings)
+    if not member_reports:
+        return {
+            "status": "not_active",
+            "members": [],
+            "findings": [],
+            "action": None,
+        }
+    structural = _fp.evaluate_functional_pyramid_source_structure(
+        tuple(declarations),
+        tuple(findings),
+    )
+    return {
+        "status": "valid" if not structural else "invalid",
+        "members": member_reports,
+        "findings": [finding.reason.value for finding in structural],
+        "action": (
+            None
+            if not structural
+            else "correct the ACTIVE declaration graph before acceptance"
+        ),
+    }
+
+
+def _installed_authority_bindings(
+    data_dir: str | _pathlib.Path,
+    repository_id: str,
+) -> list[object] | None:
+    """Read the installed whole-document binding set, read-only."""
+    path = _pathlib.Path(data_dir) / f"{repository_id}.db"
+    if not path.is_file():
+        return None
+    connection = _sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        row = connection.execute(
+            "SELECT authority_bindings_json FROM repositories WHERE repository_id=?",
+            (repository_id,),
+        ).fetchone()
+    except (_sqlite3.Error, TypeError, ValueError):
+        return None
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    try:
+        payload = _json.loads(str(row[0]))
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, list) else None
+
+
+def probe_governed_provenance(
+    data_dir: str | _pathlib.Path,
+    repository_id: str,
+    root: str | _pathlib.Path,
+) -> dict[str, object]:
+    """Compare current governed inputs with the retained installation evidence."""
+    from span.shell.install.receipt import read_receipt
+
+    receipt = read_receipt(data_dir)
+    if receipt is None:
+        return {"state": "PROVENANCE_NOT_RECORDED", "inputs": [], "mismatches": []}
+    facts = receipt.get("preflight_facts")
+    entry: dict[str, object] | None = None
+    if isinstance(facts, dict):
+        for value in facts.values():
+            if isinstance(value, dict) and value.get("repository_id") == repository_id:
+                entry = value
+                break
+    if entry is None:
+        return {"state": "PROVENANCE_NOT_RECORDED", "inputs": [], "mismatches": []}
+    inputs = entry.get("governed_inputs")
+    if not isinstance(inputs, list) or not inputs:
+        return {"state": "PROVENANCE_NOT_RECORDED", "inputs": [], "mismatches": []}
+    canonical_root = _pathlib.Path(root)
+    mismatches: list[dict[str, object]] = []
+    recorded_declarations: set[str] = set()
+    binding_inputs: list[_pathlib.Path] = []
+    for item in inputs:
+        if not isinstance(item, dict):
+            continue
+        locator = item.get("locator")
+        role = item.get("role")
+        expected = item.get("digest")
+        if not isinstance(locator, str) or not isinstance(expected, str):
+            mismatches.append({"locator": locator, "reason": "unrecorded"})
+            continue
+        path = _pathlib.Path(locator)
+        if not path.is_absolute():
+            path = canonical_root / locator
+        if role == "declaration_source":
+            recorded_declarations.add(locator)
+        if role == "authority_binding":
+            binding_inputs.append(path)
+        try:
+            actual = _hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            mismatches.append({"locator": locator, "reason": "unreadable"})
+            continue
+        if actual != expected:
+            mismatches.append({"locator": locator, "reason": "digest_mismatch"})
+
+    active_refs = _active_member_declaration_refs(data_dir, repository_id)
+    if active_refs is not None and recorded_declarations:
+        active_locators = {ref.locator for ref in active_refs}
+        if active_locators != recorded_declarations:
+            mismatches.append(
+                {
+                    "locator": repository_id,
+                    "reason": "accepted_declaration_set_differs",
+                    "accepted": sorted(active_locators),
+                    "reviewed": sorted(recorded_declarations),
+                }
+            )
+
+    if binding_inputs:
+        installed = _installed_authority_bindings(data_dir, repository_id)
+        if installed is None:
+            mismatches.append(
+                {"locator": repository_id, "reason": "installed_bindings_unreadable"}
+            )
+        else:
+            installed_json = _json.dumps(
+                installed, sort_keys=True, separators=(",", ":")
+            )
+            for path in binding_inputs:
+                try:
+                    reviewed = _json.loads(path.read_text())
+                except (OSError, TypeError, ValueError):
+                    mismatches.append(
+                        {
+                            "locator": str(path),
+                            "reason": "reviewed_bindings_unreadable",
+                        }
+                    )
+                    continue
+                reviewed_json = _json.dumps(
+                    reviewed, sort_keys=True, separators=(",", ":")
+                )
+                if installed_json != reviewed_json:
+                    mismatches.append(
+                        {
+                            "locator": str(path),
+                            "reason": "installed_binding_set_differs",
+                        }
+                    )
+    return {
+        "state": ("PROVENANCE_MATCH" if not mismatches else "PROVENANCE_MISMATCH"),
+        "inputs": len(inputs),
+        "mismatches": mismatches,
+    }
+
+
 def probe_functional_pyramid_repository(
     data_dir: str | _pathlib.Path,
     repository_id: str,
@@ -364,13 +714,19 @@ def probe_functional_pyramid_repository(
 ) -> dict[str, object]:
     """Validate local Functional Pyramid configuration without activating it."""
     canonical_root = str(_pathlib.Path(root).resolve())
+    active_refs = _active_member_declaration_refs(data_dir, repository_id)
+    declarations = (
+        _active_declaration_report(repository_id, canonical_root, active_refs)
+        if active_refs is not None
+        else _functional_pyramid_declaration_report(repository_id, canonical_root)
+    )
     return {
         "repository_id": repository_id,
-        "declarations": _functional_pyramid_declaration_report(
-            repository_id,
-            canonical_root,
-        ),
+        "declarations": declarations,
         "participation": _functional_pyramid_participation(data_dir, repository_id),
+        "provenance": probe_governed_provenance(
+            data_dir, repository_id, canonical_root
+        ),
         "activation_readiness": {
             "status": "requires_candidate",
             "action": (

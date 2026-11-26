@@ -59,6 +59,42 @@ def _member(repository_id: str) -> m.FunctionalPyramidMemberView:
     )
 
 
+def _declaration_sources(
+    repository_id: str,
+    entries: tuple[m.FunctionalDocumentDeclaration, ...],
+) -> tuple[tuple[str, m.FunctionalPyramidDeclaration], ...]:
+    """Group test placements into one Version-3 source per declared scope."""
+    grouped: dict[str, list[m.FunctionalDocumentDeclaration]] = {}
+    for entry in entries:
+        grouped.setdefault(entry.placement.scope, []).append(entry)
+    grouped.setdefault(".", [])
+    sources: list[tuple[str, m.FunctionalPyramidDeclaration]] = []
+    for scope in sorted(grouped):
+        scope_entries = tuple(grouped[scope])
+        sources.append(
+            (
+                repository_id,
+                m.FunctionalPyramidDeclaration(
+                    version=3,
+                    source_id=f"{repository_id}:{scope}",
+                    kind=(
+                        m.FunctionalPyramidSourceKind.REPOSITORY
+                        if scope == "."
+                        else m.FunctionalPyramidSourceKind.AREA
+                    ),
+                    scope=scope,
+                    documents=tuple(
+                        dict.fromkeys(
+                            entry.placement.document.identity for entry in scope_entries
+                        )
+                    ),
+                    placements=scope_entries,
+                ),
+            )
+        )
+    return tuple(sources)
+
+
 class FunctionalPyramidResolutionTest(unittest.TestCase):
     def setUp(self) -> None:
         self.p0 = _placement(
@@ -89,15 +125,13 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             m.FunctionalPyramidLayer.P3,
             "ui",
         )
-        self.declaration = m.FunctionalPyramidDeclaration(
-            version=2,
-            placements=(
-                _declaration(self.p0, "ROOT"),
-                _declaration(self.p1, self.p0),
-                _declaration(self.p3, self.p1),
-                _declaration(self.sibling, self.p0),
-            ),
+        self.declaration_entries = (
+            _declaration(self.p0, "ROOT"),
+            _declaration(self.p1, self.p0),
+            _declaration(self.p3, self.p1),
+            _declaration(self.sibling, self.p0),
         )
+        self.declarations = _declaration_sources("repo-a", self.declaration_entries)
         self.authorities = {
             ("repo-a", "docs/foundation.md"): _authority(
                 "repo-a", "docs/foundation.md", "a0"
@@ -118,7 +152,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             members=(_member("repo-a"),),
             repository_id="repo-a",
             directory=directory,
-            declarations=(("repo-a", self.declaration),),
+            declarations=self.declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=self.authorities,
         )
@@ -171,9 +205,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             m.FunctionalPyramidLayer.P3,
             "ui",
         )
-        declaration = m.FunctionalPyramidDeclaration(
-            version=2,
-            placements=(
+        declarations = _declaration_sources(
+            "repo-a",
+            (
                 _declaration(self.p0, "ROOT"),
                 _declaration(deceptive, self.p0),
             ),
@@ -198,7 +232,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
                 locator="src/service/app.py",
             ),
             semantic_scope=m.EvidenceScope(paths=("src/service/app.py",)),
-            declarations=(("repo-a", declaration),),
+            declarations=declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=authorities,
         )
@@ -220,9 +254,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             m.FunctionalPyramidLayer.P1,
             "src/service",
         )
-        declaration = m.FunctionalPyramidDeclaration(
-            version=2,
-            placements=(
+        declarations = _declaration_sources(
+            "repo-a",
+            (
                 _declaration(self.p0, "ROOT"),
                 _declaration(narrow_parent, self.p0),
                 _declaration(broad, narrow_parent),
@@ -230,7 +264,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         )
         health, findings = fp.evaluate_functional_pyramid_health(
             (_member("repo-a"),),
-            (("repo-a", declaration),),
+            declarations,
             frozenset({"repo-a"}),
         )
         self.assertEqual(health, m.FunctionalPyramidHealth.DEGRADED)
@@ -240,13 +274,10 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         )
 
     def test_missing_root_is_structural_health_finding(self) -> None:
-        declaration = m.FunctionalPyramidDeclaration(
-            version=2,
-            placements=(_declaration(self.p3, self.p1),),
-        )
+        declarations = _declaration_sources("repo-a", (_declaration(self.p3, self.p1),))
         health, findings = fp.evaluate_functional_pyramid_health(
             (_member("repo-a"),),
-            (("repo-a", declaration),),
+            declarations,
             frozenset({"repo-a"}),
         )
         self.assertEqual(health, m.FunctionalPyramidHealth.DEGRADED)
@@ -276,7 +307,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             members=(_member("repo-a"),),
             repository_id="repo-a",
             directory="src/service",
-            declarations=(("repo-a", self.declaration),),
+            declarations=self.declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=self.authorities,
             declaration_findings=(finding,),
@@ -295,7 +326,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
                 locator="domain",
             ),
             semantic_scope=m.EvidenceScope(paths=("src/service", "ui")),
-            declarations=(("repo-a", self.declaration),),
+            declarations=self.declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=self.authorities,
         )
@@ -328,7 +359,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
                 locator="domain",
             ),
             semantic_scope=m.EvidenceScope(),
-            declarations=(("repo-a", self.declaration),),
+            declarations=self.declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=self.authorities,
         )
@@ -343,7 +374,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             members=(_member("repo-a"),),
             repository_id="repo-a",
             directory="src/service",
-            declarations=(("repo-a", self.declaration),),
+            declarations=self.declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=self.authorities,
         )
@@ -354,9 +385,8 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             m.FunctionalPyramidLayer.P0,
             ".",
         )
-        repo_b_declaration = m.FunctionalPyramidDeclaration(
-            version=2,
-            placements=(_declaration(repo_b_root, "ROOT"),),
+        repo_b_declarations = _declaration_sources(
+            "repo-b", (_declaration(repo_b_root, "ROOT"),)
         )
         _, second = fp.resolve_functional_pyramid_directory_route(
             pyramid_id=m.FunctionalPyramidId("pyramid"),
@@ -364,10 +394,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             members=(_member("repo-a"), _member("repo-b")),
             repository_id="repo-a",
             directory="src/service",
-            declarations=(
-                ("repo-a", self.declaration),
-                ("repo-b", repo_b_declaration),
-            ),
+            declarations=(*self.declarations, *repo_b_declarations),
             available_repositories=frozenset({"repo-a", "repo-b"}),
             authority_bindings={
                 **self.authorities,
@@ -387,12 +414,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             m.FunctionalPyramidLayer.P4,
             "src/service",
         )
-        declaration = m.FunctionalPyramidDeclaration(
-            version=2,
-            placements=(
-                *self.declaration.placements,
-                _declaration(changed, self.p3),
-            ),
+        declarations = _declaration_sources(
+            "repo-a",
+            (*self.declaration_entries, _declaration(changed, self.p3)),
         )
         _, second = fp.resolve_functional_pyramid_directory_route(
             pyramid_id=m.FunctionalPyramidId("pyramid"),
@@ -400,7 +424,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             members=(_member("repo-a"),),
             repository_id="repo-a",
             directory="src/service",
-            declarations=(("repo-a", declaration),),
+            declarations=declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings={
                 **self.authorities,
@@ -425,7 +449,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             members=(_member("repo-a"),),
             repository_id="repo-a",
             directory="src/service",
-            declarations=(("repo-a", self.declaration),),
+            declarations=self.declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=draft,
         )
@@ -448,9 +472,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             m.FunctionalPyramidLayer.P2W,
             "src/service",
         )
-        declaration = m.FunctionalPyramidDeclaration(
-            version=2,
-            placements=(
+        declarations = _declaration_sources(
+            "repo-a",
+            (
                 _declaration(self.p0, "ROOT"),
                 _declaration(p2s, self.p0),
                 _declaration(p2w, p2s),
@@ -458,7 +482,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         )
         health, findings = fp.evaluate_functional_pyramid_health(
             (_member("repo-a"),),
-            (("repo-a", declaration),),
+            declarations,
             frozenset({"repo-a"}),
         )
         self.assertEqual(health, m.FunctionalPyramidHealth.VALID)
@@ -479,9 +503,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             m.FunctionalPyramidLayer.P2W,
             "src",
         )
-        declaration = m.FunctionalPyramidDeclaration(
-            version=2,
-            placements=(
+        declarations = _declaration_sources(
+            "repo-a",
+            (
                 _declaration(self.p0, "ROOT"),
                 _declaration(p2w, self.p0),
                 _declaration(p2s, p2w),
@@ -489,7 +513,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         )
         _, findings = fp.evaluate_functional_pyramid_health(
             (_member("repo-a"),),
-            (("repo-a", declaration),),
+            declarations,
             frozenset({"repo-a"}),
         )
         self.assertIn(
@@ -514,9 +538,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
                     layer,
                     "src/service",
                 )
-                declaration = m.FunctionalPyramidDeclaration(
-                    version=2,
-                    placements=(
+                declarations = _declaration_sources(
+                    "repo-a",
+                    (
                         _declaration(self.p0, "ROOT"),
                         _declaration(parent, self.p0),
                         _declaration(child, parent),
@@ -524,7 +548,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
                 )
                 _, findings = fp.evaluate_functional_pyramid_health(
                     (_member("repo-a"),),
-                    (("repo-a", declaration),),
+                    declarations,
                     frozenset({"repo-a"}),
                 )
                 self.assertIn(
@@ -539,7 +563,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             members=(_member("repo-a"),),
             repository_id="repo-a",
             directory="src/service",
-            declarations=(("repo-a", self.declaration),),
+            declarations=self.declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=self.authorities,
         )
@@ -549,7 +573,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             members=(_member("repo-a"),),
             repository_id="repo-a",
             directory="src/service",
-            declarations=(("repo-a", self.declaration),),
+            declarations=self.declarations,
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=self.authorities,
         )

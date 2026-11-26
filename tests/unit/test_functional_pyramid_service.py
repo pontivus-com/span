@@ -1,4 +1,4 @@
-"""Functional Pyramid Version-2 source/service orchestration tests."""
+"""Functional Pyramid Version-3 source/service orchestration tests."""
 
 import contextlib
 import datetime
@@ -59,17 +59,26 @@ def _declaration(
     repository_id: str,
     *,
     local_scope: str | None = None,
-) -> m.FunctionalPyramidDeclaration:
+) -> tuple[m.FunctionalPyramidDeclaration, ...]:
     root = _placement(
         repository_id,
         "docs/foundation.md",
         m.FunctionalPyramidLayer.P0,
         ".",
     )
-    placements = [
-        m.FunctionalDocumentDeclaration(
-            placement=root,
-            governing_placements=("ROOT",),
+    sources = [
+        m.FunctionalPyramidDeclaration(
+            version=3,
+            source_id=f"{repository_id}:repository",
+            kind=m.FunctionalPyramidSourceKind.REPOSITORY,
+            scope=".",
+            documents=(root.document.identity,),
+            placements=(
+                m.FunctionalDocumentDeclaration(
+                    placement=root,
+                    governing_placements=("ROOT",),
+                ),
+            ),
         )
     ]
     if local_scope is not None:
@@ -79,13 +88,22 @@ def _declaration(
             m.FunctionalPyramidLayer.P3,
             local_scope,
         )
-        placements.append(
-            m.FunctionalDocumentDeclaration(
-                placement=local,
-                governing_placements=(root,),
+        sources.append(
+            m.FunctionalPyramidDeclaration(
+                version=3,
+                source_id=f"{repository_id}:{local_scope}",
+                kind=m.FunctionalPyramidSourceKind.AREA,
+                scope=local_scope,
+                documents=(local.document.identity,),
+                placements=(
+                    m.FunctionalDocumentDeclaration(
+                        placement=local,
+                        governing_placements=(root,),
+                    ),
+                ),
             )
         )
-    return m.FunctionalPyramidDeclaration(version=2, placements=tuple(placements))
+    return tuple(sources)
 
 
 class _Declarations:
@@ -268,19 +286,28 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             ),
         )
 
-    def _install_v2(
+    def _install_v3(
         self,
         repository_id: str,
         *,
         local_scope: str | None = None,
         locator: str = "decl.json",
     ) -> m.FunctionalPyramidMemberIntent:
-        declaration = _declaration(repository_id, local_scope=local_scope)
+        declarations = _declaration(repository_id, local_scope=local_scope)
+        requests = [m.EvidenceRequest(locator)]
         self.declarations.results[(repository_id, locator)] = (
             _ref(repository_id, locator),
-            declaration,
+            declarations[0],
             (),
         )
+        if len(declarations) > 1:
+            area_locator = f"{locator}.area"
+            self.declarations.results[(repository_id, area_locator)] = (
+                _ref(repository_id, area_locator),
+                declarations[1],
+                (),
+            )
+            requests.append(m.EvidenceRequest(area_locator))
         bindings = [
             _binding(repository_id, "docs/foundation.md"),
         ]
@@ -291,7 +318,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
         return m.FunctionalPyramidMemberIntent(
             repository_id=repository_id,
-            declaration_sources=(m.EvidenceRequest(locator),),
+            declaration_sources=tuple(requests),
         )
 
     def _active_member(
@@ -360,8 +387,11 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
         self.declarations.results[("repo-a", "decl.json")] = (
             _ref("repo-a", "decl.json"),
-            m.FunctionalPyramidDeclaration(version=2),
+            _declaration("repo-a")[0],
             (finding,),
+        )
+        self.runtime_stores["repo-a"].load_authority_bindings.return_value = (
+            _binding("repo-a", "docs/foundation.md"),
         )
         candidate = self.admin_service.candidate(
             m.FunctionalPyramidCandidateSelector(
@@ -403,7 +433,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
 
     def test_valid_candidate_is_pure_and_ready(self) -> None:
-        intent = self._install_v2("repo-a")
+        intent = self._install_v3("repo-a")
         candidate = self.admin_service.candidate(
             m.FunctionalPyramidCandidateSelector(
                 action=m.FunctionalPyramidAction.ACTIVATE,
@@ -426,6 +456,50 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.state.members[(pyramid_id, version)] = (member,)
         self.declarations.results[("repo-a", "decl.json")] = (
             FunctionalPyramidDeclarationInvalid("unsupported", unsupported_version=1)
+        )
+
+        status = self.admin_service.status(
+            m.FunctionalPyramidSelector(repository_id="repo-a")
+        )
+
+        self.assertEqual(status.state, m.FunctionalPyramidParticipationState.ACTIVE)
+        self.assertEqual(status.health, m.FunctionalPyramidHealth.DEGRADED)
+        self.assertIn(
+            m.FunctionalPyramidFindingReason.INVALID_DECLARATION,
+            {finding.reason for finding in status.findings},
+        )
+
+    def test_candidate_v2_source_is_validation_error_only(self) -> None:
+        self.declarations.results[("repo-a", "decl.json")] = (
+            FunctionalPyramidDeclarationInvalid("unsupported", unsupported_version=2)
+        )
+        candidate = self.admin_service.candidate(
+            m.FunctionalPyramidCandidateSelector(
+                action=m.FunctionalPyramidAction.ACTIVATE,
+                members=(
+                    m.FunctionalPyramidMemberIntent(
+                        repository_id="repo-a",
+                        declaration_sources=(m.EvidenceRequest("decl.json"),),
+                    ),
+                ),
+            )
+        )
+        self.assertFalse(candidate.activation_ready)
+        self.assertEqual(
+            {item.reason for item in candidate.validation_findings},
+            {m.FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE},
+        )
+        self.assertEqual(candidate.graph_findings, ())
+
+    def test_status_keeps_active_v2_instance_active_but_degraded(self) -> None:
+        pyramid_id = m.FunctionalPyramidId("fp-v2")
+        version = m.FunctionalPyramidVersion(1)
+        member = self._active_member("repo-a")
+        self.state.active["repo-a"] = pyramid_id
+        self.state.versions[pyramid_id] = version
+        self.state.members[(pyramid_id, version)] = (member,)
+        self.declarations.results[("repo-a", "decl.json")] = (
+            FunctionalPyramidDeclarationInvalid("unsupported", unsupported_version=2)
         )
 
         status = self.admin_service.status(
@@ -466,7 +540,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         result = self.admin_service.record(
             request_id=m.RequestId("activate-dir"),
             action=m.FunctionalPyramidAction.ACTIVATE,
-            members=(self._install_v2("repo-a", local_scope="src/service"),),
+            members=(self._install_v3("repo-a", local_scope="src/service"),),
         )
         assert result.pyramid_id is not None
         with self.assertRaises(RecordingValidationError):
@@ -481,7 +555,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.admin_service.record(
             request_id=m.RequestId("activate-dir-view"),
             action=m.FunctionalPyramidAction.ACTIVATE,
-            members=(self._install_v2("repo-a", local_scope="src/service"),),
+            members=(self._install_v3("repo-a", local_scope="src/service"),),
         )
         view = self.admin_service.directory(
             m.FunctionalPyramidDirectorySelector(
@@ -497,7 +571,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
 
     def test_duplicate_unregistered_and_other_active_members_accumulate(self) -> None:
-        intent = self._install_v2("repo-a")
+        intent = self._install_v3("repo-a")
         unknown = m.FunctionalPyramidMemberIntent(
             repository_id="repo-x",
             declaration_sources=(m.EvidenceRequest("decl.json"),),
@@ -519,7 +593,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
 
     def test_revision_candidate_reports_unknown_and_stale_target(self) -> None:
-        intent = self._install_v2("repo-a")
+        intent = self._install_v3("repo-a")
         unknown = self.admin_service.candidate(
             m.FunctionalPyramidCandidateSelector(
                 action=m.FunctionalPyramidAction.REVISE,
@@ -552,7 +626,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(finding.current_version, m.FunctionalPyramidVersion(2))
 
     def test_invalid_activation_is_atomic(self) -> None:
-        intent = self._install_v2("repo-a")
+        intent = self._install_v3("repo-a")
         self.declarations.results[("repo-a", "decl.json")] = m.EvidenceSourceFailure(
             request=m.EvidenceRequest("decl.json"),
             kind=m.EvidenceSourceFailureKind.MISSING,
@@ -572,7 +646,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         result = self.admin_service.record(
             request_id=m.RequestId("activate-1"),
             action=m.FunctionalPyramidAction.ACTIVATE,
-            members=(self._install_v2("repo-a"), self._install_v2("repo-b")),
+            members=(self._install_v3("repo-a"), self._install_v3("repo-b")),
         )
         self.assertEqual(result.pyramid_id, m.FunctionalPyramidId("fp:activate-1"))
         self.assertEqual(result.version, m.FunctionalPyramidVersion(1))
@@ -587,7 +661,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
 
     def test_activation_replay_is_idempotent_and_conflict_is_rejected(self) -> None:
-        intent = self._install_v2("repo-a")
+        intent = self._install_v3("repo-a")
         first = self.admin_service.record(
             request_id=m.RequestId("activate-replay"),
             action=m.FunctionalPyramidAction.ACTIVATE,
@@ -601,7 +675,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(replay.receipt_selector, first.receipt_selector)
         self.assertEqual(replay.committed_at, first.committed_at)
 
-        other_intent = self._install_v2("repo-b")
+        other_intent = self._install_v3("repo-b")
         with self.assertRaises(RecordingConflict):
             self.admin_service.record(
                 request_id=m.RequestId("activate-replay"),
@@ -613,7 +687,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         first = self.admin_service.record(
             request_id=m.RequestId("activate-revise"),
             action=m.FunctionalPyramidAction.ACTIVATE,
-            members=(self._install_v2("repo-a"),),
+            members=(self._install_v3("repo-a"),),
         )
         assert first.pyramid_id is not None
         assert first.version is not None
@@ -623,8 +697,8 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             pyramid_id=first.pyramid_id,
             expected_version=first.version,
             members=(
-                self._install_v2("repo-a", local_scope="src"),
-                self._install_v2("repo-b"),
+                self._install_v3("repo-a", local_scope="src"),
+                self._install_v3("repo-b"),
             ),
         )
         self.assertEqual(revised.version, m.FunctionalPyramidVersion(2))
@@ -634,7 +708,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
                 action=m.FunctionalPyramidAction.REVISE,
                 pyramid_id=first.pyramid_id,
                 expected_version=m.FunctionalPyramidVersion(1),
-                members=(self._install_v2("repo-a"),),
+                members=(self._install_v3("repo-a"),),
             )
         deactivated = self.admin_service.record(
             request_id=m.RequestId("deactivate-1"),

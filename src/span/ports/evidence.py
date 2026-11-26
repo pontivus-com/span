@@ -77,6 +77,15 @@ class EvidenceSource(_typing.Protocol):
         """
         ...
 
+    def is_servable(self, repository_id: str, locator: str) -> bool:
+        """Whether one exact locator names existing text this source can serve.
+
+        This is the single-locator form of inventory membership. It answers
+        only existence and text servability for that one locator; it never
+        enumerates the repository and never reads the locator's content.
+        """
+        ...
+
     def list_inventory_entries(
         self,
         repository_id: str,

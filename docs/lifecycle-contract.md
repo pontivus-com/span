@@ -144,12 +144,16 @@ member names its registered `repository_id` and its exact repository-owned
 declaration source requests. It declares no member functional boundary:
 participation is whole-repository.
 
-Each declaration placement carries one normalized repository-relative
-directory `scope`, with `.` as the repository root, plus its canonical document
-reference, layer and governing placements. Scope is explicit declaration input;
-Span never infers it from document location, file names or repository structure.
-The declaring owner supplies it during initialization, either directly or from
-an explicit scope declaration carried by the canonical document.
+Each member names its exact repository-owned declaration source requests. A
+Version-3 declaration source carries its own `source_id`, kind (`repository` or
+`area`), one normalized repository-relative directory `scope` (`.` for the sole
+repository-kind source), its explicit whole-document membership set, and its
+placements. Each placement carries the same scope as its containing source, plus
+its canonical document reference, layer and governing placements. One canonical
+document has exactly one placement in its declaring repository; a second
+placement is a duplicate, not a second participation. Scope is explicit
+declaration input; Span never infers it from document location, file names or
+repository structure.
 
 Candidate validation is pure. It resolves only the submitted member/declaration
 sources and stable identities reached from them, validates the complete
@@ -282,9 +286,10 @@ The nested public route carriers are exact:
   `document: FunctionalDocumentRef`, and `scope: str`. `scope` is the
   normalized repository-relative directory in the declaring repository, with
   `.` as the repository root. The placement identity is the declaring
-  repository, the canonical document reference, the layer and the scope. A
-  document can therefore participate at several layers or scopes without
-  creating rule IDs.
+  repository, the canonical document reference, the layer and the scope. One
+  canonical document occupies exactly one layer and one scope in its declaring
+  repository; a repeated identity, a second layer or a second scope is a typed
+  duplicate finding, not a second participation.
 - `FunctionalDocumentRoute` carries `placement: FunctionalDocumentPlacement`,
   `authority: AuthorityBinding`,
   `governing_placements: tuple[FunctionalDocumentPlacement | "ROOT", ...]`,
@@ -298,8 +303,14 @@ The nested public route carriers are exact:
   `declared_layers`, and `absent_layers`.
 
 An unresolved finding identifies a repository plus the applicable placement or
-whole-document coordinates. Rule identifiers and rule anchors are not part of
-any declaration, route, finding, provenance or support carrier.
+whole-document coordinates. A structural finding without a placement still makes
+an affected route `UNRESOLVED`: it is relevant when its declaring-repository
+source scope contains a selected directory or semantic-scope portion, or when
+the selected governing closure contains a placement in that repository under the
+affected source scope. A route whose applicability is unrelated to the finding
+remains `RESOLVED` even while global ACTIVE health is `DEGRADED`. Rule
+identifiers and rule anchors are not part of any declaration, route, finding,
+provenance or support carrier.
 
 When the selected scope owns a canonical pyramid document, the projection
 exposes its declared reverse document dependencies so an authority change can be
@@ -1160,6 +1171,12 @@ membership/declaration graph. ACTIVE health is evaluated from current state:
 - `VALID` — the active graph/member state is presently structurally evaluable;
 - `DEGRADED` — an active member/declaration/relationship required for some
   graph evaluation is unavailable or structurally invalid.
+
+A Version-2 candidate declaration is rejected as
+`INVALID_DECLARATION_SOURCE`. An ACTIVE source that still names a Version-2
+declaration remains durably ACTIVE and is structurally `DEGRADED`
+(`INVALID_DECLARATION`) until an accepted Version-3 revision; there is no
+Version-2 decoder, translation path or hidden participation write.
 
 Health may change from VALID to DEGRADED and back as current source/member state
 changes without any participation-state write. Per-scope

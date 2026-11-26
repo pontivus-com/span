@@ -27,7 +27,16 @@ _REPO_FILES = {
     "docs/foundation.md": "# Foundation\n",
     "docs/functional-pyramid.json": _json.dumps(
         {
-            "version": 2,
+            "version": 3,
+            "source_id": "__REPOSITORY_ID__:repository",
+            "kind": "repository",
+            "scope": ".",
+            "documents": [
+                {
+                    "repository_id": "__REPOSITORY_ID__",
+                    "document_ref": "docs/foundation.md",
+                }
+            ],
             "placements": [
                 {
                     "document": {
@@ -50,7 +59,14 @@ _GOVERNED_A_FILES = {
     "src/alpha.py": "VALUE = 1\n",
     "docs/functional-pyramid.json": _json.dumps(
         {
-            "version": 2,
+            "version": 3,
+            "source_id": "repo-a:repository",
+            "kind": "repository",
+            "scope": ".",
+            "documents": [
+                {"repository_id": "repo-b", "document_ref": "rules/p0-v1.md"},
+                {"repository_id": "repo-b", "document_ref": "rules/p1.md"},
+            ],
             "placements": [
                 {
                     "document": {
@@ -80,6 +96,22 @@ _GOVERNED_A_FILES = {
                         }
                     ],
                 },
+            ],
+        },
+        sort_keys=True,
+    )
+    + "\n",
+    "docs/functional-pyramid-src.json": _json.dumps(
+        {
+            "version": 3,
+            "source_id": "repo-a:src",
+            "kind": "area",
+            "scope": "src",
+            "documents": [
+                {"repository_id": "repo-b", "document_ref": "rules/p2s.md"},
+                {"repository_id": "repo-b", "document_ref": "rules/p2w.md"},
+            ],
+            "placements": [
                 {
                     "document": {
                         "repository_id": "repo-b",
@@ -135,7 +167,14 @@ _GOVERNED_B_FILES = {
     "rules/p2w.md": "Workflow P2 contract authority.\n",
     "docs/functional-pyramid.json": _json.dumps(
         {
-            "version": 2,
+            "version": 3,
+            "source_id": "repo-b:repository",
+            "kind": "repository",
+            "scope": ".",
+            "documents": [
+                {"repository_id": "repo-b", "document_ref": "rules/p0-v1.md"},
+                {"repository_id": "repo-b", "document_ref": "rules/p1.md"},
+            ],
             "placements": [
                 {
                     "document": {
@@ -165,6 +204,22 @@ _GOVERNED_B_FILES = {
                         }
                     ],
                 },
+            ],
+        },
+        sort_keys=True,
+    )
+    + "\n",
+    "docs/functional-pyramid-rules.json": _json.dumps(
+        {
+            "version": 3,
+            "source_id": "repo-b:rules",
+            "kind": "area",
+            "scope": "rules",
+            "documents": [
+                {"repository_id": "repo-b", "document_ref": "rules/p2s.md"},
+                {"repository_id": "repo-b", "document_ref": "rules/p2w.md"},
+            ],
+            "placements": [
                 {
                     "document": {
                         "repository_id": "repo-b",
@@ -531,17 +586,28 @@ dispose();
         bindings_path = runtime_root / "repo-b-authority-bindings.json"
         bootstrap_a = runtime_root / "repo-a-functional-pyramid-bootstrap.json"
         bootstrap_b = runtime_root / "repo-b-functional-pyramid-bootstrap.json"
-        bootstrap_payload = _json.dumps(
+        bootstrap_payload_a = _json.dumps(
             {
                 "version": 2,
                 "declaration_sources": [
-                    {"locator": "docs/functional-pyramid.json", "ranges": []}
+                    {"locator": "docs/functional-pyramid.json", "ranges": []},
+                    {"locator": "docs/functional-pyramid-src.json", "ranges": []},
                 ],
             },
             sort_keys=True,
         )
-        bootstrap_a.write_text(bootstrap_payload + "\n", encoding="utf-8")
-        bootstrap_b.write_text(bootstrap_payload + "\n", encoding="utf-8")
+        bootstrap_payload_b = _json.dumps(
+            {
+                "version": 2,
+                "declaration_sources": [
+                    {"locator": "docs/functional-pyramid.json", "ranges": []},
+                    {"locator": "docs/functional-pyramid-rules.json", "ranges": []},
+                ],
+            },
+            sort_keys=True,
+        )
+        bootstrap_a.write_text(bootstrap_payload_a + "\n", encoding="utf-8")
+        bootstrap_b.write_text(bootstrap_payload_b + "\n", encoding="utf-8")
         code = (
             "import hashlib, json\n"
             "from pathlib import Path\n"

@@ -102,7 +102,7 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
             except _json.JSONDecodeError:
                 pass
             raise FunctionalPyramidDeclarationInvalid(
-                "Functional Pyramid declaration violates the Version-2 contract",
+                "Functional Pyramid declaration violates the Version-3 contract",
                 unsupported_version=unsupported_version,
             ) from exc
         return result.evidence_ref, declaration, findings

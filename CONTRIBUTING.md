@@ -35,6 +35,12 @@ not replace real Codex delivery or comparative product-acceptance evidence.
 - Keep the change scoped to one behavior or contract.
 - Add or update tests.
 - Update the public document that owns the contract.
+- Keep Span installation-neutral. Do not add a repository name, product,
+  customer, document title, repository path, installation-specific count or
+  installation-specific example to source, tests, fixtures, documentation,
+  skills or committed plans. Installation-specific execution material belongs
+  in the installation repository. A review that finds such content blocks the
+  change and must not merge it.
 - Sign off your commits with the Developer Certificate of Origin:
 
 ```bash

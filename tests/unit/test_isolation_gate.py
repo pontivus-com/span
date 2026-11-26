@@ -58,6 +58,10 @@ def _repo_files():
         # records its own absolute base paths and symlinks by design.
         if ".venv" in path.parts:
             continue
+        # `.context/` is gitignored local working material, not a repository
+        # input or published contract; it is not part of the shipped tree.
+        if ".context" in path.parts:
+            continue
         if path.is_dir():
             continue
         yield path

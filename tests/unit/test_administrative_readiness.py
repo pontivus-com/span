@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import pathlib
@@ -10,10 +11,14 @@ import sqlite3
 import tempfile
 import unittest
 
+from span.core import model as m
 from span.shell import install_verify
+from span.shell.install.constants import INSTALL_VERSION
+from span.shell.install.receipt import write_receipt
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
 from span.shell.readiness import (
     probe_functional_pyramid_repository,
+    probe_governed_provenance,
     probe_store,
     probe_structural,
 )
@@ -123,7 +128,16 @@ class StoreProbeTest(unittest.TestCase):
             (root / "docs" / "functional-pyramid.json").write_text(
                 json.dumps(
                     {
-                        "version": 2,
+                        "version": 3,
+                        "source_id": "repo:repository",
+                        "kind": "repository",
+                        "scope": ".",
+                        "documents": [
+                            {
+                                "repository_id": "repo",
+                                "document_ref": "docs/foundation.md",
+                            }
+                        ],
                         "placements": [
                             {
                                 "document": {
@@ -149,7 +163,11 @@ class StoreProbeTest(unittest.TestCase):
             (root / "docs" / "functional-pyramid.json").write_text(
                 json.dumps(
                     {
-                        "version": 2,
+                        "version": 3,
+                        "source_id": "repo:repository",
+                        "kind": "repository",
+                        "scope": ".",
+                        "documents": [],
                         "placements": [],
                         "unexpected": True,
                     }
@@ -221,6 +239,157 @@ class InstallVerifyTest(unittest.TestCase):
             payload = json.loads(stream.getvalue())
             self.assertTrue(payload["repos"][0]["store"]["ready"])
             self.assertEqual(payload["repos"][0]["store"]["schema_version"], 15)
+
+
+class FunctionalPyramidProvenanceTest(unittest.TestCase):
+    @staticmethod
+    def _binding(locator: str) -> m.AuthorityBinding:
+        return m.AuthorityBinding(
+            evidence_ref=m.EvidenceRef(
+                evidence_id=m.EvidenceId(f"authority-{locator}"),
+                repository_id="repo",
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator=locator,
+                revision_or_fingerprint="rev",
+            ),
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.ACCEPTED,
+        )
+
+    def _fixture(self, tmp: str):
+        root = pathlib.Path(tmp) / "repo"
+        (root / "docs").mkdir(parents=True)
+        (root / ".span").mkdir()
+        declaration = root / "docs" / "decl.json"
+        declaration.write_text(
+            json.dumps(
+                {
+                    "version": 3,
+                    "source_id": "repo:repository",
+                    "kind": "repository",
+                    "scope": ".",
+                    "documents": [],
+                    "placements": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        bootstrap = root / ".span" / "functional-pyramid.json"
+        bootstrap.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "declaration_sources": [
+                        {"locator": "docs/decl.json", "ranges": []}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        bindings = root / "docs" / "authority-bindings.json"
+        binding = self._binding("docs/goals.md")
+        bindings.write_text(json.dumps([m.to_canonical(binding)]), encoding="utf-8")
+        data = pathlib.Path(tmp) / "data"
+        data.mkdir()
+        store = LifecycleStore(data / "repo.db", retention=DEFAULT_LIFECYCLE_RETENTION)
+        try:
+            store.register_repository(
+                "repo",
+                str(root.resolve()),
+                authority_bindings=(binding,),
+            )
+        finally:
+            store.close()
+        inputs = [
+            {
+                "role": "bootstrap",
+                "locator": ".span/functional-pyramid.json",
+                "digest": hashlib.sha256(bootstrap.read_bytes()).hexdigest(),
+            },
+            {
+                "role": "declaration_source",
+                "locator": "docs/decl.json",
+                "digest": hashlib.sha256(declaration.read_bytes()).hexdigest(),
+            },
+            {
+                "role": "authority_binding",
+                "locator": "docs/authority-bindings.json",
+                "digest": hashlib.sha256(bindings.read_bytes()).hexdigest(),
+            },
+        ]
+        write_receipt(
+            data,
+            {
+                "install_version": INSTALL_VERSION,
+                "repos": [str(root)],
+                "host_registration": {},
+                "preflight_facts": {
+                    str(root): {
+                        "repository_id": "repo",
+                        "governed_inputs": inputs,
+                    }
+                },
+            },
+        )
+        return root, data, declaration, binding
+
+    def test_matching_governed_inputs_report_match(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data, _, _ = self._fixture(tmp)
+            result = probe_governed_provenance(data, "repo", root)
+            self.assertEqual(result["state"], "PROVENANCE_MATCH")
+            self.assertEqual(result["mismatches"], [])
+
+    def test_changed_declaration_reports_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data, declaration, _ = self._fixture(tmp)
+            declaration.write_text(
+                declaration.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+            )
+            result = probe_governed_provenance(data, "repo", root)
+            self.assertEqual(result["state"], "PROVENANCE_MISMATCH")
+            self.assertIn(
+                "digest_mismatch",
+                {item["reason"] for item in result["mismatches"]},
+            )
+
+    def test_installed_binding_difference_reports_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data, _, _ = self._fixture(tmp)
+            store = LifecycleStore(
+                data / "repo.db", retention=DEFAULT_LIFECYCLE_RETENTION
+            )
+            try:
+                store.register_repository(
+                    "repo",
+                    str(root.resolve()),
+                    authority_bindings=(self._binding("docs/other.md"),),
+                )
+            finally:
+                store.close()
+            result = probe_governed_provenance(data, "repo", root)
+            self.assertEqual(result["state"], "PROVENANCE_MISMATCH")
+            self.assertIn(
+                "installed_binding_set_differs",
+                {item["reason"] for item in result["mismatches"]},
+            )
+
+    def test_absent_recorded_inputs_report_not_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp) / "repo"
+            root.mkdir()
+            data = pathlib.Path(tmp) / "data"
+            data.mkdir()
+            write_receipt(
+                data,
+                {
+                    "install_version": INSTALL_VERSION,
+                    "repos": [str(root)],
+                    "host_registration": {},
+                },
+            )
+            result = probe_governed_provenance(data, "repo", root)
+            self.assertEqual(result["state"], "PROVENANCE_NOT_RECORDED")
 
 
 if __name__ == "__main__":

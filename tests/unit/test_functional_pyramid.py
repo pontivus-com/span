@@ -66,6 +66,12 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
                 "INVALID_DECLARATION",
                 "INVALID_PLACEMENT_SCOPE",
                 "DUPLICATE_DOCUMENT_PLACEMENT",
+                "DUPLICATE_DOCUMENT_SOURCE",
+                "DUPLICATE_DOCUMENT_LAYER",
+                "DUPLICATE_DOCUMENT_SCOPE",
+                "DOCUMENT_SCOPE_MISMATCH",
+                "MISSING_AREA_DOCUMENT",
+                "UNLISTED_AREA_DOCUMENT",
                 "INVALID_DOCUMENT_REFERENCE",
                 "MISSING_DOCUMENT_AUTHORITY",
                 "AMBIGUOUS_DOCUMENT_AUTHORITY",
@@ -119,7 +125,7 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
             )
 
 
-class FunctionalPyramidVersion2DecodeTest(unittest.TestCase):
+class FunctionalPyramidVersion3DecodeTest(unittest.TestCase):
     def test_bootstrap_is_version2_only(self) -> None:
         bootstrap = fp.decode_functional_pyramid_bootstrap(
             json.dumps(
@@ -140,9 +146,16 @@ class FunctionalPyramidVersion2DecodeTest(unittest.TestCase):
                 )
             )
 
-    def test_decode_requires_fully_qualified_governing_placement(self) -> None:
-        payload = {
-            "version": 2,
+    @staticmethod
+    def _baseline() -> dict[str, object]:
+        return {
+            "version": 3,
+            "source_id": "repo-a:repository",
+            "kind": "repository",
+            "scope": ".",
+            "documents": [
+                {"repository_id": "repo-a", "document_ref": "docs/foundation.md"}
+            ],
             "placements": [
                 {
                     "document": _doc(
@@ -150,25 +163,35 @@ class FunctionalPyramidVersion2DecodeTest(unittest.TestCase):
                     ),
                     "scope": ".",
                     "governing_placements": ["ROOT"],
-                },
-                {
-                    "document": _doc(
-                        "repo-a", "docs/design.md", m.FunctionalPyramidLayer.P3
-                    ),
-                    "scope": "src",
-                    "governing_placements": [
-                        {
-                            "document": _doc(
-                                "repo-a",
-                                "docs/foundation.md",
-                                m.FunctionalPyramidLayer.P0,
-                            ),
-                            "scope": ".",
-                        }
-                    ],
-                },
+                }
             ],
         }
+
+    def test_decode_requires_fully_qualified_governing_placement(self) -> None:
+        payload = self._baseline()
+        payload["placements"] = [
+            *payload["placements"],  # type: ignore[misc]
+            {
+                "document": _doc(
+                    "repo-a", "docs/design.md", m.FunctionalPyramidLayer.P3
+                ),
+                "scope": ".",
+                "governing_placements": [
+                    {
+                        "document": _doc(
+                            "repo-a",
+                            "docs/foundation.md",
+                            m.FunctionalPyramidLayer.P0,
+                        ),
+                        "scope": ".",
+                    }
+                ],
+            },
+        ]
+        payload["documents"] = [
+            *payload["documents"],  # type: ignore[misc]
+            {"repository_id": "repo-a", "document_ref": "docs/design.md"},
+        ]
         with self.assertRaises(ValueError):
             fp.decode_functional_pyramid_declaration(
                 json.dumps(payload),
@@ -177,25 +200,27 @@ class FunctionalPyramidVersion2DecodeTest(unittest.TestCase):
             )
 
     def test_invalid_scope_is_graph_finding_not_source_failure(self) -> None:
-        payload = {
-            "version": 2,
-            "placements": [
-                {
-                    "document": _doc(
-                        "repo-a", "docs/foundation.md", m.FunctionalPyramidLayer.P0
-                    ),
-                    "scope": "../outside",
-                    "governing_placements": ["ROOT"],
-                }
-            ],
-        }
+        payload = self._baseline()
+        payload["placements"] = [
+            {
+                "document": _doc(
+                    "repo-a", "docs/foundation.md", m.FunctionalPyramidLayer.P0
+                ),
+                "scope": "../outside",
+                "governing_placements": ["ROOT"],
+            }
+        ]
         declaration, findings = fp.decode_functional_pyramid_declaration(
             json.dumps(payload),
             repository_id="repo-a",
             declaration_locator=".span/pyramid.json",
         )
-        self.assertEqual(declaration.version, 2)
+        self.assertEqual(declaration.version, 3)
         self.assertEqual(declaration.placements, ())
+        self.assertEqual(
+            declaration.documents,
+            (m.FunctionalDocumentIdentity("repo-a", "docs/foundation.md"),),
+        )
         self.assertEqual(
             tuple(finding.reason for finding in findings),
             (m.FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE,),
@@ -203,8 +228,13 @@ class FunctionalPyramidVersion2DecodeTest(unittest.TestCase):
         self.assertEqual(findings[0].repository_id, "repo-a")
         self.assertIsNone(findings[0].placement)
 
-    def test_invalid_json_and_version_remain_source_decode_failures(self) -> None:
-        for payload in ("{", json.dumps({"version": 1, "placements": []})):
+    def test_invalid_json_and_unsupported_versions_are_source_failures(self) -> None:
+        payloads: list[str] = ["{"]
+        for version in (1, 2):
+            payload = self._baseline()
+            payload["version"] = version
+            payloads.append(json.dumps(payload))
+        for payload in payloads:
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 fp.decode_functional_pyramid_declaration(
                     payload,
@@ -212,42 +242,72 @@ class FunctionalPyramidVersion2DecodeTest(unittest.TestCase):
                     declaration_locator=".span/pyramid.json",
                 )
 
+    def test_malformed_source_metadata_is_a_decoding_failure(self) -> None:
+        mutations = (
+            ("source_id", ""),
+            ("kind", "unknown"),
+            ("scope", "../outside"),
+        )
+        for field, value in mutations:
+            with self.subTest(field=field):
+                payload = self._baseline()
+                payload[field] = value
+                with self.assertRaises(ValueError):
+                    fp.decode_functional_pyramid_declaration(
+                        json.dumps(payload),
+                        repository_id="repo-a",
+                        declaration_locator=".span/pyramid.json",
+                    )
+        missing = self._baseline()
+        del missing["documents"]
+        with self.assertRaises(ValueError):
+            fp.decode_functional_pyramid_declaration(
+                json.dumps(missing),
+                repository_id="repo-a",
+                declaration_locator=".span/pyramid.json",
+            )
+
     def test_valid_declaration_round_trips_canonical_carriers(self) -> None:
-        payload = {
-            "version": 2,
-            "placements": [
-                {
-                    "document": _doc(
-                        "repo-a", "docs/foundation.md", m.FunctionalPyramidLayer.P0
-                    ),
-                    "scope": ".",
-                    "governing_placements": ["ROOT"],
-                },
-                {
-                    "document": _doc(
-                        "repo-a", "docs/design.md", m.FunctionalPyramidLayer.P3
-                    ),
-                    "scope": "src/service",
-                    "governing_placements": [
-                        {
-                            "declaring_repository_id": "repo-a",
-                            "document": _doc(
-                                "repo-a",
-                                "docs/foundation.md",
-                                m.FunctionalPyramidLayer.P0,
-                            ),
-                            "scope": ".",
-                        }
-                    ],
-                },
-            ],
-        }
+        payload = self._baseline()
+        payload["placements"] = [
+            {
+                "document": _doc(
+                    "repo-a", "docs/foundation.md", m.FunctionalPyramidLayer.P0
+                ),
+                "scope": ".",
+                "governing_placements": ["ROOT"],
+            },
+            {
+                "document": _doc(
+                    "repo-a", "docs/design.md", m.FunctionalPyramidLayer.P3
+                ),
+                "scope": "src/service",
+                "governing_placements": [
+                    {
+                        "declaring_repository_id": "repo-a",
+                        "document": _doc(
+                            "repo-a",
+                            "docs/foundation.md",
+                            m.FunctionalPyramidLayer.P0,
+                        ),
+                        "scope": ".",
+                    }
+                ],
+            },
+        ]
+        payload["documents"] = [
+            {"repository_id": "repo-a", "document_ref": "docs/foundation.md"},
+            {"repository_id": "repo-a", "document_ref": "docs/design.md"},
+        ]
         declaration, findings = fp.decode_functional_pyramid_declaration(
             json.dumps(payload),
             repository_id="repo-a",
             declaration_locator=".span/pyramid.json",
         )
         self.assertEqual(findings, ())
+        self.assertEqual(declaration.source_id, "repo-a:repository")
+        self.assertEqual(declaration.scope, ".")
+        self.assertEqual(len(declaration.documents), 2)
         self.assertEqual(len(declaration.placements), 2)
         restored = m.from_canonical(
             m.FunctionalPyramidDeclaration,

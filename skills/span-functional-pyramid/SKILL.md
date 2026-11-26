@@ -34,21 +34,102 @@ Obtain durable participation and live health:
 
 ## 2. DISCOVER / DECLARE / REALIGN
 
-The agent establishes the intended members and declaration sources. During
-discovery the declaring owner also assigns each document placement its explicit
-repository-relative directory scope: `.` for the repository root or a directory
-prefix. Scope may come from the owner directly or from an explicit scope
-declaration carried by the canonical document; Span never infers it from where a
-document sits. A member declares no functional boundary of its own.
+A participating repository declares Version-3 sources. Each source has:
 
-Each member must declare at least one root-scoped P0 placement whose governing
-relationship is `ROOT`. That placement is what makes every directory in the
-repository return a pyramid; a directory with no narrower placement inherits its
-ancestor placements.
+- a stable non-empty source_id;
+- a kind of `repository` or `area`;
+- one explicit directory `scope` (`.` only for the single repository-kind source);
+- an explicit documents membership set using repository_id + document_ref;
+- placements at that same scope.
+
+Every listed document has exactly one placement at the source scope. A
+placement's scope must equal its source scope. One canonical document occupies
+exactly one layer and one scope in its declaring repository; do not repeat it
+across sources or layers. A shared-ancestor document belongs in the area-kind
+source at the ancestor scope. Only declared sources establish areas; Span never
+infers them from paths, workflow names or titles.
+
+Each participating repository has exactly one `repository`-kind source at scope
+`.` containing at least one `P0` placement governed by `ROOT`. No other layer is
+mandatory. A legitimately scoped area `P0` is governed directly by `ROOT`; lower
+area layers are governed by that scoped `P0` or an applicable ancestor. An
+absent non-root layer is reported, never required.
+
+```text
+{
+  "version": 3,
+  "source_id": "repo-1:repository",
+  "kind": "repository",
+  "scope": ".",
+  "documents": [
+    {"repository_id": "repo-1", "document_ref": "docs/goals.md"},
+    {"repository_id": "repo-1", "document_ref": "docs/invariants.md"}
+  ],
+  "placements": [
+    {
+      "document": {
+        "repository_id": "repo-1",
+        "document_ref": "docs/goals.md",
+        "layer": "P0"
+      },
+      "scope": ".",
+      "governing_placements": ["ROOT"]
+    },
+    {
+      "document": {
+        "repository_id": "repo-1",
+        "document_ref": "docs/invariants.md",
+        "layer": "P1"
+      },
+      "scope": ".",
+      "governing_placements": [
+        {
+          "declaring_repository_id": "repo-1",
+          "document": {
+            "repository_id": "repo-1",
+            "document_ref": "docs/goals.md",
+            "layer": "P0"
+          },
+          "scope": "."
+        }
+      ]
+    }
+  ]
+}
+```
+
+An area source uses `"kind": "area"`, a canonical non-root `scope`, and only
+placements at that scope. A source governing several descendant areas is an
+ordinary area-kind source at their shared ancestor scope.
+
+Layer rubric: P0 states purpose; P1 invariants; P2S shared contracts; P2W
+workflow contracts; P3 implementation contracts; P4 behavior/mechanisms. A pure
+governance document that states several layers is split into layer-owning
+documents. Functional statements in an ADR or `AGENTS.md` are extracted into the
+appropriate layer owner while the historical record stays intact. Preserve rule
+identity and governing relationships; never invent a rule ID or make a document
+own a second layer to fill an absent one. Span validates the declared structure;
+the repository owner owns substantive classification and completeness.
 
 If repository-owned declarations must change, edit them outside Span and then use
 `reconsider` for each directly edited repository. Dispose every actionable
 REASSESSMENT_REQUIRED/UNVERIFIABLE result before candidate validation continues.
+
+### Finding recovery
+
+| Finding | Repair |
+|---|---|
+| `INVALID_DECLARATION` | Correct source-set topology: exactly one repository-kind source at `.`, area sources non-root, unique source IDs/scopes. |
+| `DUPLICATE_DOCUMENT_SOURCE` / `_LAYER` / `_SCOPE` / `_PLACEMENT` | Keep one membership, one layer, one scope and one placement per canonical document. |
+| `DOCUMENT_SCOPE_MISMATCH` | Make the placement scope equal its containing source scope, or move the placement to the correct source. |
+| `MISSING_AREA_DOCUMENT` / `UNLISTED_AREA_DOCUMENT` | Make `documents` and `placements` agree at the source scope. |
+| `MISSING_ROOT_PLACEMENT` | Add a scope `.` P0 placement governed by `ROOT`. |
+| `INVALID_GOVERNING_EDGE` / `DOCUMENT_CYCLE` | Correct the governing references under the fixed layer relation. |
+| `INVALID_DECLARATION_SOURCE` (including Version 2) | Author a valid Version-3 source; there is no Version-2 translation. |
+
+An ACTIVE Version-2 source stays ACTIVE and reports `DEGRADED` until an accepted
+Version-3 revision. Correct the sources, validate the replacement candidate and
+record the revision; never bypass with `EXCLUDED` or `UNCONFIGURED`.
 
 ## 3. VALIDATE
 
@@ -63,7 +144,8 @@ Validate the complete intended member set through `ask`:
       {
         "repository_id": "repo-1",
         "declaration_sources": [
-          {"locator": "docs/functional-pyramid.json", "ranges": []}
+          {"locator": "docs/functional-pyramid.json", "ranges": []},
+          {"locator": "docs/functional-pyramid-area.json", "ranges": []}
         ]
       }
     ]
@@ -114,6 +196,22 @@ returned the canonical affected projection.
 Keep the Functional Pyramid receipt selector until all accepted dependent-effect
 identities are no longer actionable or have been re-established CURRENT. If a
 later repair/revision occurs, it does not erase an earlier accepted obligation.
+
+### Governed installation inputs
+
+The governed installer names `--functional-pyramid-bootstrap-file REPOSITORY_ID
+PATH` and `--authority-bindings-file REPOSITORY_ID PATH` once per participating
+repository; omission preserves the prior configuration, so omission is not
+neutral. `--authority-seeds-file` joins the governed set only where seeds change.
+An existing conventional `.span/functional-pyramid.json` is a governed input even
+when no argument is supplied.
+
+`span-install --verify-only` evaluates the complete retained ACTIVE graph and
+reports one of `PROVENANCE_MATCH`, `PROVENANCE_MISMATCH` or
+`PROVENANCE_NOT_RECORDED`. A structural failure or a mismatch exits non-zero and
+prohibits acceptance. Not-recorded is reported as not applicable for a generically
+established instance, but is an acceptance failure where a committed governed
+baseline exists.
 
 ## Deactivate / exclude
 

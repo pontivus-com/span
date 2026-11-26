@@ -56,10 +56,21 @@ class FunctionalPyramidAction(_enum.Enum):
     EXCLUDE = "exclude"
 
 
+class FunctionalPyramidSourceKind(_enum.Enum):
+    REPOSITORY = "repository"
+    AREA = "area"
+
+
 class FunctionalPyramidFindingReason(_enum.Enum):
     INVALID_DECLARATION = "INVALID_DECLARATION"
     INVALID_PLACEMENT_SCOPE = "INVALID_PLACEMENT_SCOPE"
     DUPLICATE_DOCUMENT_PLACEMENT = "DUPLICATE_DOCUMENT_PLACEMENT"
+    DUPLICATE_DOCUMENT_SOURCE = "DUPLICATE_DOCUMENT_SOURCE"
+    DUPLICATE_DOCUMENT_LAYER = "DUPLICATE_DOCUMENT_LAYER"
+    DUPLICATE_DOCUMENT_SCOPE = "DUPLICATE_DOCUMENT_SCOPE"
+    DOCUMENT_SCOPE_MISMATCH = "DOCUMENT_SCOPE_MISMATCH"
+    MISSING_AREA_DOCUMENT = "MISSING_AREA_DOCUMENT"
+    UNLISTED_AREA_DOCUMENT = "UNLISTED_AREA_DOCUMENT"
     INVALID_DOCUMENT_REFERENCE = "INVALID_DOCUMENT_REFERENCE"
     MISSING_DOCUMENT_AUTHORITY = "MISSING_DOCUMENT_AUTHORITY"
     AMBIGUOUS_DOCUMENT_AUTHORITY = "AMBIGUOUS_DOCUMENT_AUTHORITY"
@@ -135,6 +146,22 @@ class FunctionalDirectoryScope:
 
 
 @_dataclass(frozen=True)
+class FunctionalDocumentIdentity:
+    """Layer-independent canonical whole-document identity."""
+
+    repository_id: str
+    document_ref: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty(
+            "FunctionalDocumentIdentity.repository_id", self.repository_id
+        )
+        _require_canonical_repository_path(
+            "FunctionalDocumentIdentity.document_ref", self.document_ref
+        )
+
+
+@_dataclass(frozen=True)
 class FunctionalDocumentRef:
     repository_id: str
     document_ref: str
@@ -144,6 +171,13 @@ class FunctionalDocumentRef:
         _require_non_empty("FunctionalDocumentRef.repository_id", self.repository_id)
         _require_canonical_repository_path(
             "FunctionalDocumentRef.document_ref", self.document_ref
+        )
+
+    @property
+    def identity(self) -> FunctionalDocumentIdentity:
+        return FunctionalDocumentIdentity(
+            repository_id=self.repository_id,
+            document_ref=self.document_ref,
         )
 
 
@@ -180,12 +214,22 @@ class FunctionalDocumentDeclaration:
 
 @_dataclass(frozen=True)
 class FunctionalPyramidDeclaration:
+    """One Version-3 canonical declaration source (FD-66, S1-S11)."""
+
     version: int
+    source_id: str
+    kind: FunctionalPyramidSourceKind
+    scope: str
+    documents: tuple[FunctionalDocumentIdentity, ...]
     placements: tuple[FunctionalDocumentDeclaration, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.version != 2:
-            raise ValueError("FunctionalPyramidDeclaration.version must be 2")
+        if self.version != 3:
+            raise ValueError("FunctionalPyramidDeclaration.version must be 3")
+        _require_non_empty("FunctionalPyramidDeclaration.source_id", self.source_id)
+        _require_directory_scope("FunctionalPyramidDeclaration.scope", self.scope)
+        if not isinstance(self.kind, FunctionalPyramidSourceKind):
+            raise ValueError("FunctionalPyramidDeclaration.kind must be a source kind")
 
 
 @_dataclass(frozen=True)
