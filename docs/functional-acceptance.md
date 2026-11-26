@@ -66,7 +66,7 @@ partial V3 verification does not close them.
 | FA-20 | Descriptive create | `test_descriptive_recording_does_not_gain_route_support` |
 | FA-21 | Authority-content change | `test_authority_currency_does_not_change_route_identity_or_health`; `test_authority_source_change_is_considered_not_forced_stale`; `test_authority_support_status_and_presence` |
 | FA-22 | Applicability change | `test_material_applicability_change_changes_route_identity`; `test_functional_route_support_distinguishes_route_states`; `test_governance_only_change_crosses_physical_repository_boundary` |
-| FA-23 | Reverse authority navigation | `test_installed_cross_repository_governance_journey` |
+| FA-23 | Internal reverse dependency traversal; no public impact selector | `test_installed_cross_repository_governance_journey`; preserve the Beta-5 over-fetch remediation R-1–R-6 (no reverse/internal fields on public views) |
 | FA-24 | Cross-repository reconsideration | `test_governance_only_change_crosses_physical_repository_boundary` |
 | FA-25 | Implementation change | `test_changed_path_maps_containment_direct_and_indirect`; `test_discovery_membership_change_is_direct` |
 | FA-26 | Mixed answer | `test_descriptive_answer_survives_unresolved_governing_route`; `test_mixed_answer_excludes_noncurrent_normative_conclusion`; `test_unresolved_governance_is_retained_but_qualified_unverifiable` |
@@ -112,8 +112,8 @@ partial V3 verification does not close them.
 | FA-66 | Installed lifecycle closes the loop | `test_installed_cross_repository_governance_journey` |
 | FA-67 | Document-only governed initialization | Pending — S-VERIFY-02 |
 | FA-68 | Strict preflight | Pending — S-INIT-01/02, S-VERIFY-02 |
-| FA-69 | Repeat and revise | Pending — S-INIT-03, S-VERIFY-02 |
-| FA-70 | Ownership and interruption | Pending — S-INIT-02/03, S-VERIFY-02 |
+| FA-69 | Repeat and revise; authority-only delta effects | Pending — S-INIT-02/03, S-VERIFY-02 |
+| FA-70 | Ownership, existing-binding reuse and durable interruption recovery | Pending — S-INIT-02/03, S-VERIFY-02 |
 | FA-71 | Public findings | Pending — S-PUBLIC-01 |
 | FA-72 | Complete bounded retrieval | Pending — S-PUBLIC-02 |
 The matrix names enforcement boundaries; the CI execution receipt remains the

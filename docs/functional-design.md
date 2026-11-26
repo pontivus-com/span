@@ -604,13 +604,13 @@ silently drops the relationship. *(G1, G7, G8, F11, F12, L13)*
 
 **FD-88 — Governing traversal is bidirectional over one declared graph.**
 Upward orientation follows directory or scope → placement → governing placement
-to ROOT under FD-68. The reverse view is a separate selection over a canonical
-document scope: direct/transitive dependent placements and the declared
-placements that reference them. It is not part of a directory or semantic-scope
-answer and is served only when a caller asks the impact question. The reverse
-index remains internal resolution state for reconsideration. Reverse traversal is
-navigation/impact orientation only; it does not predict what a proposed edit
-will do and never creates a second dependency registry. *(G3, G7, F4, F11, L15,
+to ROOT under FD-68. Reverse traversal identifies direct and transitive
+dependent placements through the same internal graph for reconsideration and
+accepted governance changes. The compact directory and semantic-scope answers
+do not expose the reverse index, internal routes or provenance. A separate
+public document-impact selection is deferred until an explicit consumer requires
+it (TD §17.1); it is not a current acceptance requirement. Any future impact
+view is non-predictive navigation over this same graph, not a second registry. *(G3, G7, F4, F11, L15,
 L16)*
 
 **FD-88A — Governed initialization establishes the Functional Pyramid from the
@@ -626,29 +626,44 @@ selected member must satisfy FD-66/FD-86, including a member with no place rows.
 Derive repository-kind and area-kind sources, document membership, one
 placement per document, governing coordinates, ordering, one whole-document
 authority binding per placement and exact navigation/member-intent references.
-Use the document's repository and locator, no section/span, the supplied
-kind/status, empty applicability and no declared precedence. Validate the
-complete derived graph and binding coverage before mutation. An exclude row
-creates no placement or derived authority binding. Preserve ordinary authority
-outside the derived placed set. Remove a formerly derived binding whose
-placement is removed only when its derivation ownership is established; do not
-revoke independently owned authority because the document is excluded or
-omitted. A competing or anchored binding for a placed document, or uncertain
-binding ownership, is a conflict rather than silent replacement.
+For a newly derived binding use the document's repository and locator, no
+section/span, the supplied kind/status, empty applicability and no declared
+precedence. A unique existing whole-document binding that already satisfies
+the declared semantics is reused with its existing evidence identity and
+ownership; initialization must not replace it merely to obtain a generated
+identity. Validate the complete graph and binding coverage before mutation.
+An exclude row creates no placement or derived authority binding. Preserve
+ordinary authority outside the derived placed set. Remove a formerly derived
+binding whose placement is removed only when its derivation ownership is
+established; do not revoke independently owned authority because the document
+is excluded or omitted. A competing whole-document binding, or uncertain ownership where a
+replacement/removal is required, is a conflict rather than silent replacement.
+A section/span binding cannot satisfy a whole-document placement; independently
+owned section/span bindings may coexist with its unique whole-document binding
+and remain untouched, as the existing canonical resolver permits. The existing
+lower-level authority and declaration contracts are not narrowed by initialization.
 
 Select ACTIVATE for a fresh eligible explicitly selected member set. For the
-same complete member set of one existing ACTIVE instance, select REVISE if its
-applied input changed, or verify the identical applied state without a new
-participation version. Repair an operationally degraded identical state before
-claiming success. A partial active-member selection or members belonging to
+same complete member set of one existing ACTIVE instance, select REVISE when
+the requested and actual applied canonical governance configurations differ,
+including registered binding changes; verify an identical applied configuration
+without a new participation version. Input byte order/format changes alone are
+not a governance delta. Repair an operationally degraded identical state before
+claiming success; an actual binding change requires the same affected-support
+projection as any other governed revision. A partial active-member selection or members belonging to
 different ACTIVE instances fails; a member-set change requires its own explicit
 lifecycle intent. A Version-2 ACTIVE instance is revised, never re-activated.
 
-Run the existing candidate/write path and verify the exact accepted state. A
-failure is not successful initialization; preserve accepted receipt identity and
-report the actual operational state and outstanding obligations. Re-running the
-same input does not duplicate an accepted write. Never create semantic
-conclusions to clear effects. *(G7, G8, F1, F4, F7, F11, F12, L4, L11–L16)*
+Run the existing candidate/write path and verify the exact accepted state.
+Capture the old/new registered authority delta before provisioning changes the
+bindings and include its affected conclusions in the accepted write's FD-89
+projection. Authority-only changes can affect support without changing route
+identity or structural health (FD-12/FD-73); unchanged support is not forced
+stale. A failure is not successful initialization; retain the exact pending
+intent, affected-binding evidence and accepted receipt identity needed for
+recovery, and report actual operational state and outstanding obligations.
+Re-running the same input does not duplicate an accepted write. Never create
+semantic conclusions to clear effects. *(G7, G8, F1, F4, F7, F11, F12, L4, L11–L16)*
 
 **FD-88B — Runtime results expose only the public governance reasons.**
 The public Functional Pyramid result carriers (`FunctionalPyramidView.unresolved`,
@@ -1482,10 +1497,11 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 22. **Applicability change.** Changing a placement's scope, layer, document
     identity, governing edges or material member bindings requires reassessment
     through route support even when implementation/document content is unchanged.
-23. **Reverse authority navigation.** A separate exact canonical document
-    selection — never a directory or ordinary surface ask — exposes its declared
-    downstream document/placement relationships without predicting a proposed
-    edit or copying document content.
+23. **Internal reverse dependency traversal.** Reconsideration and participation
+    changes use the same reverse graph to reach dependent placements and
+    conclusions; ordinary directory and surface results do not expose that
+    internal state. No separate public impact selector is required for current
+    acceptance (FD-88).
 24. **Cross-repository reconsideration.** A governing change in repository A
     returns affected normative understanding in repository B when the same
     pyramid document relationships connect them; the caller does not enumerate B. The Changed
@@ -1654,11 +1670,17 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 69. **Repeat and revise.** Identical valid input is a no-op for participation;
     changed input for the same member set revises the exact instance, including
     V2 cutover. Conflicts and failed verification remain explicit; accepted
-    receipts and actionable effects survive recovery.
+    receipts and actionable effects survive recovery. An authority-only revision
+    returns the exact affected direct/premise-dependent conclusions, including
+    removed bindings; route identity and structural health remain independent.
+    Unaffected support is not forced stale (FD-12/FD-73/FD-89).
 70. **Ownership and interruption.** Owned metadata can legitimately change;
-    unowned conflicts fail. Ordinary authority survives exclusion; interrupted
-    setup never reports successful governed initialization or loses its accepted
-    receipt identity. Ordinary install and observation modes do not activate.
+    unowned conflicts fail. Equivalent independently owned whole-document
+    authority is reused without replacing its identity; ordinary authority
+    survives exclusion. Interrupted setup preserves recoverable pending intent
+    and accepted receipt identity, never reports successful governed setup
+    prematurely, and resumes without a duplicate write. Ordinary install and
+    observation modes do not activate.
 71. **Public findings.** FD-88B applies across all public governance results;
     internal reasons/locators never leak.
 72. **Complete bounded retrieval.** FD-88C directory continuation returns all

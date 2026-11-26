@@ -1174,11 +1174,13 @@ membership/declaration graph. ACTIVE health is evaluated from current state:
 - `DEGRADED` — an active member/declaration/relationship required for some
   graph evaluation is unavailable or structurally invalid.
 
-A Version-2 candidate declaration is rejected as
-`INVALID_DECLARATION_SOURCE`. An ACTIVE source that still names a Version-2
-declaration remains durably ACTIVE and is structurally `DEGRADED`
-(`INVALID_DECLARATION`) until an accepted Version-3 revision; there is no
-Version-2 decoder, translation path or hidden participation write.
+A Version-2 candidate declaration is rejected with public reason
+`DECLARATION_INVALID` (internal `INVALID_DECLARATION_SOURCE`). An ACTIVE source
+that still names a Version-2 declaration remains durably ACTIVE and is
+structurally `DEGRADED`, with public reason `DECLARATION_INVALID` (internal
+`INVALID_DECLARATION`), until an accepted Version-3 revision. FD-88B owns the
+projection; there is no Version-2 declaration decoder, translation path or
+hidden participation write.
 
 Health may change from VALID to DEGRADED and back as current source/member state
 changes without any participation-state write. Per-scope

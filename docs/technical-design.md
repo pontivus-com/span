@@ -740,11 +740,18 @@ source set; the public candidate/write carries explicit member intent. Absence
 of a bootstrap is not exclusion. Lower-level lifecycle operations retain their
 explicit input contract, not a second governed installation workflow.
 
-Each named declaration source is strict JSON with one canonical document shape:
+Each named declaration source uses the existing strict Version-3 grammar
+(FD-66); Version 2 above is the navigation bootstrap, not a declaration:
 
 ```text
 {
-  "version": 2,
+  "version": 3,
+  "source_id": str,
+  "kind": "repository" | "area",
+  "scope": "." | "relative/directory",
+  "documents": [
+    { "repository_id": str, "document_ref": str }
+  ],
   "placements": [
     {
       "document": {
@@ -973,9 +980,11 @@ Internal-only, never serialized:
   locators;
 - `AuthorityBinding` payloads, evaluated through ordinary support rules.
 
-A document-impact selection (`document → dependents`) is a separate API. It has
-no consumer today and is implemented only when an explicit caller question
-requires it; FD-88 defines its direction and its non-predictive semantics.
+A future document-impact selection (`document → dependents`) is a separate API.
+It has no consumer today and is not implemented or required for Beta-5
+acceptance; FD-88 defines its non-predictive semantics. Preserve the compact
+projection and internal reverse traversal established by the completed
+read-API over-fetch remediation. Do not reintroduce its retired public fields.
 
 The ordered placement list is paged, not merely omitted. When it exceeds the
 response budget, the answer returns the largest fitting prefix,
@@ -1052,12 +1061,23 @@ and the canonical model in `src/span/core/model/classification.py`. Extend the
 existing derivation to supply the exact `AuthorityBinding`, `EvidenceRef`,
 `EvidenceRequest` and `FunctionalPyramidBootstrap` values consumed by the existing
 owners. Group sources by declaring repository and scope; source identity is a
-stable function of those coordinates, independent of its address. Whole-document
+stable function of those coordinates, independent of its address. New whole-document
 binding evidence uses the exact repository/locator, `DOCUMENTATION` source kind,
 row kind/status and the existing stable `authority-document-` identity convention.
 Observe source content identity through existing evidence access. Reconcile binding
 ownership under FD-88A using the prior accepted derivation/provenance and existing
 canonical authority configuration, not an inferred prefix or new authority registry.
+A unique existing whole-document binding with the same required kind/status,
+empty applicability and no declared precedence satisfies the placement without
+replacing its evidence identity or assuming ownership. Its live fingerprint and
+support remain evaluated by the existing evidence/support owners. A competing whole-document
+binding or a required replacement/removal of uncertain ownership is rejected.
+Independently owned section/span bindings are preserved; only an exact
+whole-document binding satisfies FD-66, without narrowing the existing
+canonical resolver's treatment of ancillary authority.
+Compare the actual pre-provisioning and reconciled canonical binding tuples;
+retain the changed old/new identities and values for the shared effect engine
+(§20.3), including old identities when a binding is removed.
 
 `span-install --functional-pyramid-classification-file REPOSITORY_ID PATH`
 (repeatable with the existing repository selection) requests governed
@@ -1092,6 +1112,50 @@ provenance as exact configuration evidence; it is not authority or additional
 ingress. The runtime authority store remains the sole registered binding owner.
 Use existing evidence/authority stores, not a new semantic store.
 
+**Interrupted initialization.** Reuse the existing installer receipt owner
+(`install.json`) and its verified backup/recovery path. After read-only
+preflight and backup, but before any generated-file or authority mutation,
+atomically persist a pending governed-setup entry in that administrative
+receipt. Preserve the last accepted configuration and host information; for a
+fresh install the receipt explicitly describes incomplete setup, not readiness.
+Retain the exact selected repository identities/roots, input and derived
+payload digests, planned owned artifact paths/digests, canonical reconciled
+bindings and their changed old/new values, and the original canonical
+participation action/member intent, target identity/expected version and one
+fresh canonical request ID allocated once for this operation. This is recovery
+provenance, not a new authority or participation store. The existing receipt
+owner must write by temporary sibling and atomic replacement; do not use the
+end-of-install receipt as the first durable record of the intent. The existing
+backup already includes this receipt. Do not introduce a second receipt file,
+request-identity algorithm, public operation, or database schema for setup.
+
+A subsequent explicit initialization first checks for a pending entry. For the
+same input, validate its recorded identities/digests, permitted artifacts and
+actual authority state against the recorded preflight or intended configuration;
+reuse the original canonical request ID and payload. Query the existing
+participation receipt before choosing any new action/version. If accepted,
+verify the exact accepted instance and finish publication/verification without a
+new participation write; if not accepted, complete the remaining provisioning
+and submit the original intent through ordinary CAS and candidate validation.
+Mismatch, competing mutation, missing evidence or different pending input is an
+explicit recovery conflict, not permission to overwrite unowned data or create a
+new revision. Preserve the previous receipt and backup; use the existing
+recovery path when the original operation cannot be safely completed. Same-input
+recovery does not require the operator to reconstruct a payload. The explicit
+setup session and existing ownership/CAS rules remain in force; no claim of
+atomicity across repository provisioning and participation is made.
+
+After acceptance, retain its receipt selector before finalization; on
+interruption it remains discoverable via the original pending request ID. Only
+after publication and strict verification of the intended configuration against
+observed state promote that configuration to the accepted installer provenance
+and clear the pending entry by atomic receipt replacement. Preserve outstanding
+accepted semantic-effect receipt references. The verification phase compares
+against pending expected provenance during initialization; standalone
+`--verify-only` is observational and reports incomplete governed setup if a
+pending entry remains. A final receipt or an existing ACTIVE/VALID status alone
+cannot establish successful governed setup.
+
 Use temporary sibling files and atomic individual renames, reject symlinks,
 escapes, unmanaged collisions or unverifiable ownership. Publish the conventional
 navigation bootstrap only after the corresponding participation is accepted;
@@ -1112,24 +1176,33 @@ following in one invocation:
    binding coverage. Apply FD-88A action selection; do not infer membership.
 2. Prepare the runtime and protected metadata; provision each repository through
    `provision_repository_runtime(InitializeRepositoryRequest)` using the derived
-   bindings. Do not introduce a second registration or authority writer.
+   bindings. Record pending intent and old/new authority evidence before any
+   changes, as specified above. Do not introduce a second registration or
+   authority writer.
 3. Construct member intent from exact generated source references. Use existing
    `FunctionalPyramidService.candidate` and `.record` through the installation
    runtime composition used by MCP. The explicit governed setup request is the
-   authorization; derive exact current pyramid/version and canonical request
-   identity. Keep existing CAS, transactional revalidation, receipt replay,
-   effect propagation and the single participation writer. No second MCP tool.
-4. Verify the exact accepted instance, version, member set, ACTIVE/VALID,
-   operational readiness and provenance through existing verification. Complete
-   publication of derived navigation metadata. Retain the participation receipt
+   authorization; derive exact current pyramid/version and allocate the
+   canonical request identity once before effects. Keep existing CAS,
+   transactional revalidation, receipt replay, effect propagation and the single
+   participation writer. Include the pre-provisioning old/new binding delta in
+   the same accepted effect projection (§20.3). No second MCP tool.
+4. After participation acceptance, publish derived navigation metadata and
+   verify the exact accepted instance, version, member set, ACTIVE/VALID,
+   operational readiness and actual input/binding/source provenance through the
+   existing verifier, against the pending expected configuration. Complete the
+   installer receipt only after verification; retain the participation receipt
    identity and its canonical effect/contexts handoff in the existing installer
    result/receipt composition. Do not signal governed setup success while
    verification fails or silently clear outstanding semantic obligations.
 
-An unchanged applied configuration is verified without a new participation
-version. A changed classification is a proposed replacement until accepted by
-REVISE; report provenance disagreement on verification/initialization, never
-silently describe it as already applied. Changes to governing content continue
+An unchanged canonical applied configuration is verified without a new
+participation version. A material difference in the requested and actual
+applied governance configuration, including a changed registered binding,
+requires REVISE. Compare canonical derived declarations and reconciled bindings,
+not raw classification formatting; preserve raw input digests for provenance.
+Do not misreport a differing configuration as already applied. A provenance
+difference alone must not manufacture a governance delta. Changes to governing content continue
 through the existing live evidence/support and reconsideration owners. A V2
 revision follows §21; the declaration format alone is not a semantic route change.
 No user assembles candidate/member payloads or invokes ACTIVATE after installation.
@@ -1141,7 +1214,12 @@ authority bindings, bootstrap, repository state or participation. Inspect the
 result through the existing public API. Reuse the installed test infrastructure;
 exercise exact bindings, root/area/shared-ancestor resolution, cross-repository
 parents, exclusions, invalid input, owned revision, interruption, idempotence,
-V2 revision, dependent effects, provenance, public findings and continuation.
+V2 revision, binding-only changes/removals with unchanged route identity,
+dependent effects, equivalent existing authority reuse, provenance, public
+findings and continuation. Interrupt before publication/provisioning, after
+provisioning and after acceptance but before final receipt; prove the same
+pending intent can complete without an extra participation version or lost
+ownership/effect evidence.
 
 ### 18. Pure resolver, health and support evaluation
 
@@ -1616,9 +1694,26 @@ selects every current NORMATIVE revision in that repository that lacks
 `REASSESSMENT_REQUIRED` effects. This is the mechanism for FD-79 and avoids
 fabricating historical support.
 
-Existing authority-source edits continue to use changed-scope reconsider. The
-effect engine re-evaluates canonical route/authority support rather than marking
-conclusions stale merely because a declaration file path matched.
+Existing authority-source edits continue to use changed-scope reconsider.
+Governed initialization additionally provides the exact old/new registered
+binding delta from §17.2 to the existing Functional Pyramid write composition,
+as an internal service input only. Capture that delta before provisioning;
+do not rediscover old bindings from the post-replacement authority store.
+Use the existing repository-qualified AUTHORITY support-dependency index for
+the union of changed old/new evidence identities, including removed bindings.
+Combine its direct dependents with the existing changed-route and participation
+roots before the single premise closure and grouping in
+`DependencyEffectService`. Re-evaluate affected authority support through the
+existing `SupportService` and FD-12 rules, not forced route reassessment. Record
+the union of affected immutable conclusion revision refs in the existing
+participation receipt; replay projects those retained refs, not a new scan.
+Apply the same support rules to descriptive conclusions that explicitly depend
+on changed authority as to normative ones. Do not alter route identity, graph
+health, ordinary changed-scope behavior, the public record payload or the
+canonical record-content digest to carry an administrative delta. The pending
+installer provenance binds the original operation and exact binding evidence;
+a replay uses that intent and the existing receipt. No second support evaluator,
+effect registry, per-repository shell loop or forced blanket invalidation.
 
 #### 20.4 Functional Pyramid `record`
 
