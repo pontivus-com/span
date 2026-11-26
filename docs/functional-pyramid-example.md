@@ -4,9 +4,11 @@ A neutral, installation-independent example: `repo-a` and `repo-b`, areas
 `area-a` and `area-b`, and a shared-ancestor source. It uses no product,
 customer, or workspace identifier.
 
-The repository-kind source below is `repo-a`'s only root source. It carries the
-mandatory root P0 placement and one P1 invariant. Every other source is an
-area-kind source at a canonical non-root scope.
+The Version-3 source examples below illustrate Span's derived internal
+representation, not files that the repository user must author. The user-facing
+initialization input is the flat classification in technical design §17.2.
+The repository-kind source below is `repo-a`'s only root source; area-kind
+sources have canonical non-root scopes.
 
 ```json
 {
@@ -123,37 +125,15 @@ It may govern several descendant areas without declaring a descendant count.
 }
 ```
 
-## Ingress paths
+## Initialization ingress
 
-The bootstrap remains Version 2 navigation configuration and selects declaration
-sources; it owns no functional identity.
-
-```json
-{
-  "version": 2,
-  "declaration_sources": [
-    {"locator": ".span/repo-a-repository.json", "ranges": []},
-    {"locator": ".span/repo-a-area-a.json", "ranges": []},
-    {"locator": ".span/repo-a-areas.json", "ranges": []}
-  ]
-}
-```
-
-The equivalent direct member intent names the same whole-document sources:
-
-```json
-{
-  "repository_id": "repo-a",
-  "declaration_sources": [
-    {"locator": ".span/repo-a-repository.json", "ranges": []},
-    {"locator": ".span/repo-a-area-a.json", "ranges": []},
-    {"locator": ".span/repo-a-areas.json", "ranges": []}
-  ]
-}
-```
-
-Both paths resolve through the same decoder and graph validator and produce the
-same structural result.
+Supply the Version-1 Functional Pyramid classification document for each
+explicitly selected member, using the exact grammar in
+[technical design §17.2](technical-design.md#172-functional-pyramid-initialization-import).
+The examples above are produced by Span, not additional inputs. The existing
+Version-2 navigation bootstrap and direct member intent name the derived
+whole-document sources; initialization constructs both automatically. See
+[Install](install.md) for the governed initialization command and its status.
 
 ## Absent layer
 

@@ -7,7 +7,8 @@ for a campaign. They are **not user documentation and not product authority**.
 ## Current programme
 
 - [1.0.0 Beta 5](1.0.0-beta5.md) — current corrective prerelease programme on
-  `release/1.0.0-beta5`.
+  `release/1.0.0-beta5` (release history and release gates).
+- [Functional Pyramid governance implementation plan](functional-pyramid-governance-implementation-plan.md) — sole current task and acceptance plan for governed initialization, derived from the binding requirements documents.
 
 ## Historical programme records
 

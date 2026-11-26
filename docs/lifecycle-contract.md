@@ -1082,75 +1082,59 @@ Span has two related lifecycles in Version 1.
    does not replace it. Functional Pyramid orientation, support and change
    propagation are composed into its existing moments.
 
-Both lifecycles use only `ask`, `record` and `reconsider`. Repository
-installation/registration remains operational setup; Functional Pyramid adoption
-is governance lifecycle state.
+The public MCP surface remains `ask`, `record` and `reconsider`. Repository
+installation/registration is administrative setup. Explicit Functional Pyramid
+initialization composes that setup with the existing participation lifecycle;
+it adds neither a public MCP operation nor a participation writer.
 
 ### 7.1 Functional Pyramid initialization/adoption lifecycle
 
-This diagram shows the agent procedure needed to move repository-owned governance
-into an ACTIVE Functional Pyramid. Only `record(kind="functional_pyramid")`
-changes durable participation. Discovery and declaration authoring use ordinary
-Span/source/editor work; candidate validation is a pure `ask`.
+**Governed initialization contract.** The repository supplies one valid
+Functional Pyramid classification document per explicitly selected participating
+repository and requests governed initialization. The complete selected member
+set is explicit. The document is the Version-1 flat classification contract:
+`repository_id`, `document_ref`, `disposition` and, for a `place` row, `layer`,
+`scope`, `governing_documents`, `authority_kind`, `authority_status`; an
+`exclude` row carries `exclusion_reason` and no placement/authority fields.
+`ROOT` is the sole governing terminal for P0; other rows name qualified placed
+document identities. No derived declaration, binding, bootstrap, candidate
+payload, generated-file commit or separate activation command is required from
+the repository user. The document is not an additional MCP selector.
 
-The flat classification is an authoring input, not a lifecycle selector. A
-materialise-only installer step derives repository-owned Version-3 declarations,
-the derived authority-binding file and the bootstrap in `.span/` metadata; it
-changes no participation and writes no canonical document. The operator reviews
-and commits the derived inputs, installation consumes those committed inputs,
-and `record` ACTIVATE/REVISE is the only participation write. A Version-2
-ACTIVE member is revised, never re-activated.
+Span owns the complete mechanical journey, including installation, derivation,
+provisioning, participation establishment and verification. Ordinary installation
+without governed input does not activate participation. The same explicitly
+requested governed initialization can revise an existing instance; it cannot
+silently remove members, merge instances or infer participation from a file's
+presence. The existing candidate and participation `record` owners remain the
+sole validation/write path. Their canonical input and output contracts are
+unchanged by administrative orchestration.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> STATUS
-
-    STATUS --> ACTIVE: ACTIVE + VALID; no revision intended
-    STATUS --> EXCLUDED: EXCLUDED; no adoption intended
-    STATUS --> DISCOVER: UNCONFIGURED, ACTIVE/DEGRADED, or adoption/revision intended
-    EXCLUDED --> DISCOVER: later adoption intended
-
-    DISCOVER --> VALIDATE: complete candidate intent already established
-    DISCOVER --> DECLARE: declarations missing or incomplete
-
-    DECLARE --> REALIGN: repository-owned declarations updated
-    REALIGN --> VALIDATE: no actionable non-current disposition remains
-    REALIGN --> DISCOVER: more investigation/source repair required
-
-    VALIDATE --> DECLARE: declaration/graph findings require source repair
-    VALIDATE --> STATUS: registration/membership/version finding requires reorientation
-    VALIDATE --> ACTIVATE: activation_ready=true
-
-    ACTIVATE --> STATUS: write revalidation or CAS rejects
-    ACTIVATE --> VERIFY: activate/revise accepted
-
-    VERIFY --> DISCOVER: committed graph is DEGRADED or committed state mismatches
-    VERIFY --> REESTABLISH: exact VALID state + accepted write returned actionable dependent effects
-    VERIFY --> ACTIVE: exact VALID state + no actionable dependent effects
-
-    REESTABLISH --> ACTIVE: activate/revise effects are current
-    REESTABLISH --> EXCLUDED: deactivate effects are current
-
-    ACTIVE --> DISCOVER: revision needs governance discovery
-    ACTIVE --> VALIDATE: exact revision candidate already known
-    ACTIVE --> DEACTIVATE: explicit deactivation intended
-    DEACTIVATE --> REESTABLISH: accepted with actionable dependent effects
-    DEACTIVATE --> EXCLUDED: accepted with no actionable dependent effects
+    [*] --> INPUT: explicit governed initialization
+    INPUT --> BLOCKED: invalid or incomplete input
+    INPUT --> ESTABLISH: validated input and explicit member intent
+    ESTABLISH --> BLOCKED: operational or candidate failure
+    ESTABLISH --> VERIFY: accepted activation/revision or identical applied state
+    VERIFY --> BLOCKED: verification failure
+    VERIFY --> REESTABLISH: actionable semantic effects
+    VERIFY --> ACTIVE: exact ACTIVE + VALID and no outstanding effects
+    REESTABLISH --> ACTIVE: dispositions complete
+    REESTABLISH --> BLOCKED: unresolved semantic/operational obligation
 ```
 
-| Phase | Agent input / operation | Span-derived state | Output gate |
-| --- | --- | --- | --- |
-| STATUS | `ask(FunctionalPyramidSelector{repository_id|pyramid_id})` | durable participation, exact live instance/version/member projection and current structural health/findings | `FunctionalPyramidStatus`: ACTIVE+VALID with no intended revision → ACTIVE; ACTIVE+DEGRADED, UNCONFIGURED, or intended adoption/revision → DISCOVER/VALIDATE as applicable; EXCLUDED stays EXCLUDED unless adoption is intended |
-| DISCOVER | ordinary `ask`, explicit evidence admission and canonical source reads | evidence identity/current semantic orientation only; Span does not manufacture membership, placement scope or governing meaning | agent-held complete `FunctionalPyramidMemberIntent` set, including each placement's explicit directory scope, → VALIDATE; missing/incomplete repository-owned declarations → DECLARE; unresolved owner/authority question remains explicit |
-| DECLARE | external repository edit | no Span mutation | changed repository paths become the input to REALIGN |
-| REALIGN | `reconsider(changed_scope)`, once per directly edited repository, then ordinary investigate/record where required | containment/direct/indirect effects including governance effects and repository-bound contexts | `Changed` with no actionable non-current conclusions → VALIDATE; actionable effects must be re-established before validation; `Rejected` corrects the request; `Unavailable` is a blocker |
-| VALIDATE | `ask(FunctionalPyramidCandidateSelector{action,members,pyramid_id?,expected_version?})` | registration/membership/version checks, whole-document declaration validation, placement-graph and root-P0 validation | `FunctionalPyramidCandidate.activation_ready=true` → ACTIVATE; source/graph findings → DECLARE/DISCOVER; registration/membership/version findings → STATUS; `Rejected` fixes selector structure; `Unavailable` blocks |
-| ACTIVATE | `record(kind="functional_pyramid", action="activate"|"revise", ...)` | candidate revalidation, old/new participation delta, immutable dependent-effect refs, live affected projection and contexts | `FunctionalPyramidRecorded` → VERIFY while retaining its returned dependent effects/contexts for the post-write gate; `Rejected` → STATUS; pre-commit `Unavailable` blocks |
-| VERIFY | `ask(FunctionalPyramidSelector{pyramid_id})` using the accepted result's identity | current committed instance/version/members and structural health | exact accepted identity/version/members + VALID + no actionable effects from the accepted write → ACTIVE; exact+VALID with actionable effects → REESTABLISH; DEGRADED/mismatch → DISCOVER; `Unavailable` blocks |
-| REESTABLISH | use the `FunctionalPyramidRecorded.dependent_effects` update coordinates and per-repository `reestablishment_contexts`; ordinary investigate + `record(kind="understanding", ...)` as needed | current evidence plus freshly derived support for each affected conclusion | all accepted write effects CURRENT → ACTIVE for activate/revise or EXCLUDED for deactivate; remaining REASSESSMENT_REQUIRED/UNVERIFIABLE loops through investigation; operational inability is a named blocker |
-| DEACTIVATE | `record(kind="functional_pyramid", action="deactivate", pyramid_id, expected_version)` | atomic ACTIVE→EXCLUDED participation effects plus immutable/live dependent effects | accepted with no actionable dependent effects → EXCLUDED; accepted with actionable effects → REESTABLISH; `Rejected` reorients through STATUS; `Unavailable` blocks |
-| ACTIVE | ordinary Span runtime | participation remains ACTIVE; health/route/support remain live independent projections | ordinary §7.2 lifecycle |
-| EXCLUDED | optional `record(... action="exclude")` when not ACTIVE, or accepted deactivation after effect disposition | explicit non-participation | ordinary semantic Span lifecycle remains available without a governing projection; later adoption begins at DISCOVER |
+| Phase | Responsibility | Output gate |
+| --- | --- | --- |
+| INPUT | Repository owner supplies the classification and requests initialization; Span validates the complete input and selected membership | Invalid, ambiguous or incomplete governance is reported to the owner; no inferred authority |
+| ESTABLISH | Span composes its installation, derived-input provisioning, candidate validation and existing ACTIVATE/REVISE writer | Accepted receipt or verified identical state; rejection/unavailability is explicit |
+| VERIFY | Span verifies exact applied identity/version/membership, live health, operational readiness and input provenance | ACTIVE + VALID and no outstanding operational failure; preserve accepted receipt if verification fails |
+| REESTABLISH | Span reports canonical dependent effects and contexts; agent performs only semantic investigation/disposition where required | No outstanding actionable effect, or explicit blocker; no automatic semantic judgments |
+| ACTIVE | Ordinary §7.2 runtime | Existing public operations |
+
+Explicit deactivation/exclusion remain existing lifecycle `record` actions,
+with their ordinary dependent-effect obligations. Governance document edits
+outside initialization remain subject to ordinary changed-scope reconsideration.
 
 A failed validation never changes participation. Post-write VERIFY is exact
 state/health verification, not sampling: candidate validation already owns graph
@@ -1163,11 +1147,12 @@ initialization/revision/deactivation task is complete. No extra `reconsider`
 call is required for the participation write itself because the write already
 returns that canonical affected projection.
 
-If VERIFY/repair requires another DISCOVER→DECLARE→REALIGN→VALIDATE→write loop,
-an earlier accepted write's immutable `dependent_effect_refs` remain part of
-the task's outstanding obligation until their live projection is no longer
-actionable or has been re-established CURRENT. The agent keeps the returned
-`FunctionalPyramidReceiptSelector` as the public durable handoff.
+If verification/recovery requires another initialization attempt or a later
+participation write, an earlier accepted write's immutable
+`dependent_effect_refs` remain outstanding until their live projection is no
+longer actionable or has been re-established CURRENT. The installer retains the
+accepted receipt identity for the agent's existing `FunctionalPyramidReceiptSelector`
+handoff.
 `ask(FunctionalPyramidReceiptSelector)` reconstructs the immutable accepted
 `dependent_effect_refs`; it does not manufacture live contexts. When the agent
 still has the original canonical write payload, replaying that same accepted
@@ -1204,11 +1189,11 @@ view and is not an uncovered or empty-governance result. A structural defect may
 leave a returned route `UNRESOLVED`, but a participating directory never
 receives an absence of governance.
 
-The initialization skill may guide DISCOVER → DECLARE → REALIGN → VALIDATE →
-ACTIVATE → VERIFY → REESTABLISH when the accepted write returns actionable
-effects, but it does
-not own a second Functional Pyramid definition and it does not bypass the
-ordinary Span lifecycle while interpreting repository sources.
+The initialization skill guides the owner to the governed initialization entry
+point and handles genuine input or semantic-effect obligations. It never
+reconstructs the derived configuration or repeats the mechanical setup phases
+as agent-managed MCP calls. Explicit lower-level lifecycle operations retain
+their existing contracts for separately authorized participation changes.
 
 ### 7.2 Span runtime and curation lifecycle with Functional Pyramid integration
 

@@ -36,12 +36,11 @@ equality, typed duplicate detection before deduplication, Version-2 candidate
 rejection and ACTIVE degradation, and placement-less finding relevance to the
 affected route only.
 
-**End-to-end initialization amendment (2026-11-26).** FD-88A–C add the flat
-classification ingress, the materialise-only authoring step, derived authority
-bindings and the public reason/paging boundary. These cases are not yet assigned
-FA rows or live tests; the implementation plan's VS-INIT, VS-PUBLIC and VS-E2E
-cases are the traceability owner until those tests land. No FA completion is
-claimed for them.
+**End-to-end initialization amendment.** FD-88A–C and functional acceptance
+cases 67–72 specify the single document-driven governed installation, strict
+preflight, replay/revision, metadata ownership, public projection and paging.
+These new acceptance rows are pending until the installed tests land; historical
+partial V3 verification does not close them.
 
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
@@ -57,7 +56,7 @@ claimed for them.
 | FA-10 | Same semantic scope | `test_exact_question_selector_does_not_paraphrase_match`; `test_declared_symbol_boundary_is_exact_functional_pyramid_scope`; `test_document_locator_never_infers_applicability` |
 | FA-11 | Additive composition | `test_root_totality_and_additive_ancestor_composition`; `test_directory_without_own_placement_inherits_all_ancestors` |
 | FA-12 | Sibling and descendant exclusion | `test_descendant_placement_does_not_apply_to_ancestor`; `test_root_totality_and_additive_ancestor_composition` |
-| FA-13 | Disconnected applicability | `test_disconnected_placements_apply_only_at_their_declared_scopes` |
+| FA-13 | Disconnected scope and unique placement | `test_disconnected_placements_apply_only_at_their_declared_scopes`; duplicate placement evidence in FA-17 |
 | FA-14 | Multi-path and broad semantic scope | `test_multi_path_summary_is_union_not_intersection_or_last_path`; `test_repository_wide_semantic_scope_selects_all_placements` |
 | FA-15 | Membership is not applicability | `test_unrelated_member_does_not_change_route_identity`; `test_route_identity_tracks_applicability_not_pyramid_version` |
 | FA-16 | Cross-repository authority | `test_installed_cross_repository_governance_journey` |
@@ -75,7 +74,7 @@ claimed for them.
 | FA-28 | Runtime lifecycle preservation | `test_three_tool_journey_and_restart`; `test_reconsider_record_succeeds_without_an_intervening_ask`; `test_challenge_raised_by_reconsider_is_settled_by_record` |
 | FA-29 | Governance-source edit lifecycle | `test_authority_source_change_is_considered_not_forced_stale`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_normative_confirm_reestablishes_changed_server_route_support` |
 | FA-30 | Lifecycle-compliance hooks | `test_session_entry_composes_four_participation_health_branches_once`; `test_changed_scope_projection_receives_complete_input_before_render_bound`; `test_changed_scope_preview_reuses_projection_without_context_issuance`; `test_governance_only_change_crosses_physical_repository_boundary`; `test_codex_merge_adds_entries_and_dedupes`; `test_codex_apply_patch_parser_uses_only_documented_patch_markers`; `test_codex_post_tool_emits_structured_context_for_complete_native_scope`; `test_codex_post_tool_keeps_reconsider_obligation_when_preview_is_clean`; `test_codex_post_tool_reports_incomplete_native_scope_without_guessing`; `test_claude_post_tool_uses_documented_absolute_path_and_structured_context`; `test_claude_post_tool_reports_incomplete_native_scope_without_guessing`; `test_packaged_opencode_plugin_reaches_real_installed_hook_store`; `test_packaged_assets_are_generated_from_canonical_sources`; `test_hook_source_uses_canonical_changed_scope_projection`; `test_hook_source_has_no_semantic_writer_or_builder`; `tests/plugin/test_span_hooks_notice.mjs` (multi-edit union, native multi-file patch, explicit incomplete input, no session eviction, clean-preview/clean-completion handoff, stale-notice invalidation with retained-union retry, singular delivery) |
-| FA-31 | Initialization handoff | `test_activation_commits_members_effects_and_receipt`; `test_installed_lifecycle_over_stdio`; `test_installed_cross_repository_governance_journey` |
+| FA-31 | Initialization handoff | `test_activation_commits_members_effects_and_receipt`; `test_installed_lifecycle_over_stdio`; `test_installed_cross_repository_governance_journey`; document-only installed handoff pending FA-67 |
 | FA-32 | One active instance per repository | `test_concurrent_overlapping_activation_serializes_to_one_active_instance`; `test_duplicate_unregistered_and_other_active_members_accumulate` |
 | FA-33 | Three-tool host surface | `test_only_the_three_core_tools_are_registered`; `test_installed_lifecycle_over_stdio` |
 | FA-34 | No uncovered answer | `test_root_totality_and_additive_ancestor_composition`; `test_directory_without_own_placement_inherits_all_ancestors`; `test_installed_cross_repository_governance_journey` |
@@ -87,7 +86,7 @@ claimed for them.
 | FA-40 | Operational route failure while ACTIVE | `test_functional_route_support_distinguishes_route_states`; `test_repository_unavailability_is_graph_state` |
 | FA-41 | Pyramid-write replay projection | `test_activation_replay_is_idempotent_and_conflict_is_rejected`; `test_installed_cross_repository_governance_journey` |
 | FA-42 | Pyramid concurrency | `test_concurrent_overlapping_activation_serializes_to_one_active_instance`; `test_revision_compare_and_set_and_deactivate` |
-| FA-43 | Initialization declaration edits use ordinary re-alignment | `test_functional_pyramid_skill_covers_result_driven_lifecycle`; `test_governance_only_change_crosses_physical_repository_boundary` |
+| FA-43 | External governance edits use ordinary re-alignment | `test_governance_only_change_crosses_physical_repository_boundary`; generated initialization effect integration pending FA-69/70 |
 | FA-44 | Conformance uses the normative input contract | `test_normative_create_derives_route_and_all_applicable_authorities`; `test_governed_normative_record_never_uses_empty_uncovered_route` |
 | FA-45 | Acceptance is not runtime completion | `test_unresolved_governance_is_retained_but_qualified_unverifiable`; `test_owner_read_failure_reports_unavailable_without_rejecting_acceptance`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
 | FA-46 | Participation-write acceptance is not initialization completion | `test_installed_cross_repository_governance_journey`; `test_functional_pyramid_skill_covers_result_driven_lifecycle` |
@@ -111,5 +110,11 @@ claimed for them.
 | FA-64 | Migrated current knowledge is pending | `test_schema14_current_revision_migrates_as_pending_capture` |
 | FA-65 | Three-tool host surface remains exact | `test_only_the_three_core_tools_are_registered` |
 | FA-66 | Installed lifecycle closes the loop | `test_installed_cross_repository_governance_journey` |
+| FA-67 | Document-only governed initialization | Pending — S-VERIFY-02 |
+| FA-68 | Strict preflight | Pending — S-INIT-01/02, S-VERIFY-02 |
+| FA-69 | Repeat and revise | Pending — S-INIT-03, S-VERIFY-02 |
+| FA-70 | Ownership and interruption | Pending — S-INIT-02/03, S-VERIFY-02 |
+| FA-71 | Public findings | Pending — S-PUBLIC-01 |
+| FA-72 | Complete bounded retrieval | Pending — S-PUBLIC-02 |
 The matrix names enforcement boundaries; the CI execution receipt remains the
 evidence that those tests passed for a particular candidate.

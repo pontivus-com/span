@@ -19,41 +19,23 @@ Follow [Install and connect](install.md), then verify the setup:
 span-install --verify-only
 ```
 
-Keep the reported repository ID. A successful installation means Span is ready
-to work with the repository; it does not mean the repository has already been
-semantically understood or that project governance is configured.
+Keep the reported repository ID. Ordinary installation verifies operational
+readiness, not semantic understanding or governed participation.
 
 ## 2. Resolve project guidance before governed work
 
-Repository installation and Functional Pyramid participation are separate.
+For governed work, supply the repository's Functional Pyramid classification
+and request governed initialization as specified in [Install](install.md).
+Span establishes and verifies participation automatically. The owner repairs
+only genuine input defects; the agent handles any returned semantic obligations
+through the existing lifecycle. No generated setup inputs or manual candidate/
+activation sequence are required. The Beta-5 governed command is a target until
+its installed acceptance passes.
 
-Check the repository's Functional Pyramid status before the first governed
-investigation.
-
-- **ACTIVE + VALID** — project governance is initialized; proceed.
-- **ACTIVE + DEGRADED** — repair the declared governance before relying on it.
-- **UNCONFIGURED** — if the repository should use project governance, complete
-  Functional Pyramid initialization/adoption before governed work.
-- **EXCLUDED** — proceed with the descriptive Span lifecycle without a governing
-  projection unless adoption is later intended.
-
-Initialization/adoption establishes the declared map from software scope to the
-canonical project goals, principles, contracts, functional design, and technical
-design. Span keeps their identity, applicability, relationships, and change
-effects; the canonical documents remain at their owning sources.
-
-For an UNCONFIGURED repository intended for governed use, the sequence is:
-
-1. inspect current Functional Pyramid status;
-2. discover the intended member repositories and declaration sources;
-3. add or repair repository-owned declarations where needed;
-4. validate the complete candidate;
-5. activate it;
-6. verify the accepted pyramid is ACTIVE + VALID; and
-7. dispose any dependent effects returned by the accepted write.
-
-The installed `span-functional-pyramid` skill guides that lifecycle. Exact
-selectors and write forms are in the [MCP reference](mcp.md).
+- **ACTIVE + VALID** — proceed when outstanding semantic obligations are disposed.
+- **ACTIVE + DEGRADED** — repair the reported governance/operational defect.
+- **UNCONFIGURED** — request governed initialization if intended.
+- **EXCLUDED** — descriptive lifecycle unless adoption is explicitly requested.
 
 ## 3. Pick a real engineering task
 

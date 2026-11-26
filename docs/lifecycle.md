@@ -40,12 +40,11 @@ governance repair before the repository is treated as governance-ready.
 ## Initialize governing context before governed runtime
 
 Functional Pyramid initialization/adoption establishes or revises the explicit
-relationship from software scope to canonical project goals, principles,
-contracts, functional design, and technical design.
-
-Only explicit lifecycle actions change durable participation. Span does not
-infer governance from repository layout, filenames, or semantic similarity, and
-it does not copy governing prose into a second authority store.
+relationship from software scope to canonical project governance. Supply the
+Functional Pyramid classification for each selected member and request governed
+initialization through [installation](install.md). Span performs the mechanical
+setup and verifies the outcome; ordinary registration alone is not activation.
+No inferred authority or competing documentation corpus is created.
 
 Once a repository is ACTIVE + VALID, ordinary `ask` resolves the governing
 projection for the same software scope as the semantic request. UNCONFIGURED and

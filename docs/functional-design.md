@@ -613,45 +613,42 @@ navigation/impact orientation only; it does not predict what a proposed edit
 will do and never creates a second dependency registry. *(G3, G7, F4, F11, L15,
 L16)*
 
-**FD-88A — Initialization imports one approved classification and materialises
-the repository-owned declarations.**
-Initialization accepts one flat classification file per participating repository.
-The file is versioned (`version: 1`) and carries one row per canonical document:
-`repository_id`, `document_ref`, `disposition`, and, for a `place` row, `layer`,
-`scope`, `governing_documents`, `authority_kind` and `authority_status`; an
-`exclude` row carries `exclusion_reason` and no placement fields.
-`governing_documents` names `ROOT` only for a P0 row, or one or more document
-identities placed in the complete member classification. An `exclude` row
-produces no placement and remains the exclusion record. The classification is
-the owner's decision record; it is not a runtime source. Rows are unique per
-canonical document. A document whose statements span several layers or scopes is
-split or extracted before it can be classified.
+**FD-88A — Governed initialization establishes the Functional Pyramid from the
+repository-supplied input.**
+Decode the complete member set under lifecycle §7.1. Rows are unique per
+canonical document. A document whose statements span several layers or scopes
+is split or extracted by its owner before it can be classified. Reject unknown,
+ambiguous, incomplete, conflicting or unreadable inputs; never infer missing
+semantic or authority decisions. Resolve each governing identity against exactly
+one placed document in the complete explicitly selected member set. Every
+selected member must satisfy FD-66/FD-86, including a member with no place rows.
 
-Span decodes the complete member set strictly, resolves cross-repository
-governing identities across the member files, and derives repository-kind and
-area-kind Version-3 sources, document membership, one placement per document,
-governing placement coordinates, ordering, one whole-document authority binding
-per placement and the Version-2 bootstrap. It validates the complete derived
-source set and binding coverage before writing. The owner supplies the layer,
-scope, governing identities, authority kind/status and place/exclude decision;
-Span derives every structural carrier and never chooses authority. A binding
-uses the document reference as its repository and locator, has no section/span,
-carries the row's authority kind and status, and uses empty applicability and no
-declared precedence. Bindings for documents outside the classification are
-preserved; a classified document's binding is replaced by the derived
-whole-document binding, and an existing non-whole-document binding for a
-classified document is a conflict.
+Derive repository-kind and area-kind sources, document membership, one
+placement per document, governing coordinates, ordering, one whole-document
+authority binding per placement and exact navigation/member-intent references.
+Use the document's repository and locator, no section/span, the supplied
+kind/status, empty applicability and no declared precedence. Validate the
+complete derived graph and binding coverage before mutation. An exclude row
+creates no placement or derived authority binding. Preserve ordinary authority
+outside the derived placed set. Remove a formerly derived binding whose
+placement is removed only when its derivation ownership is established; do not
+revoke independently owned authority because the document is excluded or
+omitted. A competing or anchored binding for a placed document, or uncertain
+binding ownership, is a conflict rather than silent replacement.
 
-The derived sources, bootstrap and binding file are materialised in the
-repository's Span-owned `.span/` metadata by a materialise-only authoring step.
-The step writes a validated file set, refuses to overwrite a file it does not
-own, and never performs a participation write. The operator reviews the derived
-mapping, commits the `.span/` inputs, and installation consumes those committed
-inputs with ordinary provenance verification. Participation remains the existing
-atomic `record` ACTIVATE/REVISE action. A classified revision of an ACTIVE
-Version-2 instance is a REVISE of that instance, never a second activation.
-Transcription only: ambiguous, incomplete or conflicting rows fail. *(G7, G8,
-F11, F12, L11–L14)*
+Select ACTIVATE for a fresh eligible explicitly selected member set. For the
+same complete member set of one existing ACTIVE instance, select REVISE if its
+applied input changed, or verify the identical applied state without a new
+participation version. Repair an operationally degraded identical state before
+claiming success. A partial active-member selection or members belonging to
+different ACTIVE instances fails; a member-set change requires its own explicit
+lifecycle intent. A Version-2 ACTIVE instance is revised, never re-activated.
+
+Run the existing candidate/write path and verify the exact accepted state. A
+failure is not successful initialization; preserve accepted receipt identity and
+report the actual operational state and outstanding obligations. Re-running the
+same input does not duplicate an accepted write. Never create semantic
+conclusions to clear effects. *(G7, G8, F1, F4, F7, F11, F12, L4, L11–L16)*
 
 **FD-88B — Runtime results expose only the public governance reasons.**
 The public Functional Pyramid result carriers (`FunctionalPyramidView.unresolved`,
@@ -758,20 +755,12 @@ second semantic writer, route carrier or dependency-effect representation.
 
 **FD-94 — Lifecycle notices compose Functional Pyramid obligations without
 becoming governance.**
-Repository initialization registers the canonical root. A materialise-only
-authoring step may derive repository-owned Version-3 declarations, the derived
-authority-binding file and a Version-2 bootstrap from one owner-approved flat
-classification per participating repository (FD-88A). It derives only the
-structural carriers from that explicit classification: it never infers a scope,
-document identity or relationship from the repository tree. Initialization
-never activates participation. The durable state remains `UNCONFIGURED` until an
-accepted activation validates the declarations, whole-document authority
-bindings, the repository-root P0 placement and cross-repository relationships.
-
-During initialization/discovery the declaring owner supplies each placement's
-explicit directory scope, governing document identities, authority kind/status
-and place/exclude decision in the classification ledger. Span never infers a
-scope from where the document sits.
+Ordinary repository initialization registers the canonical root and leaves
+participation unchanged. Explicit governed initialization is FD-88A; it owns
+mechanical establishment of the requested instance, not merely registration.
+The source of governance remains the owner-supplied classification and
+canonical documents. Hooks observe the result; they never perform setup or
+participation writes.
 
 At session start/resume/compact, canonical participation and live health select
 only the Functional Pyramid obligation: UNCONFIGURED directs governed use to the
@@ -1445,9 +1434,10 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 12. **Sibling and descendant exclusion.** Directory lookup excludes
     sibling-only and descendant-only placements while retaining every containing
     ancestor scope and the repository root.
-13. **Disconnected applicability.** One document may be placed at several
-    unrelated directory scopes; each directory receives it only where its own
-    declared scope contains that directory.
+13. **Disconnected scope and unique placement.** Distinct documents placed at
+    unrelated scopes apply only to their declared scope and its descendants.
+    Repeating a canonical document in multiple scopes/layers of one declaring
+    repository is invalid under FD-66.
 14. **Multi-path and broad semantic scope.** Resolution unions placements across
     path-derived directories while preserving per-path provenance internally. The view's
     `declared_layers` is the ordered union of layers in that complete route
@@ -1533,17 +1523,17 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     obligations are exercised. Explicit MCP-result transitions are not
     rediscovered, and no hook mutates semantics, curation, participation,
     governance or support or issues re-establishment contexts.
-31. **Initialization handoff.** After accepted activation/revision, lifecycle
-    verification succeeds only when `FunctionalPyramidSelector` returns the
-    exact committed pyramid identity/version/member view with live health VALID;
-    no undefined representative-route sample is required.
+31. **Initialization handoff.** Governed initialization verifies exact committed
+    pyramid identity/version/member view, live health VALID, readiness and
+    provenance; no caller-managed activation or undefined route sample is
+    required (FD-88A).
 32. **One active instance per repository.** Attempting to activate/revise a
     member already ACTIVE in another pyramid produces
     `MEMBER_ALREADY_ACTIVE` and cannot create ambiguous repository-scoped
     governing orientation.
-33. **Three-tool host surface.** Initialization, governed development and
-    re-alignment are all reachable through `ask`, `record` and `reconsider`;
-    no authority/pyramid MCP operation is advertised.
+33. **Three-tool host surface.** Governed initialization uses the existing
+    administrative entry and canonical participation writer; governed runtime
+    and re-alignment use `ask`, `record`, `reconsider`. No new MCP tool exists.
 34. **No uncovered answer.** Every directory in an ACTIVE repository returns a
     Functional Pyramid result. A directory whose only applicable placement is the
     repository root returns that placement. `UNCOVERED_PATH`,
@@ -1582,9 +1572,10 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 42. **Pyramid concurrency.** Concurrent revise/deactivate operations obey pyramid
     version compare-and-set, and concurrent overlapping activations/revisions
     cannot make one repository ACTIVE in more than one instance.
-43. **Initialization declaration edits use ordinary re-alignment.** Every
-    repository declaration edit in lifecycle §7.1 runs through changed-scope
-    reconsideration and disposition before candidate validation proceeds.
+43. **External governance edits use ordinary re-alignment.** External edits
+    remain subject to changed-scope reconsideration; generated initialization
+    effects are disposed through their canonical owners without requiring a
+    manual declaration-authoring phase or duplicating participation effects.
 44. **Conformance uses the normative input contract.** A conformance judgment
     is recorded with `assertion_nature=NORMATIVE`; in an ACTIVE repository it
     receives the same server-derived route/authority support as every other
@@ -1654,8 +1645,24 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     demonstrates capture → pending discovery → curation → fresh-session reuse →
     change → reconsider → semantic-preserving confirm/reuse, and a semantic
     correction path that requires re-curation.
-
-
+67. **Document-only governed initialization.** From a fresh installation, the
+    supplied classification documents plus explicit member selection suffice;
+    exact derived governance, authority, ACTIVE/VALID, provenance and ordinary
+    runtime are observable without caller-generated intermediate configuration.
+68. **Strict preflight.** Invalid classification, identity, membership, authority
+    or graph input fails before setup mutation; no semantic repair is inferred.
+69. **Repeat and revise.** Identical valid input is a no-op for participation;
+    changed input for the same member set revises the exact instance, including
+    V2 cutover. Conflicts and failed verification remain explicit; accepted
+    receipts and actionable effects survive recovery.
+70. **Ownership and interruption.** Owned metadata can legitimately change;
+    unowned conflicts fail. Ordinary authority survives exclusion; interrupted
+    setup never reports successful governed initialization or loses its accepted
+    receipt identity. Ordinary install and observation modes do not activate.
+71. **Public findings.** FD-88B applies across all public governance results;
+    internal reasons/locators never leak.
+72. **Complete bounded retrieval.** FD-88C directory continuation returns all
+    applicable placements in deterministic pages with complete unresolved state.
 ## 16. What this layer does not define
 
 Layer 3 does not choose storage layout, wire encoding, transport framing,

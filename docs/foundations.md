@@ -393,11 +393,14 @@ DEGRADED while an unaffected route still resolves. A DEGRADED health state
 reports a structural defect in the declared graph, not a directory without
 governance.
 
-Activation or revision is based only on explicit repository-owned declarations.
-Canonical governing content remains at its owner. Span retains the instance
-membership, references, relationships, placement scopes and identities required to
-resolve and maintain the graph; it does not turn the graph into a second
-documentation corpus.
+Activation or revision is based only on explicit repository-owned governance
+input. The repository supplies governance decisions; Span derives and manages
+the structural representation and performs the mechanical establishment of
+that governance. Explicit governed initialization authorizes the existing
+participation write; registration alone, ordinary runtime and hooks do not.
+Canonical governing content remains at its owner. Span retains only the
+membership, references, relationships, placement scopes and identities needed
+to resolve and maintain the graph, not a second documentation corpus.
 
 *Demonstration:* registering or adding a repository changes no applicable route
 unless a declared relationship makes it relevant. If a still-declared ACTIVE

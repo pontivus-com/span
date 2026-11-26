@@ -44,10 +44,12 @@ Technical Design §22).
 7. `READY` means the repository store, required installation capabilities and
    provider are operationally available. It is not semantic coverage,
    correctness, Functional Pyramid participation, or completeness.
-8. Repository registration and Functional Pyramid participation are separate.
-   A registered ready repository is UNCONFIGURED until explicitly EXCLUDED or
-   ACTIVATED through the ordinary three-tool lifecycle. Runtime open never
-   creates or changes participation.
+8. Registration alone and Functional Pyramid participation remain distinct.
+   Ordinary installation preserves existing participation. Explicit governed
+   initialization composes installation and the existing participation writer
+   according to lifecycle §7.1 and TD §17.2. Runtime open never initializes or
+   changes participation. The governed user supplies only the classification
+   and explicit initialization intent; generated inputs are Span-owned.
 9. Installer authority ingress is repository-qualified:
    `--authority-seeds-file REPOSITORY_ID PATH` and
    `--authority-bindings-file REPOSITORY_ID PATH`. Files contain strict JSON

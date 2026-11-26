@@ -132,7 +132,8 @@ carried code scope; `support` remains the complete dependency set and
 `observation_id` remains exclusive. `actions` is for understanding updates and `action` for surface or Functional
 Pyramid lifecycle writes. Those are semantic fields, not separate tools.
 Operational repository installation/registration belongs to the installer;
-Functional Pyramid participation is governed through the ordinary MCP lifecycle.
+explicit governed initialization composes it with the existing participation
+writer (lifecycle §7.1, TD §17.2). Ordinary MCP lifecycle contracts are unchanged.
 Structural navigation belongs to the host. Any other
 operation name follows the ordinary unknown-tool path. Span carries no
 retired-name map, aliases, compatibility grammar, or replacement routing for

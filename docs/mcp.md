@@ -88,10 +88,10 @@ same tool:
   whole-document Version-3 sources; the optional bootstrap remains Version-2
   navigation only. Validation and graph findings use the public reason
   vocabulary; internal declaration-source reasons and locators are never
-  returned. The installer may derive the Version-3 sources from a repository
-  flat classification ledger; materialisation is an installer authoring step,
-  not an MCP operation. See the
-  [neutral worked example](functional-pyramid-example.md).
+   returned. Governed initialization derives sources, authority and member
+   intent from the supplied Functional Pyramid classification and invokes the
+   existing lifecycle owners automatically; see [installation](install.md) and
+   the [neutral worked example](functional-pyramid-example.md).
 - `FunctionalPyramidReceiptSelector` retrieves the exact installation-scoped
   acceptance receipt for a Functional Pyramid write.
 

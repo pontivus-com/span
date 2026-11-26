@@ -204,12 +204,30 @@ Reload OpenCode after changing its MCP configuration.
 For plugin scope, path selection, relocation, and upgrade rules, see
 [Advanced OpenCode configuration](#advanced-opencode-configuration).
 
-## Optional project-authority configuration
+## Governed installation (Beta-5 target; pending implementation)
 
-Use this installer input when a repository already has explicit authority seeds
-or bindings that Span should provision. It does not activate Functional Pyramid
-participation; a successfully installed repository remains UNCONFIGURED until
-the governance lifecycle explicitly activates or excludes it.
+Provide the repository-owned Functional Pyramid classification document described
+in [lifecycle §7.1](lifecycle-contract.md#71-functional-pyramid-initializationadoption-lifecycle)
+and [technical design §17.2](technical-design.md#172-functional-pyramid-initialization-import).
+The target command is:
+
+```bash
+span-install --repo /work/repo-a \
+  --functional-pyramid-classification-file repo-a /work/repo-a/.span/functional-pyramid-classification.json
+```
+
+For multiple members, repeat `--repo` and the classification mapping for each
+explicitly selected member. Span performs all mechanical initialization and
+reports the verified outcome or exact blocker/semantic-effect handoff. Do not
+prepare or commit derived declaration, bootstrap or binding files or issue a
+separate activation command. Ordinary installation without governed input
+remains non-activating. This syntax is the target contract, not a claim that
+this development head has implemented it.
+
+## Optional ordinary project-authority configuration
+
+Use this independent input for explicit ordinary authority seeds or bindings.
+Do not provide a competing authority-binding input for a governed member.
 
 Authority input is repository-qualified:
 
@@ -239,9 +257,9 @@ For each repository and authority family:
 All deterministic decoding and routing validation completes before the first
 repository-store mutation.
 
-Provisioning establishes repository state but does not automatically activate
-Functional Pyramid participation. A newly registered repository remains outside
-an active pyramid until that participation is explicitly recorded.
+Ordinary provisioning does not activate Functional Pyramid participation.
+Explicit governed installation continues through the initialization contract
+above; registration by itself is not governed initialization completion.
 
 ## What installation provisions
 
