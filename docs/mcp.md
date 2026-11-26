@@ -75,15 +75,22 @@ same tool:
 - `FunctionalPyramidDirectorySelector` returns the governing document list for
   one existing repository-relative directory, including `.` for the root: the
   ordered placements (document reference, layer, scope), the declared/absent
-  layer summary and any unresolved findings. It includes every declared
+  layer summary and any unresolved public findings. It includes every declared
   placement whose scope contains that directory, including ancestor and root
   placements; no directory in an ACTIVE repository returns an uncovered or
-  empty governing result. Internal resolution state (routes, downstream
-  dependencies, per-path provenance, authority bindings) is never returned.
+  empty governing result. An oversized list returns `next_after`; the same
+  selector accepts that token as `after` and returns the next deterministic
+  page. Internal resolution state (routes, downstream dependencies, per-path
+  provenance, authority bindings), internal FD-71 reasons and declaration
+  locators are never returned.
 - `FunctionalPyramidCandidateSelector` validates an ACTIVATE or REVISE proposal
   without persisting participation. Each member's `declaration_sources` name
   whole-document Version-3 sources; the optional bootstrap remains Version-2
-  navigation only. See the
+  navigation only. Validation and graph findings use the public reason
+  vocabulary; internal declaration-source reasons and locators are never
+  returned. The installer may derive the Version-3 sources from a repository
+  flat classification ledger; materialisation is an installer authoring step,
+  not an MCP operation. See the
   [neutral worked example](functional-pyramid-example.md).
 - `FunctionalPyramidReceiptSelector` retrieves the exact installation-scoped
   acceptance receipt for a Functional Pyramid write.

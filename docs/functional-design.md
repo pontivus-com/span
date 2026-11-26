@@ -151,12 +151,11 @@ placement in the repository. The resulting route is the union of the
 per-directory selections, and provenance retains the path or boundary that
 selected each placement.
 
-Scope is explicit declaration input. The declaring owner supplies it during
-initialization, either directly or from an explicit scope declaration carried
-by the canonical document. Absolute paths, traversal outside the repository and
-ambiguous repository identity are rejected. Semantic classification, model
-judgment, file-name heuristics and structural proximity never participate.
-*(G1, G4, G7, F11, F12, L12–L13)*
+Scope is explicit declaration input. The declaring owner supplies it in the
+approved classification ledger during initialization. Absolute paths, traversal
+outside the repository and ambiguous repository identity are rejected. Semantic
+classification, model judgment, file-name heuristics and structural proximity
+never participate. *(G1, G4, G7, F11, F12, L12–L13)*
 
 **FD-63 — Applicable-set construction is monotone.**
 For one normalized directory, start with an empty placement set and walk the
@@ -537,9 +536,9 @@ unchanged.
 
 Before ACTIVATE/REVISE/DEACTIVATE commits, Span computes the deterministic
 participation changes and FD-79 semantic dependent effects against the same
-transaction decision. For the Beta-5 Version-1 → Version-2 cutover, a REVISE
-whose current ACTIVE declarations are undecodable solely because they are
-Version-1 rule declarations validates the replacement Version-2 candidate
+transaction decision. In the historical Beta-5 Version-1 → Version-2 cutover, a
+REVISE whose current ACTIVE declarations were undecodable solely because they
+were Version-1 rule declarations validated the replacement Version-2 candidate
 without translating or reconstructing the old graph. Its old-side route effect
 root is every retained current normative revision whose existing
 FunctionalRouteSupport is bound to the target pyramid identity; those revisions
@@ -614,6 +613,94 @@ navigation/impact orientation only; it does not predict what a proposed edit
 will do and never creates a second dependency registry. *(G3, G7, F4, F11, L15,
 L16)*
 
+**FD-88A — Initialization imports one approved classification and materialises
+the repository-owned declarations.**
+Initialization accepts one flat classification file per participating repository.
+The file is versioned (`version: 1`) and carries one row per canonical document:
+`repository_id`, `document_ref`, `disposition`, and, for a `place` row, `layer`,
+`scope`, `governing_documents`, `authority_kind` and `authority_status`; an
+`exclude` row carries `exclusion_reason` and no placement fields.
+`governing_documents` names `ROOT` only for a P0 row, or one or more document
+identities placed in the complete member classification. An `exclude` row
+produces no placement and remains the exclusion record. The classification is
+the owner's decision record; it is not a runtime source. Rows are unique per
+canonical document. A document whose statements span several layers or scopes is
+split or extracted before it can be classified.
+
+Span decodes the complete member set strictly, resolves cross-repository
+governing identities across the member files, and derives repository-kind and
+area-kind Version-3 sources, document membership, one placement per document,
+governing placement coordinates, ordering, one whole-document authority binding
+per placement and the Version-2 bootstrap. It validates the complete derived
+source set and binding coverage before writing. The owner supplies the layer,
+scope, governing identities, authority kind/status and place/exclude decision;
+Span derives every structural carrier and never chooses authority. A binding
+uses the document reference as its repository and locator, has no section/span,
+carries the row's authority kind and status, and uses empty applicability and no
+declared precedence. Bindings for documents outside the classification are
+preserved; a classified document's binding is replaced by the derived
+whole-document binding, and an existing non-whole-document binding for a
+classified document is a conflict.
+
+The derived sources, bootstrap and binding file are materialised in the
+repository's Span-owned `.span/` metadata by a materialise-only authoring step.
+The step writes a validated file set, refuses to overwrite a file it does not
+own, and never performs a participation write. The operator reviews the derived
+mapping, commits the `.span/` inputs, and installation consumes those committed
+inputs with ordinary provenance verification. Participation remains the existing
+atomic `record` ACTIVATE/REVISE action. A classified revision of an ACTIVE
+Version-2 instance is a REVISE of that instance, never a second activation.
+Transcription only: ambiguous, incomplete or conflicting rows fail. *(G7, G8,
+F11, F12, L11–L14)*
+
+**FD-88B — Runtime results expose only the public governance reasons.**
+The public Functional Pyramid result carriers (`FunctionalPyramidView.unresolved`,
+`FunctionalPyramidStatus.findings`, `FunctionalPyramidCandidate.graph_findings`)
+use one public finding: `reason`, `detail`, `recovery`, optional
+`repository_id`, optional `directory` and optional `placement`. The public
+governance reason vocabulary is exactly `DECLARATION_INVALID`,
+`DOCUMENT_SET_INCOMPLETE`, `DOCUMENT_UNAVAILABLE`, `DOCUMENT_AMBIGUOUS` and
+`GOVERNANCE_UNAVAILABLE`. Candidate lifecycle findings add the five public
+lifecycle reasons below; the public reason enum is their union, with
+`DECLARATION_INVALID` shared.
+The internal FD-71 reasons map as follows and are never serialized:
+
+| Internal FD-71 reason | Public reason |
+| --- | --- |
+| `INVALID_DECLARATION`, `INVALID_PLACEMENT_SCOPE`, `DOCUMENT_SCOPE_MISMATCH`, `INVALID_DOCUMENT_REFERENCE`, `NONCANONICAL_DOCUMENT_AUTHORITY`, `DOCUMENT_CYCLE`, `INVALID_GOVERNING_EDGE` | `DECLARATION_INVALID` |
+| `MISSING_AREA_DOCUMENT`, `UNLISTED_AREA_DOCUMENT`, `UNKNOWN_DOCUMENT`, `UNRESOLVED_DOCUMENT_PARENT`, `MISSING_ROOT_PLACEMENT` | `DOCUMENT_SET_INCOMPLETE` |
+| `DOCUMENT_UNAVAILABLE` | `DOCUMENT_UNAVAILABLE` |
+| `DUPLICATE_DOCUMENT_PLACEMENT`, `DUPLICATE_DOCUMENT_SOURCE`, `DUPLICATE_DOCUMENT_LAYER`, `DUPLICATE_DOCUMENT_SCOPE`, `AMBIGUOUS_DOCUMENT_AUTHORITY` | `DOCUMENT_AMBIGUOUS` |
+| `REPOSITORY_UNAVAILABLE`, `MISSING_DOCUMENT_AUTHORITY` | `GOVERNANCE_UNAVAILABLE` |
+
+Candidate lifecycle findings use the public lifecycle reasons
+`UNREGISTERED_MEMBER`, `DUPLICATE_MEMBER`, `MEMBER_ALREADY_ACTIVE`,
+`UNKNOWN_PYRAMID` and `STALE_PYRAMID_VERSION`; missing or invalid declaration
+sources project to `DECLARATION_INVALID`. The internal
+`MISSING_DECLARATION_SOURCE` and `INVALID_DECLARATION_SOURCE` are never
+serialized. `declaration_locator`, internal reason enums, route and provenance
+state, health internals and authority payloads are never serialized. The member
+view's `declaration_refs` remain the public identity of the repository-owned
+sources; the internal per-finding `declaration_locator` is not serialized.
+`detail` and `recovery` are public and must not contain an internal reason code
+or internal locator. The unavailable carrier's `failure` and `recovery` use the
+same public vocabulary.
+
+The projection happens at the service boundary; the serializer emits only public
+carriers. A conformance test asserts that the wire schema contains no internal
+finding carrier, internal reason enum or declaration locator, and the
+installed-MCP journey asserts that only public reasons are returned. *(G1, G7,
+F11, L12)*
+
+**FD-88C — A truncated directory list is resumable through the public selector.**
+When the ordered placement list exceeds the response budget, the view returns the
+fitting prefix, `truncated=true`, one constant omission statement and a public
+continuation token. `FunctionalPyramidDirectorySelector` accepts that token and
+returns the next deterministic page for the same directory and selection.
+`unresolved` is never truncated. The token is opaque, versioned and bound to the
+repository, directory, selection and declaration version; it carries no internal
+route, provenance or authority state. *(A7, A8, G1, L12)*
+
 **FD-89 — Cross-repository change propagation uses one dependency engine.**
 Repository changed-scope and accepted Functional Pyramid participation changes
 are two roots into the same FD-88/route-support dependency traversal. A
@@ -671,18 +758,20 @@ second semantic writer, route carrier or dependency-effect representation.
 
 **FD-94 — Lifecycle notices compose Functional Pyramid obligations without
 becoming governance.**
-Repository initialization registers the canonical root and may install a
-Version-2 Functional Pyramid bootstrap that names whole declaration sources.
-Initialization never activates participation and never derives placement scopes,
-documents or relationships from the repository tree. The durable state remains
-`UNCONFIGURED` until an accepted activation validates the declarations,
-whole-document authority bindings, the repository-root P0 placement and
-cross-repository relationships.
+Repository initialization registers the canonical root. A materialise-only
+authoring step may derive repository-owned Version-3 declarations, the derived
+authority-binding file and a Version-2 bootstrap from one owner-approved flat
+classification per participating repository (FD-88A). It derives only the
+structural carriers from that explicit classification: it never infers a scope,
+document identity or relationship from the repository tree. Initialization
+never activates participation. The durable state remains `UNCONFIGURED` until an
+accepted activation validates the declarations, whole-document authority
+bindings, the repository-root P0 placement and cross-repository relationships.
 
 During initialization/discovery the declaring owner supplies each placement's
-explicit directory scope, either directly or from an explicit scope declaration
-carried by the canonical document. Span may assist by reading that explicit
-declaration, but it never infers a scope from where the document sits.
+explicit directory scope, governing document identities, authority kind/status
+and place/exclude decision in the classification ledger. Span never infers a
+scope from where the document sits.
 
 At session start/resume/compact, canonical participation and live health select
 only the Functional Pyramid obligation: UNCONFIGURED directs governed use to the

@@ -36,6 +36,13 @@ equality, typed duplicate detection before deduplication, Version-2 candidate
 rejection and ACTIVE degradation, and placement-less finding relevance to the
 affected route only.
 
+**End-to-end initialization amendment (2026-11-26).** FD-88A–C add the flat
+classification ingress, the materialise-only authoring step, derived authority
+bindings and the public reason/paging boundary. These cases are not yet assigned
+FA rows or live tests; the implementation plan's VS-INIT, VS-PUBLIC and VS-E2E
+cases are the traceability owner until those tests land. No FA completion is
+claimed for them.
+
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
 | FA-01 | Unconfigured versus excluded | `test_status_projects_unconfigured_excluded_and_rejects_unknown`; `test_exclude_is_explicit_nonparticipation`; `test_descriptive_recording_does_not_gain_route_support` |

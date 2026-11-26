@@ -178,6 +178,13 @@ from span.core.model.functional_pyramid import (  # noqa: F401
     FunctionalRouteSupport,
     RetrievedFunctionalPyramidReceipt,
 )
+from span.core.model.classification import (  # noqa: F401
+    FunctionalPyramidClassification,
+    FunctionalPyramidClassificationDisposition,
+    FunctionalPyramidClassificationExclusion,
+    FunctionalPyramidClassificationRow,
+    FunctionalPyramidDerivation,
+)
 from span.core.model.support import (  # noqa: F401
     AuthoritySupportDependency,
     ConclusionSupport,
@@ -638,4 +645,9 @@ __all__ = [
     "RetrievedFunctionalPyramidReceipt",
     "FunctionalRouteSupport",
     "FunctionalPyramidRecorded",
+    "FunctionalPyramidClassification",
+    "FunctionalPyramidClassificationDisposition",
+    "FunctionalPyramidClassificationExclusion",
+    "FunctionalPyramidClassificationRow",
+    "FunctionalPyramidDerivation",
 ]

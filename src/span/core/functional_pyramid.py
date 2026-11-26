@@ -9,6 +9,13 @@ import json as _json
 import posixpath as _posixpath
 
 from span.core import containment as _containment
+from span.core.model.classification import (
+    FunctionalPyramidClassification,
+    FunctionalPyramidClassificationDisposition,
+    FunctionalPyramidClassificationExclusion,
+    FunctionalPyramidClassificationRow,
+    FunctionalPyramidDerivation,
+)
 from span.core.model.functional_pyramid import (
     FunctionalDirectoryScope,
     FunctionalDocumentDeclaration,
@@ -372,6 +379,119 @@ def decode_functional_pyramid_declaration(
             placements=tuple(declarations),
         ),
         _ordered_findings(findings),
+    )
+
+
+def derive_functional_pyramid_declarations(
+    classification: FunctionalPyramidClassification,
+) -> FunctionalPyramidDerivation:
+    """Materialise one classification into canonical Version-3 sources (FD-88A).
+
+    Pure. The row owns the layer, scope, governing documents and disposition;
+    this function derives source identity and kind, membership, placement
+    identity, governing placement coordinates and ordering. Graph validity is
+    evaluated separately through the source-set structural owner.
+    """
+    placed: dict[FunctionalDocumentIdentity, FunctionalPyramidClassificationRow] = {}
+    exclusions: list[FunctionalPyramidClassificationExclusion] = []
+    for row in classification.rows:
+        if row.disposition is FunctionalPyramidClassificationDisposition.EXCLUDE:
+            assert row.exclusion_reason is not None
+            exclusions.append(
+                FunctionalPyramidClassificationExclusion(
+                    repository_id=row.repository_id,
+                    document_ref=row.document_ref,
+                    reason=row.exclusion_reason,
+                )
+            )
+            continue
+        placed[FunctionalDocumentIdentity(row.repository_id, row.document_ref)] = row
+
+    def placement_for(
+        row: FunctionalPyramidClassificationRow,
+    ) -> FunctionalDocumentPlacement:
+        assert row.layer is not None
+        assert row.scope is not None
+        return FunctionalDocumentPlacement(
+            declaring_repository_id=row.repository_id,
+            document=FunctionalDocumentRef(
+                row.repository_id, row.document_ref, row.layer
+            ),
+            scope=row.scope,
+        )
+
+    def governing_for(
+        row: FunctionalPyramidClassificationRow,
+    ) -> tuple[FunctionalDocumentPlacement | str, ...]:
+        if row.layer is FunctionalPyramidLayer.P0:
+            return ("ROOT",)
+        resolved: list[FunctionalDocumentPlacement] = []
+        for parent in row.governing_documents:
+            if isinstance(parent, str):
+                raise ValueError("ROOT cannot govern a non-P0 placement")
+            try:
+                parent_row = placed[parent]
+            except KeyError:
+                raise ValueError(
+                    "governing document is not a placed document in this "
+                    f"classification: {parent.repository_id}:{parent.document_ref}"
+                ) from None
+            resolved.append(placement_for(parent_row))
+        return tuple(resolved)
+
+    grouped: dict[tuple[str, str], list[FunctionalPyramidClassificationRow]] = {}
+    for row in placed.values():
+        assert row.scope is not None
+        grouped.setdefault((row.repository_id, row.scope), []).append(row)
+
+    declarations: list[tuple[str, FunctionalPyramidDeclaration]] = []
+    for repository_id, scope in sorted(grouped):
+        rows = grouped[(repository_id, scope)]
+        entries = [
+            FunctionalDocumentDeclaration(
+                placement=placement_for(row),
+                governing_placements=governing_for(row),
+            )
+            for row in rows
+        ]
+        entries.sort(key=lambda entry: _placement_sort_key(entry.placement))
+        documents = tuple(
+            sorted(
+                (
+                    FunctionalDocumentIdentity(repository_id, row.document_ref)
+                    for row in rows
+                ),
+                key=lambda identity: identity.document_ref,
+            )
+        )
+        declarations.append(
+            (
+                repository_id,
+                FunctionalPyramidDeclaration(
+                    version=3,
+                    source_id=f"{repository_id}:{scope}",
+                    kind=(
+                        FunctionalPyramidSourceKind.REPOSITORY
+                        if scope == "."
+                        else FunctionalPyramidSourceKind.AREA
+                    ),
+                    scope=scope,
+                    documents=documents,
+                    placements=tuple(entries),
+                ),
+            )
+        )
+    return FunctionalPyramidDerivation(
+        declarations=tuple(declarations),
+        exclusions=tuple(
+            sorted(
+                exclusions,
+                key=lambda exclusion: (
+                    exclusion.repository_id,
+                    exclusion.document_ref,
+                ),
+            )
+        ),
     )
 
 

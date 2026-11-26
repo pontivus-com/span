@@ -688,9 +688,9 @@ relative-directory form: non-empty, not absolute, no empty segment, no `.` or
 is rejected rather than rewritten into another scope.
 A scope is always relative to the declaring repository. It is explicit
 declaration input and is never inferred from the document's location, file
-name, directory placement, genre or similarity. A canonical document may carry
-an explicit scope declaration as an authoring input during initialization; the
-accepted placement scope in the declaration source is the single runtime owner.
+name, directory placement, genre or similarity. In the current flat import, the
+declaring owner supplies it in the classification ledger; the accepted
+placement scope in the derived declaration source is the single runtime owner.
 Resolution never reads document metadata to discover applicability.
 
 **Placement carriers.** A `FunctionalDocumentRef` is the canonical document
@@ -701,8 +701,9 @@ FunctionalDocumentRef, "scope": str }`. Its identity is all four coordinates. A
 `FunctionalDocumentDeclaration` pairs one placement with its direct governing
 placements: `{ "placement": FunctionalDocumentPlacement,
 "governing_placements": [FunctionalDocumentPlacement | "ROOT", ...] }`. The same
-canonical document may therefore appear at several layers or scopes without
-creating a rule identity.
+canonical document may participate in different declaring repositories, but
+within one declaring repository it has exactly one placement (one layer and one
+scope); it never creates a rule identity.
 
 Resolution performs one exact authority lookup by the document's repository and
 locator. Exactly one `AuthorityBinding` must match, its evidence repository and
@@ -927,9 +928,42 @@ The directory answer is exactly:
   ],
   "declared_layers": ["P0", "P1"],
   "absent_layers": ["P2S", "P2W", "P3", "P4"],
-  "unresolved": []
+  "unresolved": [
+    {
+      "reason": "DECLARATION_INVALID",
+      "detail": "The Functional Pyramid declaration cannot be decoded.",
+      "recovery": "Revise the ACTIVE instance with valid Version-3 declarations.",
+      "repository_id": "...",
+      "directory": null,
+      "placement": null
+    }
+  ],
+  "truncated": false,
+  "omitted": [],
+  "next_after": null
 }
 ```
+
+Public findings use exactly `reason`, `detail`, `recovery`, optional
+`repository_id`, optional `directory` and optional `placement`. The public
+reason vocabulary and its fixed mapping are FD-88B. A public finding contains no
+`declaration_locator`, no internal reason enum and no authority payload. The
+service projects internal FD-71 findings into this carrier at the boundary; the
+internal finding remains server-side.
+
+Candidate results use the same public finding for `graph_findings`.
+`validation_findings` use the public lifecycle reasons plus
+`DECLARATION_INVALID` for missing or invalid declaration sources; the internal
+`MISSING_DECLARATION_SOURCE` and `INVALID_DECLARATION_SOURCE` are not serialized.
+The public validation finding keeps `expected_version` and `current_version` and
+drops `declaration_locator`. Status results use the public finding for
+`findings`. Unavailable results carry public `failure` and `recovery` text that
+contains no internal reason code or internal locator.
+
+The wire schema contains only public carriers. A conformance test asserts that
+no internal finding carrier, internal reason enum or `declaration_locator`
+appears in the generated schema; the installed-MCP journey asserts that only
+public reasons are returned.
 
 It contains no `routes`, `downstream_placements`, `governing_placements`,
 `authority` binding payload, per-path `provenance` or instance `health`. An
@@ -944,15 +978,175 @@ Internal-only, never serialized:
   Functional Pyramid change propagation;
 - per-path provenance, retained to preserve multi-path identity and route
   support;
+- internal FD-71 findings, internal validation reasons and declaration source
+  locators;
 - `AuthorityBinding` payloads, evaluated through ordinary support rules.
 
 A document-impact selection (`document → dependents`) is a separate API. It has
 no consumer today and is implemented only when an explicit caller question
 requires it; FD-88 defines its direction and its non-predictive semantics.
 
-When the document list exceeds the response budget, `placements` is paged or
-omitted with an explicit `truncated` marker and recovery under FD-55–FD-57.
-`unresolved` is never truncated.
+The ordered placement list is paged, not merely omitted. When it exceeds the
+response budget, the answer returns the largest fitting prefix,
+`truncated=true`, one constant omission statement and `next_after`.
+`FunctionalPyramidDirectorySelector` accepts `after` and returns the next
+deterministic page for the same repository, directory, selection and declaration
+version. The token is opaque, versioned and uses the existing paging contract; a
+stale token returns the paging stale-continuation failure rather than silently
+restarting. `unresolved` is complete on every page and is never truncated.
+
+### 17.2 Functional Pyramid initialization import
+
+**Authority:** G7, G8; F11, F12; L11–L14; FD-66–FD-67, FD-74, FD-86–FD-88.
+
+One classification file is supplied per participating repository. Its exact
+grammar is:
+
+```json
+{
+  "version": 1,
+  "rows": [
+    {
+      "repository_id": "repo-a",
+      "document_ref": "docs/goals.md",
+      "disposition": "place",
+      "layer": "P0",
+      "scope": ".",
+      "governing_documents": ["ROOT"],
+      "authority_kind": "REPOSITORY_RULE",
+      "authority_status": "ACCEPTED"
+    },
+    {
+      "repository_id": "repo-a",
+      "document_ref": "docs/invariants.md",
+      "disposition": "place",
+      "layer": "P1",
+      "scope": ".",
+      "governing_documents": [
+        {"repository_id": "repo-a", "document_ref": "docs/goals.md"}
+      ],
+      "authority_kind": "REPOSITORY_RULE",
+      "authority_status": "ACCEPTED"
+    },
+    {
+      "repository_id": "repo-a",
+      "document_ref": "docs/legacy.md",
+      "disposition": "exclude",
+      "exclusion_reason": "superseded by docs/goals.md"
+    }
+  ]
+}
+```
+
+A place row has exactly `repository_id`, `document_ref`, `disposition`, `layer`,
+`scope`, `governing_documents`, `authority_kind` and `authority_status`. An
+exclude row has exactly `repository_id`, `document_ref`, `disposition` and
+`exclusion_reason`. The top level has exactly `version` and `rows`; unknown
+fields, an unsupported version, non-canonical paths or scopes, duplicate
+documents and mixed place/exclude fields fail. `governing_documents` contains
+`"ROOT"` only for a P0 row, or document identity objects. A non-P0 row has at
+least one governing document and no `ROOT`.
+
+The flat import places a document in its owning repository. Cross-repository
+*placement* remains a Version-3 source capability outside this ingress; the
+current corpus places each document in its own repository. Cross-repository
+*governing* is supported: the materialiser loads the complete selected member
+set, builds one identity index across the member files, and resolves each
+governing identity across repositories. A governing identity that does not
+resolve to exactly one place row in the selected member set fails before any
+write.
+
+Span derives repository-kind and area-kind sources, document membership, one
+placement per document, governing placement coordinates, ordering, one
+whole-document authority binding per placement and the Version-2 bootstrap.
+Sources are grouped by declaring repository and scope; the root source is
+`REPOSITORY` at `.`, every other source is `AREA`. Source identity and file name
+are stable functions of the declaring repository and scope; the file name is an
+address, never an identity.
+
+Each derived binding uses the document reference as its repository and locator,
+has no section or span, carries `DOCUMENTATION` source kind, the row's
+`authority_kind` and `authority_status`, empty applicability and no declared
+precedence. Its evidence identity is a stable digest of the repository-qualified
+document identity under the existing `authority-document-` prefix. The binding
+file is the canonical `AuthorityBinding` list, sorted by repository and locator.
+
+The materialiser merges the derived bindings into the existing
+`.span/authority-bindings.json`: a binding whose repository-qualified document is
+not a classified document is preserved; a binding for a classified document is
+replaced by the derived whole-document binding. An existing binding for a
+classified document that is not a whole-document binding is a conflict and fails
+the materialisation. This preserves legitimate authority outside the Functional
+Pyramid.
+
+Before writing, the materialiser evaluates the complete derived source set
+through `evaluate_functional_pyramid_source_structure` and checks binding
+coverage: every placement has exactly one whole-document binding. Any finding
+prohibits the write.
+
+The materialise-only step is a mode of the existing installer binary:
+`--functional-pyramid-classification-file REPOSITORY_ID PATH` (repeatable) with
+`--materialize-functional-pyramid`. It is mutually exclusive with installation,
+verification, census and runtime operations. It reads the supplied
+classifications, derives and validates, writes, prints the derived paths and the
+exclusion summary, and exits. It performs no registration, store, host, binding
+store or participation write.
+
+The materialiser owns only `.span/functional-pyramid/**`,
+`.span/functional-pyramid.json` and the derived `.span/authority-bindings.json`.
+Source files are written first, the binding file next, and the bootstrap last as
+the commit point. All payloads are built and validated in memory before the
+first rename. Files are written through temporary siblings and renamed; a
+symlink, path escape or target outside the owned paths is refused. If a step
+before the bootstrap fails, the previous bootstrap still selects the previous
+source set and the new files are unreferenced. After the bootstrap switches,
+source files no longer referenced are removed. Re-running the same input is
+byte-identical and a no-op; a changed input replaces the owned files.
+
+The exclusion manifest is the classification's exclude rows. The materialiser
+prints their count and identities; the durable owner record is the repository's
+governance classification document. The classification file itself is
+repository-owned, supplied explicitly (recommended
+`.span/functional-pyramid-classification.json`) and never rewritten by the
+materialiser.
+
+The end-to-end sequence is fixed:
+
+1. The owner approves the complete classification, including exclusions and
+   authority kind/status.
+2. The materialiser derives and writes the `.span/` source set, binding file and
+   bootstrap.
+3. The owner reviews the derived mapping and commits those `.span/` inputs.
+4. Normal installation consumes the committed bootstrap, declaration sources
+   and binding file; preflight records their digests and repository revision.
+5. The candidate validates the complete member set; `record` ACTIVATEs a fresh
+   instance or REVISEs the current ACTIVE instance with its exact identity and
+   expected version.
+6. `--verify-only --strict` verifies the retained ACTIVE graph and provenance;
+   actionable dependent effects are disposed through the ordinary
+   reconsideration path.
+
+The classification is the owner's decision record. The derived `.span/` files
+are the governed installation inputs; installation provenance covers those
+files, not the classification. The classification remains the durable mapping
+and authoring evidence. No canonical document is edited and no write occurs
+outside `.span/` metadata.
+
+A Version-2 ACTIVE instance is revised, never re-activated. The declaration
+format change alone does not force route reassessment; a changed placement set
+does. The classified mapping is a placement change, so the existing
+affected-route mechanism applies and its dependent effects must be disposed
+before the revision is complete.
+
+End-to-end acceptance uses a neutral temporary repository set with a root P0, a
+P1 invariant, an area source, a shared-ancestor source, a cross-repository
+governing identity, an exclusion and non-default authority kind/status. It runs
+classification → materialise → commit → candidate → `record` activate/revise →
+`ask`, and asserts: exact derived sources/membership/bindings/bootstrap; missing
+root, missing binding, unresolved parent and duplicate document fail; an
+unowned or differing target is refused; replay is byte-identical; directory
+paging resumes; public results contain only public reasons and no internal
+locator; a Version-2 ACTIVE instance is revised with dependent effects returned.
 
 ### 18. Pure resolver, health and support evaluation
 
@@ -1288,13 +1482,16 @@ The exact mechanism is:
    Pyramid participation. It may establish the authority state required by
    candidate validation but never ACTIVATEs/REVISEs/DEACTIVATEs/EXCLUDEs a
    pyramid and creates no cross-repository setup transaction. When the explicit
-   bootstrap option is present, the installer validates the exact Version-2
-   bootstrap shape and every Version-3 declaration source it selects, and writes
-   the bootstrap only to `.span/functional-pyramid.json`. An absent destination
-   may be created, identical bytes are a no-op, and different existing bytes
-   reject before mutation. Declaration sources named by that bootstrap must
-   already be repository-owned files. Initialization never generates a
-   declaration template, document relevance or relationships. A newly registered
+   bootstrap option is present, normal installation validates the exact
+   Version-2 bootstrap shape and every Version-3 declaration source it selects,
+   and writes the bootstrap only to `.span/functional-pyramid.json`. An absent
+   destination may be created, identical bytes are a no-op, and different
+   existing bytes reject before mutation. Declaration sources consumed by normal
+   installation must already be repository-owned committed files; that step
+   never generates a declaration template, document relevance or relationships.
+   The separate materialise-only mode (TD §17.2) derives the source set, binding
+   file and bootstrap from the approved classification; it performs no
+   participation write and is not part of installation. A newly registered
    repository starts UNCONFIGURED. Reinitializing an existing repository
    preserves its current UNCONFIGURED, EXCLUDED or ACTIVE participation state.
 9. The install receipt reports observed `InitializeRepositoryResult`
@@ -1485,11 +1682,12 @@ not installation-level participation state.
 The declaration cutover is explicit and version-local. Version-1 rule
 declarations are never decoded into, grouped into or adapted as document
 placements, and Version-2 declarations are never translated into Version-3
-sources. Before revising an ACTIVE instance, the operator authors Version-3
-sources with explicit source identity, kind, scope and document membership from
-the repository's approved canonical document corpus, assigns at least one
-root-scoped P0 placement, validates the complete candidate in isolation and takes
-the ordinary verified backup required for an existing installation.
+sources. Before revising an ACTIVE instance, the owner approves the flat
+classification, the materialiser derives the Version-3 sources with explicit
+source identity, kind, scope and document membership, assigns at least one
+root-scoped P0 placement from the ledger, validates the complete candidate in
+isolation and takes the ordinary verified backup required for an existing
+installation.
 
 Opening an installation that still has an ACTIVE Version-1 or Version-2 member
 intent does not rewrite participation. The member remains ACTIVE; current health
