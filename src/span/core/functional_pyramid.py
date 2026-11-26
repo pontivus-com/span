@@ -636,12 +636,14 @@ def encode_functional_pyramid_declaration(
             {
                 **_placement_payload(entry.placement),
                 "governing_placements": [
-                    parent
-                    if isinstance(parent, str)
-                    else {
-                        **_placement_payload(parent),
-                        "declaring_repository_id": parent.declaring_repository_id,
-                    }
+                    (
+                        parent
+                        if isinstance(parent, str)
+                        else {
+                            **_placement_payload(parent),
+                            "declaring_repository_id": parent.declaring_repository_id,
+                        }
+                    )
                     for parent in entry.governing_placements
                 ],
             }

@@ -66,7 +66,11 @@ from span.shell.install.preflight import (
     load_functional_pyramid_bootstraps,
     preflight_facts,
 )
-from span.shell.install.receipt import read_receipt, write_receipt
+from span.shell.install.receipt import (
+    administrative_ownership,
+    read_receipt,
+    write_receipt,
+)
 from span.shell.install.recovery import (
     create_backup,
     reap_backups,
@@ -124,7 +128,7 @@ class _RuntimeState:
 def _environment(args: argparse.Namespace) -> _Environment:
     paths = platform_paths()
     venv_dir = Path(args.venv_dir) if args.venv_dir else paths["venv_dir"]
-    data_dir = Path(args.data_dir) if args.data_dir else paths["data_dir"]
+    data_dir = (Path(args.data_dir) if args.data_dir else paths["data_dir"]).resolve()
     bin_dir = Path(args.bin_dir) if args.bin_dir else paths["bin_dir"]
     span_repo = Path(args.span_repo).resolve()
     targets = tuple(Path(r).resolve() for r in args.repo)
@@ -889,9 +893,40 @@ def _build_receipt(
     }
 
 
-def main(argv=None):
-    args = parse_args(argv)
-    env = _environment(args)
+def _mutating_invocation(env: _Environment) -> bool:
+    """Classify administrative operations before acquiring ownership."""
+    args = env.args
+    if env.dry:
+        return False
+    if any(
+        (
+            args.backup,
+            args.backup_repository is not None,
+            args.load_repository_backup is not None,
+            args.reap_repository_backups is not None,
+            args.restore_backup is not None,
+            args.reap_backups is not None,
+            args.uninstall,
+            args.purge is not None,
+            args.transition_phase in ("apply", "rollback"),
+        )
+    ):
+        return True
+    return not any(
+        (
+            args.list_orphans,
+            args.verify_repository_backup is not None,
+            args.verify_backup is not None,
+            args.transition_phase in ("inspect", "verify"),
+            args.verify_only,
+            args.snapshot_census is not None,
+            args.compare_census is not None,
+        )
+    )
+
+
+def _execute(env: _Environment) -> None:
+    args = env.args
     if _run_one_shot(env):
         return
     prior_receipt = read_receipt(env.data_dir)
@@ -904,3 +939,12 @@ def main(argv=None):
     receipt = _build_receipt(env, state, host_registration, report)
     write_receipt(env.data_dir, receipt, dry_run=env.dry)
     print("install complete.")
+
+
+def main(argv=None):
+    env = _environment(parse_args(argv))
+    if not _mutating_invocation(env):
+        _execute(env)
+        return
+    with administrative_ownership(env.data_dir):
+        _execute(env)

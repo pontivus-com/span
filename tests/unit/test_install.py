@@ -1253,6 +1253,48 @@ class AgentsRuleIsolationTest(unittest.TestCase):
 
 
 class ReceiptScopeTest(unittest.TestCase):
+    def test_administrative_owner_blocks_alias_and_competing_maintenance(self):
+        from span.shell.install.receipt import administrative_ownership
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            data = root / "data"
+            data.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(data, target_is_directory=True)
+            database = data / "repo-a.db"
+            database.write_bytes(b"unchanged")
+            with administrative_ownership(data):
+                with self.assertRaisesRegex(SystemExit, "another installer owns"):
+                    with administrative_ownership(alias):
+                        self.fail("alias bypassed installation ownership")
+                with self.assertRaisesRegex(SystemExit, "another installer owns"):
+                    install.main(["--data-dir", str(alias), "--purge", "repo-a"])
+                self.assertEqual(database.read_bytes(), b"unchanged")
+                install.main(["--data-dir", str(alias), "--list-orphans"])
+            with administrative_ownership(alias):
+                self.assertTrue((data / ".install.lock").is_file())
+
+    def test_receipt_replacement_failure_preserves_previous_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            previous = {
+                "install_version": install.INSTALL_VERSION,
+                "repos": ["/r/alpha"],
+                "host_registration": {},
+            }
+            install.write_receipt(root, previous)
+            receipt = root / "install.json"
+            original = receipt.read_bytes()
+            with mock.patch(
+                "span.shell.install.receipt.os.replace",
+                side_effect=OSError("injected publication failure"),
+            ):
+                with self.assertRaisesRegex(OSError, "publication failure"):
+                    install.write_receipt(root, {**previous, "repos": ["/r/beta"]})
+            self.assertEqual(receipt.read_bytes(), original)
+            self.assertEqual(tuple(root.glob(".install-*.tmp")), ())
+
     def test_write_receipt_persists_scope_list(self):
         import tempfile
 

@@ -987,9 +987,7 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
         for (repository, declaration), request in zip(
             derivation.declarations, member.declaration_sources, strict=True
         ):
-            payload = fp.encode_functional_pyramid_declaration(
-                repository, declaration
-            )
+            payload = fp.encode_functional_pyramid_declaration(repository, declaration)
             decoded, findings = fp.decode_functional_pyramid_declaration(
                 payload.decode("utf-8"),
                 repository_id=repository,
@@ -1062,7 +1060,9 @@ class FunctionalPyramidClassificationDerivationTest(unittest.TestCase):
             authority_kind=m.AuthorityKind.TERMINOLOGY,
             status=m.AuthorityStatus.ACCEPTED,
         )
-        with self.assertRaisesRegex(ValueError, "independent authority binding conflict"):
+        with self.assertRaisesRegex(
+            ValueError, "independent authority binding conflict"
+        ):
             fp.reconcile_functional_pyramid_bindings(
                 classification,
                 fingerprints=fingerprints,

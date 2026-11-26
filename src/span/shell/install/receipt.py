@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from pathlib import Path
-from typing import NoReturn
+from typing import Iterator, NoReturn
 
 from span.shell.install.constants import INSTALL_VERSION
 from span.shell.install.hosts import OPENCODE_PLUGIN_SCOPES
@@ -66,13 +67,63 @@ def _validate_current_receipt(path: Path, receipt: object) -> dict[str, object]:
     return receipt
 
 
+@contextlib.contextmanager
+def administrative_ownership(data_dir: str | Path) -> Iterator[None]:
+    """Hold the single installation-local administrative lock (TD §17.2)."""
+    import fcntl
+    import stat
+
+    root = Path(data_dir).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / ".install.lock"
+    try:
+        handle = os.open(
+            lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
+        )
+    except OSError as exc:
+        raise SystemExit(f"cannot open administrative lock {lock_path}: {exc}") from None
+    try:
+        if not stat.S_ISREG(os.fstat(handle).st_mode):
+            raise SystemExit(f"invalid administrative lock file: {lock_path}")
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit(
+                f"another installer owns {root}; no administrative state changed"
+            ) from None
+        except OSError as exc:
+            raise SystemExit(f"cannot acquire administrative ownership: {exc}") from None
+        yield
+    finally:
+        os.close(handle)
+
+
 def write_receipt(data_dir, payload, dry_run=False):
-    receipt = Path(data_dir) / "install.json"
+    """Publish a complete receipt atomically, preserving the previous on failure."""
+    import tempfile
+
+    root = Path(data_dir)
+    receipt = root / "install.json"
     print(f"+ write receipt: {receipt}")
     if dry_run:
         return
-    Path(data_dir).mkdir(parents=True, exist_ok=True)
-    receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    root.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=".install-", suffix=".tmp", dir=root)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, receipt)
+        directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read_receipt(data_dir):
