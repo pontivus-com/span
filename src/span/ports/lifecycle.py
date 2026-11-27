@@ -319,6 +319,12 @@ class LifecycleStorePort(_typing.Protocol):
         """Return every immutable boundary version of one surface."""
         ...
 
+    def accepted_understanding_effects(
+        self, understanding_id: m.UnderstandingId
+    ) -> tuple[m.AcceptedUnderstandingEffect, ...]:
+        """Read retained accepted transition facts for one exact understanding."""
+        ...
+
     def get_receipt(self, key: m.RecordingKey) -> m.RecordReceipt | None:
         """Return the retained receipt for one request key."""
         ...

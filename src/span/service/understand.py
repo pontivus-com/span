@@ -10,6 +10,31 @@ from span.service.support import SupportService
 __all__ = ["UnderstandService"]
 
 
+def accepted_dispositions(
+    store: LifecycleStorePort, effect: m.AcceptedUnderstandingEffect
+) -> tuple[m.AcceptedChallengeDisposition, ...]:
+    """Read precisely the disposition revision recorded by acceptance."""
+    accepted: list[m.AcceptedChallengeDisposition] = []
+    for coordinate in effect.challenge_dispositions:
+        challenge = store.get_challenge(coordinate.challenge_id.value)
+        matches = tuple(
+            disposition
+            for disposition in challenge.dispositions
+            if disposition.challenge_revision == coordinate.challenge_revision
+        )
+        if (
+            len(matches) != 1
+            or challenge.understanding_id != effect.understanding_id
+        ):
+            raise RecordingValidationError(
+                "the exact accepted challenge disposition is unavailable"
+            )
+        accepted.append(
+            m.accepted_challenge_disposition(challenge.challenge_id, matches[0])
+        )
+    return tuple(accepted)
+
+
 class UnderstandService:
     """Return exact retained detail addressed by a closed selector."""
 
@@ -117,7 +142,7 @@ class UnderstandService:
                 understanding_id=effect.understanding_id,
                 version=effect.version,
                 revision_effects=effect.revision_effects,
-                challenge_dispositions=self.accepted_dispositions(effect),
+                challenge_dispositions=accepted_dispositions(self._store, effect),
                 dependent_effects=effect.dependent_effects,
             )
         if isinstance(effect, m.AcceptedSurfaceEffect):
@@ -129,30 +154,6 @@ class UnderstandService:
                     "accepted surface boundary is unavailable"
                 )
         return effect
-
-    def accepted_dispositions(
-        self, effect: m.AcceptedUnderstandingEffect
-    ) -> tuple[m.AcceptedChallengeDisposition, ...]:
-        """Read precisely the disposition revision recorded by acceptance."""
-        accepted: list[m.AcceptedChallengeDisposition] = []
-        for coordinate in effect.challenge_dispositions:
-            challenge = self._store.get_challenge(coordinate.challenge_id.value)
-            matches = tuple(
-                disposition
-                for disposition in challenge.dispositions
-                if disposition.challenge_revision == coordinate.challenge_revision
-            )
-            if (
-                len(matches) != 1
-                or challenge.understanding_id != effect.understanding_id
-            ):
-                raise RecordingValidationError(
-                    "the exact accepted challenge disposition is unavailable"
-                )
-            accepted.append(
-                m.accepted_challenge_disposition(challenge.challenge_id, matches[0])
-            )
-        return tuple(accepted)
 
     def challenge_opening(
         self, receipt: m.RecordReceipt

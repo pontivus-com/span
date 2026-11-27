@@ -969,6 +969,26 @@ class LifecycleStore:
 
     # -- receipts ----------------------------------------------------------
 
+    def accepted_understanding_effects(
+        self, understanding_id: m.UnderstandingId
+    ) -> tuple[m.AcceptedUnderstandingEffect, ...]:
+        rows = self._connection.execute(
+            "SELECT canonical_json FROM record_receipts"
+            " WHERE json_extract(canonical_json, '$.accepted_effect.understanding_id.value')=?"
+            " AND json_extract(canonical_json, '$.accepted_effect.\"$type\"')="
+            " 'AcceptedUnderstandingEffect' ORDER BY request_id",
+            (understanding_id.value,),
+        )
+        effects = []
+        for row in rows:
+            receipt = m.from_canonical(
+                m.RecordReceipt, _json.loads(row["canonical_json"])
+            )
+            if not isinstance(receipt.accepted_effect, m.AcceptedUnderstandingEffect):
+                raise LifecycleStoreInvariantError("accepted effect index disagrees with receipt")
+            effects.append(receipt.accepted_effect)
+        return tuple(effects)
+
     def get_receipt(self, key: m.RecordingKey) -> m.RecordReceipt | None:
         return self._get_receipt_in(self._connection, key, self._clock())
 

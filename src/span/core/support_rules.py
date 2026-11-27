@@ -65,6 +65,42 @@ def premise_closure(
     yield indirect, forced
 
 
+def retained_successor(
+    ref: _m.ConclusionRevisionRef,
+    membership: tuple[_m.ConclusionRevisionRef, ...],
+    accepted: tuple[_m.AcceptedUnderstandingEffect, ...],
+) -> _m.ConclusionRevisionRef | None:
+    """FD-20: follow exact lineage and accepted replacement edges, never guesses."""
+    visited: set[_m.ConclusionId] = set()
+    selected = ref
+    while selected.conclusion_id not in visited:
+        visited.add(selected.conclusion_id)
+        current = next(
+            (
+                item for item in membership
+                if item.understanding_id == selected.understanding_id
+                and item.conclusion_id == selected.conclusion_id
+                and item.revision.value >= selected.revision.value
+            ),
+            None,
+        )
+        if current is not None:
+            return current
+        replacements = {
+            effect.ref
+            for transition in accepted
+            for effect in transition.revision_effects
+            if effect.replaced_ref is not None
+            and effect.replaced_ref.understanding_id == selected.understanding_id
+            and effect.replaced_ref.conclusion_id == selected.conclusion_id
+            and effect.replaced_ref.revision.value >= selected.revision.value
+        }
+        if len(replacements) != 1:
+            return None
+        selected = next(iter(replacements))
+    return None
+
+
 def dependency_change_reasons(
     direct: set[_m.ConclusionRevisionRef],
     indirect: set[_m.ConclusionRevisionRef],
