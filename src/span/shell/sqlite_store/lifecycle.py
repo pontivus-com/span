@@ -365,77 +365,131 @@ class LifecycleStore:
         under the same version is rejected. Boundary changes use
         ``update_surface`` so history stays immutable.
         """
-        key = surface.key
         with _transaction(self._connection) as connection:
-            row = connection.execute(
-                "SELECT kind, canonical_json FROM surfaces"
-                " WHERE repository_id=? AND locator=?",
-                (key.repository_id, key.locator),
-            ).fetchone()
-            if row is None:
-                self._insert_surface(connection, surface)
-                return surface
-            existing = m.from_canonical(m.Surface, _json.loads(row["canonical_json"]))
-            if row["kind"] != key.kind.value:
-                raise SurfaceConflict(
-                    f"surface {key.locator!r} is already declared as {row['kind']}",
-                    current_boundary_version=existing.boundary_version,
-                )
-            if existing == surface:
-                return existing
+            return self._put_surface_in(connection, surface)
+
+    def _put_surface_in(
+        self, connection: _sqlite3.Connection, surface: m.Surface
+    ) -> m.Surface:
+        key = surface.key
+        row = connection.execute(
+            "SELECT kind, canonical_json FROM surfaces"
+            " WHERE repository_id=? AND locator=?",
+            (key.repository_id, key.locator),
+        ).fetchone()
+        if row is None:
+            self._insert_surface(connection, surface)
+            return surface
+        existing = m.from_canonical(m.Surface, _json.loads(row["canonical_json"]))
+        if row["kind"] != key.kind.value:
             raise SurfaceConflict(
-                f"surface {key.locator!r} already has boundary version "
-                f"{existing.boundary_version}",
+                f"surface {key.locator!r} is already declared as {row['kind']}",
                 current_boundary_version=existing.boundary_version,
             )
+        if existing == surface:
+            return existing
+        raise SurfaceConflict(
+            f"surface {key.locator!r} already has boundary version "
+            f"{existing.boundary_version}",
+            current_boundary_version=existing.boundary_version,
+        )
 
     def update_surface(
         self, surface: m.Surface, *, expected_boundary_version: int
     ) -> m.Surface:
         """Apply one compare-and-set boundary update, preserving history."""
-        key = surface.key
         with _transaction(self._connection) as connection:
-            row = connection.execute(
-                "SELECT kind, boundary_version FROM surfaces"
-                " WHERE repository_id=? AND locator=?",
-                (key.repository_id, key.locator),
-            ).fetchone()
-            if row is None:
-                raise LifecycleRecordNotFound("surface", key.locator)
-            current = int(row["boundary_version"])
-            if surface.boundary_version != expected_boundary_version + 1:
-                raise SurfaceConflict(
-                    "a boundary update must advance the version by exactly one",
-                    current_boundary_version=current,
-                )
-            if row["kind"] != key.kind.value:
-                raise SurfaceConflict(
-                    f"surface {key.locator!r} is already declared as {row['kind']}",
-                    current_boundary_version=current,
-                )
-            if current != expected_boundary_version:
-                raise SurfaceConflict(
-                    f"surface {key.locator!r} is at boundary version {current}, "
-                    f"not {expected_boundary_version}",
-                    current_boundary_version=current,
-                )
-            canonical = _json.dumps(m.to_canonical(surface), sort_keys=True)
-            connection.execute(
-                "UPDATE surfaces SET parent_kind=?, parent_locator=?,"
-                " boundary_version=?, canonical_json=?"
-                " WHERE repository_id=? AND kind=? AND locator=?",
-                (
-                    None if surface.parent is None else surface.parent.kind.value,
-                    None if surface.parent is None else surface.parent.locator,
-                    surface.boundary_version,
-                    canonical,
-                    key.repository_id,
-                    key.kind.value,
-                    key.locator,
-                ),
+            return self._update_surface_in(connection, surface, expected_boundary_version=expected_boundary_version)
+
+    def _update_surface_in(
+        self, connection: _sqlite3.Connection, surface: m.Surface, *, expected_boundary_version: int
+    ) -> m.Surface:
+        key = surface.key
+        row = connection.execute(
+            "SELECT kind, boundary_version FROM surfaces"
+            " WHERE repository_id=? AND locator=?",
+            (key.repository_id, key.locator),
+        ).fetchone()
+        if row is None:
+            raise LifecycleRecordNotFound("surface", key.locator)
+        current = int(row["boundary_version"])
+        if surface.boundary_version != expected_boundary_version + 1:
+            raise SurfaceConflict(
+                "a boundary update must advance the version by exactly one",
+                current_boundary_version=current,
             )
-            self._insert_boundary(connection, surface, canonical)
-            return surface
+        if row["kind"] != key.kind.value:
+            raise SurfaceConflict(
+                f"surface {key.locator!r} is already declared as {row['kind']}",
+                current_boundary_version=current,
+            )
+        if current != expected_boundary_version:
+            raise SurfaceConflict(
+                f"surface {key.locator!r} is at boundary version {current}, "
+                f"not {expected_boundary_version}",
+                current_boundary_version=current,
+            )
+        canonical = _json.dumps(m.to_canonical(surface), sort_keys=True)
+        connection.execute(
+            "UPDATE surfaces SET parent_kind=?, parent_locator=?,"
+            " boundary_version=?, canonical_json=?"
+            " WHERE repository_id=? AND kind=? AND locator=?",
+            (
+                None if surface.parent is None else surface.parent.kind.value,
+                None if surface.parent is None else surface.parent.locator,
+                surface.boundary_version,
+                canonical,
+                key.repository_id,
+                key.kind.value,
+                key.locator,
+            ),
+        )
+        self._insert_boundary(connection, surface, canonical)
+        return surface
+
+    def record_surface(
+        self,
+        key: m.RecordingKey,
+        digest: m.ContentDigest,
+        surface: m.Surface,
+        action: m.SurfaceAction,
+        *,
+        expected_boundary_version: int | None = None,
+    ) -> m.RecordReceipt:
+        with _transaction(self._connection) as connection:
+            now = self._clock()
+            decision = receipt_decision(
+                self._get_receipt_in(connection, key, now), key, digest
+            )
+            if decision.kind is m.ReceiptDecisionKind.REPLAY:
+                if decision.receipt is None:
+                    raise LifecycleStoreInvariantError("missing replay receipt")
+                return decision.receipt
+            if decision.kind is m.ReceiptDecisionKind.CONFLICT:
+                raise RecordingConflict(
+                    decision.reason,
+                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+                )
+            if surface.key.repository_id != key.repository_id:
+                raise RecordingValidationError("surface belongs to another repository")
+            if action is m.SurfaceAction.CREATE:
+                accepted = self._put_surface_in(connection, surface)
+            else:
+                if expected_boundary_version is None:
+                    raise RecordingValidationError("surface update requires expected version")
+                accepted = self._update_surface_in(
+                    connection, surface,
+                    expected_boundary_version=expected_boundary_version,
+                )
+            receipt = build_receipt(
+                key, digest, now,
+                effect=m.AcceptedSurfaceEffect(
+                    action, accepted.key, accepted.boundary_version
+                ),
+                replay_expires_at=now + self.retention.replay_retention,
+            )
+            self._write_receipt(connection, receipt)
+            return receipt
 
     def find_surface(self, key: m.SurfaceKey) -> m.Surface | None:
         row = self._connection.execute(
@@ -1064,18 +1118,28 @@ class LifecycleStore:
             for disposition in transition.curations:
                 self._insert_curation_in(connection, disposition)
             self._write_challenge_effects(connection, transition.challenge_effects)
-            dependents: tuple[m.ConclusionRevisionRef, ...] = ()
+            dependents = m.AcceptedDependencyEffects(())
             if not isinstance(command, m.CreateUnderstandingCommand):
                 before = set(version.conclusions)
                 after = set(transition.new_version.conclusions)
                 reached = _dependents.premise_dependents(connection, before - after)
-                dependents = self._current_dependent_refs(connection, reached)
+                dependents = self._accepted_dependent_effects(connection, reached)
             receipt = build_receipt(
                 command.identity,
                 digest,
                 now,
-                understanding=(selected, transition.new_version.version),
-                dependent_effects=dependents,
+                effect=m.AcceptedUnderstandingEffect(
+                    understanding_id=selected,
+                    version=transition.new_version.version,
+                    revision_effects=transition.revision_effects,
+                    challenge_dispositions=tuple(
+                        m.AcceptedChallengeCoordinate(
+                            effect.challenge_id, effect.new_revision
+                        )
+                        for effect in transition.challenge_effects
+                    ),
+                    dependent_effects=dependents,
+                ),
                 replay_expires_at=now + self.retention.replay_retention,
             )
             self._write_receipt(connection, receipt)
@@ -1148,7 +1212,7 @@ class LifecycleStore:
                 command.identity,
                 digest,
                 now,
-                verification_run_id=run.run_id,
+                effect=m.AcceptedVerificationEffect(run.run_id),
                 replay_expires_at=now + self.retention.replay_retention,
             )
             self._write_receipt(connection, receipt)
@@ -1414,12 +1478,14 @@ class LifecycleStore:
             self._connection, dependency_kind, dependency_ref
         )
 
-    def _current_dependent_refs(
+    def _accepted_dependent_effects(
         self,
         connection: _sqlite3.Connection,
         reached: tuple[m.ConclusionRevisionRef, ...],
-    ) -> tuple[m.ConclusionRevisionRef, ...]:
+    ) -> m.AcceptedDependencyEffects:
         membership: dict[str, frozenset[m.ConclusionRevisionRef]] = {}
+        surfaces: dict[str, m.SurfaceKey] = {}
+        effects: list[m.AcceptedDependencyEffect] = []
         for ref in reached:
             identity = ref.understanding_id.value
             if identity not in membership:
@@ -1428,9 +1494,14 @@ class LifecycleStore:
                     connection, identity, understanding.current_version.value
                 )
                 membership[identity] = frozenset(version.conclusions)
-        return tuple(
-            ref for ref in reached if ref in membership[ref.understanding_id.value]
-        )
+                surfaces[identity] = understanding.surface
+            if ref in membership[identity]:
+                effects.append(
+                    m.AcceptedDependencyEffect(
+                        surfaces[identity], ref, (m.ChangeReason.INDIRECT,)
+                    )
+                )
+        return m.AcceptedDependencyEffects(tuple(effects))
 
     def current_functional_route_dependents(
         self, pyramid_id: str
@@ -1575,7 +1646,13 @@ class LifecycleStore:
                 command.identity,
                 digest,
                 now,
-                challenge_id=challenge_id,
+                effect=m.AcceptedChallengeOpeningEffect(
+                    challenge_id,
+                    challenge.challenge_revision,
+                    challenge.understanding_id,
+                    challenge.target_version,
+                    challenge.target_conclusions,
+                ),
                 replay_expires_at=now + self.retention.replay_retention,
             )
             self._write_receipt(connection, receipt)
@@ -1790,8 +1867,8 @@ class LifecycleStore:
             "(repository_id, request_id, content_digest,"
             " canonical_json, replay_expires_at) VALUES(?,?,?,?,?)",
             (
-                receipt.identity.repository_id,
-                receipt.identity.request_id.value,
+                receipt.key.repository_id,
+                receipt.key.request_id.value,
                 receipt.content_digest.value,
                 _json.dumps(m.to_canonical(receipt), sort_keys=True),
                 (

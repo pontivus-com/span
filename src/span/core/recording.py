@@ -28,6 +28,7 @@ from span.core.model.investigation import (
     ContextOrigin,
     ContextState,
     InvestigationContext,
+    InvestigationContextRef,
 )
 from span.core.model.primitives import (
     ChallengeId,
@@ -42,11 +43,11 @@ from span.core.model.primitives import (
     SemanticBasis,
     UnderstandingId,
     UnderstandingVersionNumber,
-    VerificationRunId,
     evidence_scope_contains,
 )
 from span.core.model.recording import (
     AcceptedRevisionEffect,
+    AcceptedWriteEffect,
     RevisionEffectAction,
     ReceiptDecision,
     ReceiptDecisionKind,
@@ -157,10 +158,7 @@ def receipt_decision(
     digest: ContentDigest,
 ) -> ReceiptDecision:
     """Receipt-first decision for one request key/content pair (FD-3)."""
-    if existing is not None and (
-        existing.identity.repository_id != key.repository_id
-        or existing.identity.request_id != key.request_id
-    ):
+    if existing is not None and existing.key != key:
         raise RecordingConflict(
             "receipt identity does not match the recording key",
             cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
@@ -181,37 +179,28 @@ def receipt_decision(
 
 
 def build_receipt(
-    identity: RecordingIdentity,
+    identity: RecordingIdentity | RecordingKey,
     digest: ContentDigest,
     committed_at: _datetime.datetime,
     *,
-    understanding: tuple[UnderstandingId, UnderstandingVersionNumber] | None = None,
-    verification_run_id: VerificationRunId | None = None,
-    challenge_id: ChallengeId | None = None,
-    dependent_effects: tuple[ConclusionRevisionRef, ...] = (),
+    effect: AcceptedWriteEffect,
+    original_addressing_repository_id: str | None = None,
     replay_expires_at: _datetime.datetime | None = None,
 ) -> RecordReceipt:
-    """Build the immutable receipt for one accepted effect."""
-    understanding_ids: tuple[UnderstandingId, ...] = ()
-    understanding_versions: tuple[UnderstandingVersionNumber, ...] = ()
-    verification_ids: tuple[VerificationRunId, ...] = ()
-    challenge_ids: tuple[ChallengeId, ...] = ()
-    if understanding is not None:
-        understanding_ids = (understanding[0],)
-        understanding_versions = (understanding[1],)
-    if verification_run_id is not None:
-        verification_ids = (verification_run_id,)
-    if challenge_id is not None:
-        challenge_ids = (challenge_id,)
+    """Build an exact immutable receipt from the accepted transition."""
     return RecordReceipt(
-        identity=identity,
+        key=RecordingKey(identity.repository_id, identity.request_id),
+        original_addressing_repository_id=(
+            original_addressing_repository_id or identity.repository_id
+        ),
         content_digest=digest,
         committed_at=committed_at,
-        accepted_understanding_ids=understanding_ids,
-        accepted_understanding_versions=understanding_versions,
-        accepted_verification_run_ids=verification_ids,
-        accepted_challenge_ids=challenge_ids,
-        dependent_effects=dependent_effects,
+        accepted_effect=effect,
+        context=(
+            InvestigationContextRef(identity.repository_id, identity.context_id)
+            if isinstance(identity, RecordingIdentity)
+            else None
+        ),
         replay_expires_at=replay_expires_at,
     )
 

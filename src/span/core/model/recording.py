@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as _datetime
 import enum as _enum
+import typing as _typing
 from dataclasses import dataclass as _dataclass
 
 from span.core.model.primitives import (
@@ -23,6 +24,7 @@ from span.core.model.primitives import (
     VerificationRunId,
     _require_non_empty,
 )
+from span.core.model.investigation import InvestigationContextRef
 from span.core.model.surfaces import (
     AcceptedDependencyEffects,
     SurfaceAction,
@@ -203,42 +205,45 @@ class AcceptedVerificationEffect:
     run_id: VerificationRunId
 
 
+AcceptedWriteEffect = _typing.Union[
+    AcceptedUnderstandingEffect,
+    AcceptedVerificationEffect,
+    AcceptedSurfaceEffect,
+    AcceptedChallengeOpeningEffect,
+]
+AcceptedReceiptEffect = _typing.Union[
+    AcceptedWriteEffect, HistoricalAcceptanceDetailUnavailable
+]
+
+
 @_dataclass(frozen=True)
 class RecordReceipt:
-    """Immutable evidence that one recording submission committed."""
+    """Immutable acceptance, independently of live qualification and replay."""
 
-    identity: RecordingIdentity
+    key: RecordingKey
+    original_addressing_repository_id: str
     content_digest: ContentDigest
     committed_at: _datetime.datetime
-    accepted_understanding_ids: tuple[UnderstandingId, ...] = ()
-    accepted_understanding_versions: tuple[UnderstandingVersionNumber, ...] = ()
-    accepted_verification_run_ids: tuple[VerificationRunId, ...] = ()
-    accepted_challenge_ids: tuple[ChallengeId, ...] = ()
-    dependent_effects: tuple[ConclusionRevisionRef, ...] = ()
+    accepted_effect: AcceptedReceiptEffect
+    context: InvestigationContextRef | None
     replay_expires_at: _datetime.datetime | None = None
 
     def __post_init__(self) -> None:
-        if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
+        _require_non_empty("original addressing repository", self.original_addressing_repository_id)
+        if self.committed_at.utcoffset() is None:
             raise ValueError("RecordReceipt.committed_at must be timezone-aware")
         if self.replay_expires_at is not None:
-            if (
-                self.replay_expires_at.tzinfo is None
-                or self.replay_expires_at.utcoffset() is None
-            ):
+            if self.replay_expires_at.utcoffset() is None:
                 raise ValueError("RecordReceipt.replay_expires_at must be aware")
             if self.replay_expires_at < self.committed_at:
                 raise ValueError("replay_expires_at cannot precede committed_at")
-        if self.accepted_understanding_ids and (
-            len(self.accepted_understanding_ids)
-            != len(self.accepted_understanding_versions)
-        ):
-            raise ValueError("accepted understanding IDs and versions must correspond")
-        if not (
-            self.accepted_understanding_ids
-            or self.accepted_verification_run_ids
-            or self.accepted_challenge_ids
-        ):
-            raise ValueError("a receipt must record at least one accepted effect")
+        if isinstance(self.accepted_effect, AcceptedSurfaceEffect):
+            if self.context is not None:
+                raise ValueError("surface acceptance has no investigation context")
+            if self.accepted_effect.surface.repository_id != self.key.repository_id:
+                raise ValueError("surface acceptance must share receipt owner")
+        elif self.context is None or self.context.repository_id != self.key.repository_id:
+            raise ValueError("semantic acceptance requires its owner-bound context")
 
 
 class ReceiptDecisionKind(_enum.Enum):

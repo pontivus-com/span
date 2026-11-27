@@ -281,6 +281,18 @@ class LifecycleStorePort(_typing.Protocol):
         """Resolve one declared authority binding."""
         ...
 
+    def record_surface(
+        self,
+        key: m.RecordingKey,
+        digest: m.ContentDigest,
+        surface: m.Surface,
+        action: m.SurfaceAction,
+        *,
+        expected_boundary_version: int | None = None,
+    ) -> m.RecordReceipt:
+        """Atomically accept or replay a surface boundary and its receipt."""
+        ...
+
     def put_surface(self, surface: m.Surface) -> m.Surface:
         """Persist a surface, idempotent for identical content."""
         ...
