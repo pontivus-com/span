@@ -90,69 +90,93 @@ class UnderstandService:
                 f"no receipt for request {request.request_id!r}"
             )
         try:
-            verification_runs = tuple(
-                self._store.get_verification_run(run_id.value)
-                for run_id in receipt.accepted_verification_run_ids
-            )
-        except (OSError,) + self._store.operational_errors:
-            return m.RetrievedReceipt(
-                receipt_selector=request,
-                committed_at=receipt.committed_at,
-                accepted_effect=self.unavailable_acceptance(receipt),
-            )
-        accepted_effect: (
-            m.AcceptedVerificationReceipt | m.HistoricalAcceptanceDetailUnavailable
-        )
-        if (
-            verification_runs
-            and not receipt.accepted_understanding_ids
-            and not receipt.accepted_challenge_ids
-            and not receipt.dependent_effects
-        ):
-            accepted_effect = m.AcceptedVerificationReceipt(
-                tuple(m.verification_view(run, None) for run in verification_runs)
-            )
-        else:
-            accepted_effect = self.unavailable_acceptance(receipt)
+            accepted_effect = self._accepted_receipt_effect(receipt)
+        except (OSError, RecordingValidationError) + self._store.operational_errors:
+            accepted_effect = m.unavailable_acceptance(receipt)
         return m.RetrievedReceipt(
             receipt_selector=request,
             committed_at=receipt.committed_at,
             accepted_effect=accepted_effect,
         )
 
-    @staticmethod
-    def unavailable_acceptance(
-        receipt: m.RecordReceipt,
-    ) -> m.HistoricalAcceptanceDetailUnavailable:
-        return m.HistoricalAcceptanceDetailUnavailable(
-            understanding_versions=tuple(
-                m.UnderstandingVersionRef(identity, version)
-                for identity, version in zip(
-                    receipt.accepted_understanding_ids,
-                    receipt.accepted_understanding_versions,
-                    strict=True,
+    def _accepted_receipt_effect(
+        self, receipt: m.RecordReceipt
+    ) -> (
+        m.AcceptedUnderstandingReceipt
+        | m.AcceptedVerificationReceipt
+        | m.AcceptedSurfaceEffect
+        | m.AcceptedChallengeOpeningEffect
+        | m.HistoricalAcceptanceDetailUnavailable
+    ):
+        effect = receipt.accepted_effect
+        if isinstance(effect, m.AcceptedVerificationEffect):
+            run = self._store.get_verification_run(effect.run_id.value)
+            return m.AcceptedVerificationReceipt((m.verification_view(run, None),))
+        if isinstance(effect, m.AcceptedUnderstandingEffect):
+            return m.AcceptedUnderstandingReceipt(
+                understanding_id=effect.understanding_id,
+                version=effect.version,
+                revision_effects=effect.revision_effects,
+                challenge_dispositions=self.accepted_dispositions(effect),
+                dependent_effects=effect.dependent_effects,
+            )
+        if isinstance(effect, m.AcceptedSurfaceEffect):
+            if not any(
+                boundary.boundary_version == effect.boundary_version
+                for boundary in self._store.surface_boundaries(effect.surface)
+            ):
+                raise RecordingValidationError(
+                    "accepted surface boundary is unavailable"
                 )
-            ),
-            verification_run_ids=receipt.accepted_verification_run_ids,
-            challenge_ids=receipt.accepted_challenge_ids,
-            dependent_effect_refs=receipt.dependent_effects,
-            reason="exact accepted detail is unavailable",
-            recovery="retrieve the named historical records; do not repeat the write",
-        )
+        return effect
+
+    def accepted_dispositions(
+        self, effect: m.AcceptedUnderstandingEffect
+    ) -> tuple[m.AcceptedChallengeDisposition, ...]:
+        """Read precisely the disposition revision recorded by acceptance."""
+        accepted: list[m.AcceptedChallengeDisposition] = []
+        for coordinate in effect.challenge_dispositions:
+            challenge = self._store.get_challenge(coordinate.challenge_id.value)
+            matches = tuple(
+                disposition
+                for disposition in challenge.dispositions
+                if disposition.challenge_revision == coordinate.challenge_revision
+            )
+            if (
+                len(matches) != 1
+                or challenge.understanding_id != effect.understanding_id
+            ):
+                raise RecordingValidationError(
+                    "the exact accepted challenge disposition is unavailable"
+                )
+            accepted.append(
+                m.accepted_challenge_disposition(challenge.challenge_id, matches[0])
+            )
+        return tuple(accepted)
 
     def challenge_opening(
         self, receipt: m.RecordReceipt
     ) -> m.Challenged | m.AcceptedDetailUnavailable:
         selector = m.ReceiptRetrievalSelector(
-            repository_id=receipt.identity.repository_id,
-            request_id=receipt.identity.request_id.value,
+            repository_id=receipt.key.repository_id,
+            request_id=receipt.key.request_id.value,
         )
         try:
-            if len(receipt.accepted_challenge_ids) != 1:
+            effect = receipt.accepted_effect
+            if (
+                not isinstance(effect, m.AcceptedChallengeOpeningEffect)
+                or receipt.context is None
+            ):
                 raise RecordingValidationError("receipt has no exact challenge opening")
-            retained = self._store.get_challenge(
-                receipt.accepted_challenge_ids[0].value
-            )
+            retained = self._store.get_challenge(effect.challenge_id.value)
+            if (
+                retained.understanding_id != effect.understanding_id
+                or retained.target_version != effect.target_version
+                or retained.target_conclusions != effect.target_conclusions
+            ):
+                raise RecordingValidationError(
+                    "accepted challenge coordinates are unavailable"
+                )
             opening = create_challenge(
                 challenge_id=retained.challenge_id,
                 understanding_id=retained.understanding_id,
@@ -176,16 +200,13 @@ class UnderstandService:
             return m.AcceptedDetailUnavailable(
                 receipt_selector=selector,
                 committed_at=receipt.committed_at,
-                detail=self.unavailable_acceptance(receipt),
+                detail=m.unavailable_acceptance(receipt),
             )
         return m.Challenged(
             receipt_selector=selector,
             committed_at=receipt.committed_at,
             challenge=m.challenge_view(opening),
-            context=m.InvestigationContextRef(
-                repository_id=receipt.identity.repository_id,
-                context_id=receipt.identity.context_id,
-            ),
+            context=receipt.context,
             prior_conclusions=conclusions,
         )
 

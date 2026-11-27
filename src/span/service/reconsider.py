@@ -103,8 +103,13 @@ class ReconsiderService:
         key = m.RecordingKey(repository_id, m.RequestId(challenge.request_id))
         existing = self._store.get_receipt(key)
         if existing is not None:
+            if existing.context is None:
+                raise RecordingConflict(
+                    "the request already committed a surface effect",
+                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+                )
             command = self._challenge_command(
-                repository_id, challenge, existing.identity.context_id
+                repository_id, challenge, existing.context.context_id
             )
             decision = receipt_decision(existing, key, record_content_digest(command))
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:

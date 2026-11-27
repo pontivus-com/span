@@ -250,6 +250,38 @@ class RecordReceipt:
             raise ValueError("semantic acceptance requires its owner-bound context")
 
 
+def unavailable_acceptance(
+    receipt: RecordReceipt,
+) -> HistoricalAcceptanceDetailUnavailable:
+    """Retain known accepted coordinates when required detail cannot be read."""
+    effect = receipt.accepted_effect
+    if isinstance(effect, HistoricalAcceptanceDetailUnavailable):
+        return effect
+    versions: tuple[UnderstandingVersionRef, ...] = ()
+    runs: tuple[VerificationRunId, ...] = ()
+    challenges: tuple[ChallengeId, ...] = ()
+    dependents: tuple[ConclusionRevisionRef, ...] = ()
+    if isinstance(effect, AcceptedUnderstandingEffect):
+        versions = (UnderstandingVersionRef(effect.understanding_id, effect.version),)
+        challenges = tuple(item.challenge_id for item in effect.challenge_dispositions)
+        dependents = tuple(item.ref for item in effect.dependent_effects.effects)
+    elif isinstance(effect, AcceptedVerificationEffect):
+        runs = (effect.run_id,)
+    elif isinstance(effect, AcceptedChallengeOpeningEffect):
+        challenges = (effect.challenge_id,)
+        versions = (
+            UnderstandingVersionRef(effect.understanding_id, effect.target_version),
+        )
+    return HistoricalAcceptanceDetailUnavailable(
+        versions,
+        runs,
+        challenges,
+        dependents,
+        "exact accepted detail is unavailable",
+        "retrieve the named historical records; do not repeat the write",
+    )
+
+
 class ReceiptDecisionKind(_enum.Enum):
     NEW = "NEW"
     REPLAY = "REPLAY"
