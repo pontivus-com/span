@@ -87,7 +87,7 @@ def verification_payload(value: object) -> dict[str, object]:
     payload = _factor(
         value, "VerificationRun", "facts", "VerificationRunFacts", _VERIFICATION_FIELDS
     )
-    m.from_canonical(m.VerificationRunFacts, payload["facts"])
+    m.from_canonical(m.VerificationRun, payload)
     return payload
 
 
@@ -126,6 +126,7 @@ def challenge_payload(value: object) -> dict[str, object]:
     payload["dispositions"] = [
         _disposition(item) for item in _sequence(payload.get("dispositions", []))
     ]
+    m.from_canonical(m.Challenge, payload)
     return payload
 
 
@@ -270,6 +271,7 @@ def receipt_payload(value: object) -> dict[str, object]:
         },
         accepted_effect=effect,
     )
+    m.from_canonical(m.RecordReceipt, payload)
     return payload
 
 
