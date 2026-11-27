@@ -1042,6 +1042,8 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(result.status.current, 1)
         self.assertEqual(result.status.pending, 0)
         self.assertEqual(result.status.pending_refs, ())
+        self.assertEqual(result.status.descendants, ())
+        self.assertEqual(result.status.unexamined, 0)
 
     def test_exact_question_without_membership_is_unassessed(self) -> None:
         result = self.service.ask(
@@ -1504,18 +1506,17 @@ class AnswerServiceTest(unittest.TestCase):
         result = self._ask("src/a.py", None)
         assert isinstance(result, m.Answer)
         self.assertEqual(len(result.verification), 1)
+        self.assertEqual(result.verification[0].run.observed_at, NOW)
 
     def test_verification_selection_order_is_deterministic(self) -> None:
         first = self._record_verification_paths("req-order-a", ("src/a.py",))
         second = self._record_verification_paths("req-order-b", ("src/a.py",))
         result = self._ask("src/a.py", "What does A do?", "req-order-ask")
         assert isinstance(result, m.Answer)
-        expected = sorted(
-            [
-                first.accepted_verification_run_ids[0].value,
-                second.accepted_verification_run_ids[0].value,
-            ]
-        )
+        expected = [
+            first.accepted_verification_run_ids[0].value,
+            second.accepted_verification_run_ids[0].value,
+        ]
         self.assertEqual(
             [view.run.run_id.value for view in result.verification],
             expected,
@@ -1911,9 +1912,7 @@ class AnswerServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(result, m.RetrievedReceipt)
-        self.assertEqual(
-            result.accepted_effect, m.AcceptedVerificationReceipt((run,))
-        )
+        self.assertEqual(result.accepted_effect, m.AcceptedVerificationReceipt((run,)))
 
     def _page_service(self, *, clock=None):
         import dataclasses

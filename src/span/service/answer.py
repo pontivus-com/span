@@ -18,7 +18,7 @@ import typing as _typing
 
 from span.core import containment
 from span.core import model as m
-from span.core import support_rules
+from span.core import support_rules, selection
 from span.core.recording import RecordingValidationError
 from span.core.rejection import RejectionCauseKind
 from span.ports.lifecycle import LifecycleStorePort
@@ -36,7 +36,7 @@ from span.service.evidence import EvidenceService
 from span.service.ids import server_context_id
 from span.service.support import SupportService
 from span.service.understand import UnderstandService
-from span.service.surface_status import compose_surface_status, covers_path
+from span.service.surface_status import compose_surface_status
 
 __all__ = ["AnswerService", "gap_recovery"]
 
@@ -156,8 +156,16 @@ class AnswerService:
             if selected_understanding is not None
             else tuple(item for item in all_understandings if item.surface == surface)
         )
+        if selected_question is not None:
+            understandings = tuple(
+                item for item in understandings if item.question == selected_question
+            )
         status = compose_surface_status(
-            surface, store=self._store, support=self._support, evidence=self._evidence
+            surface,
+            store=self._store,
+            support=self._support,
+            evidence=self._evidence,
+            selected=understandings if selected_question is not None else None,
         )
         if selected_question is None:
             functional_pyramid = self._functional_pyramid_projection(
@@ -190,13 +198,12 @@ class AnswerService:
         understandings: tuple[m.Understanding, ...],
         status: m.SurfaceStatus,
     ) -> m.AskResult:
-        matched = tuple(
-            item for item in understandings if item.question == selected_question
-        )
+        matched = understandings
+        semantic_scope = self._matched_semantic_scope(matched) if matched else None
         functional_pyramid = self._functional_pyramid_projection(
             repository_id,
             surface,
-            self._matched_semantic_scope(matched) if matched else None,
+            semantic_scope,
         )
         if not matched:
             result = self._cold_gap(
@@ -252,7 +259,7 @@ class AnswerService:
                     functional_pyramid=functional_pyramid,
                     conclusions=tuple(current),
                     gaps=tuple(gaps),
-                    verification=self._verification(surface),
+                    verification=self._verification(surface, semantic_scope),
                 ),
             )
 
@@ -542,59 +549,23 @@ class AnswerService:
         declared = self._store.find_surface(surface)
         return () if declared is None else declared.boundary.paths
 
-    def _verification_members(self, surface: m.SurfaceKey) -> tuple[str, ...] | None:
-        """The file members the asked surface denotes, or None when unresolvable.
-
-        A file is itself. A symbol is matched through its containing file; a
-        symbol identity with no file prefix is excluded explicitly. A declared
-        surface denotes its boundary paths and the containing files of its
-        declared symbols.
-        """
-        if surface.kind is m.SurfaceKind.FILE:
-            return (surface.locator,)
-        if surface.kind is m.SurfaceKind.SYMBOL:
-            containing = containment.surface_file_locator(surface.locator)
-            return None if containing is None else (containing,)
-        declared = self._store.find_surface(surface)
-        if declared is None:
-            return None
-        members = list(declared.boundary.paths)
-        for symbol in declared.boundary.symbols:
-            containing = containment.surface_file_locator(symbol)
-            if containing is not None:
-                members.append(containing)
-        return tuple(dict.fromkeys(members))
-
-    def _run_scope_covers(
-        self,
-        scope: m.EvidenceScope,
-        repository_id: str,
-        members: tuple[str, ...],
-    ) -> bool:
-        """True when the run's declared scope covers every surface member.
-
-        A run scope path covers a member when it is equal or an ancestor
-        (FD-5, FD-17). Declared evidence references are scope members too; a
-        reference from another repository cannot cover this surface.
-        """
-        atoms: list[str] = list(scope.paths)
-        for ref in scope.evidence_refs:
-            if ref.repository_id != repository_id:
-                return False
-            atoms.append(containment.surface_file_locator(ref.locator) or ref.locator)
-        if not atoms:
-            return False
-        covered = set(atoms)
-        return all(covers_path(member, covered) for member in members)
-
-    def _verification(self, surface: m.SurfaceKey) -> tuple[m.VerificationView, ...]:
-        members = self._verification_members(surface)
-        if not members:
+    def _verification(
+        self, surface: m.SurfaceKey, semantic_scope: m.EvidenceScope | None = None
+    ) -> tuple[m.VerificationView, ...]:
+        if (
+            surface.kind is m.SurfaceKind.SYMBOL
+            and containment.surface_file_locator(surface.locator) is None
+        ):
             return ()
-        selected: list[m.VerificationView] = []
+        if semantic_scope is None:
+            try:
+                semantic_scope = self._surface_semantic_scope(surface)
+            except RecordingValidationError:
+                return ()
+        candidates: list[m.VerificationView] = []
         for run in self._store.list_verification_runs(surface.repository_id):
-            if not self._run_scope_covers(
-                run.scope.scope, surface.repository_id, members
+            if not selection.verification_covers(
+                run, surface.repository_id, semantic_scope
             ):
                 continue
             try:
@@ -602,12 +573,13 @@ class AnswerService:
                 qualification: m.VerificationQualification | m.SupportUnavailable = (
                     self._support.qualify_verification(detailed)
                 )
-            except (OSError, ValueError):
+            except (OSError,) + self._store.operational_errors:
                 qualification = m.SupportUnavailable(
                     "verification support evaluation is unavailable"
                 )
-            selected.append(m.VerificationView(run=run, qualification=qualification))
-        return tuple(selected)
+            candidates.append(m.VerificationView(run=run, qualification=qualification))
+        selected, _history = selection.select_verification(tuple(candidates))
+        return selected
 
     def _exact_reference(
         self,

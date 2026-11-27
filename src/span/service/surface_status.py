@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace as _replace
+
 from span.core import model as m
+from span.core import selection
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.support import SupportService
 from span.service.evidence import EvidenceService
@@ -14,105 +17,79 @@ def compose_surface_status(
     store: LifecycleStorePort,
     support: SupportService,
     evidence: EvidenceService,
+    selected: tuple[m.Understanding, ...] | None = None,
 ) -> m.SurfaceStatus:
+    if selected is not None:
+        return _distribution(surface, selected, store=store, support=support)
     all_understandings = tuple(store.list_understandings(surface.repository_id))
     own = tuple(item for item in all_understandings if item.surface == surface)
-    return _status(
-        surface,
-        own,
-        all_understandings,
-        store=store,
-        support=support,
-        evidence=evidence,
-    )
-
-
-def _status(
-    surface: m.SurfaceKey,
-    understandings: tuple[m.Understanding, ...],
-    all_understandings: tuple[m.Understanding, ...],
-    seen: set[m.SurfaceKey] | None = None,
-    examined: tuple[m.EvidenceScope, ...] | None = None,
-    children: dict[m.SurfaceKey, list[m.SurfaceKey]] | None = None,
-    *,
-    store: LifecycleStorePort,
-    support: SupportService,
-    evidence: EvidenceService,
-) -> m.SurfaceStatus:
-    visited = set() if seen is None else seen
-    visited.add(surface)
-    if examined is None:
-        examined = _examined_scopes(all_understandings, store=store)
-    if children is None:
-        children = {}
-        for item in store.list_surfaces(surface.repository_id):
-            if item.parent is not None:
-                children.setdefault(item.parent, []).append(item.key)
-    current = 0
-    pending = 0
-    pending_refs: list[m.PendingConclusionRef] = []
-    stale = 0
-    stale_refs: list[m.StaleConclusionRef] = []
-    unassessed = 0
-    for understanding in understandings:
-        qualification = support.evaluate_version(understanding.understanding_id.value)
-        if not qualification.conclusions:
-            unassessed += 1
-        for conclusion in qualification.conclusions:
-            if conclusion.evaluation.state is m.SupportState.CURRENT:
-                disposition = store.find_curation(
-                    conclusion.ref,
-                    as_of_version=understanding.current_version,
-                )
-                if disposition is not None:
-                    current += 1
-                else:
-                    pending += 1
-                    pending_refs.append(
-                        m.PendingConclusionRef(
-                            ref=conclusion.ref,
-                            understanding_version=understanding.current_version,
-                        )
-                    )
-            else:
-                stale += 1
-                stale_refs.append(
-                    m.StaleConclusionRef(
-                        ref=conclusion.ref,
-                        understanding_version=understanding.current_version,
-                        state=conclusion.evaluation.state,
-                    )
-                )
-    unexamined, limited = _unexamined(
-        surface,
-        understandings,
-        examined,
-        store=store,
-        evidence=evidence,
-    )
-    descendants = tuple(
-        _status(
+    examined = _examined_scopes(all_understandings, store=store)
+    surfaces = store.list_surfaces(surface.repository_id)
+    children = selection.immediate_children(surface, surfaces)
+    summaries = tuple(
+        _surface_distribution(
             child,
             tuple(item for item in all_understandings if item.surface == child),
-            all_understandings,
-            visited,
             examined,
-            children,
             store=store,
             support=support,
             evidence=evidence,
         )
-        for child in children.get(surface, ())
-        if child not in visited
+        for child in children
     )
-    return m.SurfaceStatus(
-        surface=surface,
-        current=current,
-        pending=pending,
-        pending_refs=tuple(pending_refs),
-        stale=stale,
-        stale_refs=tuple(stale_refs),
-        unassessed=unassessed,
+    return _surface_distribution(
+        surface,
+        own,
+        examined,
+        store=store,
+        support=support,
+        evidence=evidence,
+        descendants=summaries,
+    )
+
+
+def _distribution(
+    surface: m.SurfaceKey,
+    understandings: tuple[m.Understanding, ...],
+    *,
+    store: LifecycleStorePort,
+    support: SupportService,
+) -> m.SurfaceStatus:
+    evaluations = tuple(
+        support.evaluate_version(
+            understanding.understanding_id.value, understanding.current_version.value
+        )
+        for understanding in understandings
+    )
+    curated = frozenset(
+        conclusion.ref
+        for qualification in evaluations
+        for conclusion in qualification.conclusions
+        if conclusion.evaluation.state is m.SupportState.CURRENT
+        and store.find_curation(
+            conclusion.ref, as_of_version=qualification.version
+        )
+        is not None
+    )
+    return selection.status_distribution(surface, evaluations, curated)
+
+
+def _surface_distribution(
+    surface: m.SurfaceKey,
+    understandings: tuple[m.Understanding, ...],
+    examined: tuple[m.EvidenceScope, ...],
+    *,
+    store: LifecycleStorePort,
+    support: SupportService,
+    evidence: EvidenceService,
+    descendants: tuple[m.SurfaceStatus, ...] = (),
+) -> m.SurfaceStatus:
+    distribution = _distribution(surface, understandings, store=store, support=support)
+    unexamined, limited = _unexamined(
+        surface, understandings, examined, store=store, evidence=evidence
+    )
+    return _replace(
+        distribution,
         unexamined=unexamined,
         unexamined_limited=limited,
         descendants=descendants,
@@ -186,10 +163,3 @@ def _unexamined(
             unexamined += 1
     return unexamined, True
 
-
-def covers_path(locator: str, examined_paths: set[str]) -> bool:
-    for path in examined_paths:
-        stem = path.rstrip("/")
-        if locator == stem or locator.startswith(stem + "/"):
-            return True
-    return False
