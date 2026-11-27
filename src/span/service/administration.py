@@ -9,82 +9,67 @@ source locator; nothing about kind, status or precedence is inferred.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from span.core import model as m
 from span.ports.evidence import EvidenceSource
 from span.ports.lifecycle import LifecycleStorePort
-from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 
-__all__ = ["initialize_repository"]
+__all__ = ["initialize_repository", "validate_authority_configuration"]
 
 
-def _inventory_locators(
-    requested: tuple[m.EvidenceRef, ...],
+def validate_authority_configuration(
+    request: m.InitializeRepositoryRequest,
     *,
     repository_id: str,
     evidence: EvidenceSource,
-) -> dict[str, m.EvidenceRef]:
-    inventory = evidence.inventory_evidence(
-        repository_id,
-        m.EvidenceScope(paths=(), evidence_refs=requested),
-        DEFAULT_SERVICE_BOUNDS_POLICY.maximum_query_bounds,
-    )
-    return {item.evidence_ref.locator: item.evidence_ref for item in inventory.items}
+) -> m.InitializeRepositoryRequest:
+    """Validate every explicit locator; preserve omitted and empty families."""
+    observed: dict[str, m.EvidenceRef] = {}
 
-
-def _resolve_seeds(
-    requested: tuple[m.EvidenceRef, ...],
-    *,
-    repository_id: str,
-    evidence: EvidenceSource,
-) -> tuple[m.EvidenceRef, ...]:
-    by_locator = _inventory_locators(
-        requested, repository_id=repository_id, evidence=evidence
-    )
-    resolved: list[m.EvidenceRef] = []
-    for seed in requested:
-        try:
-            found = by_locator[seed.locator]
-        except KeyError:
-            raise ValueError(
-                "unknown authority seed locator: " f"{seed.locator}"
-            ) from None
-        if found.repository_id != repository_id:
-            raise ValueError(
-                f"authority seed {seed.locator!r} belongs to "
-                f"{found.repository_id!r}"
-            )
-        resolved.append(found)
-    return tuple(resolved)
-
-
-def _validate_bindings(
-    requested: tuple[m.AuthorityBinding, ...],
-    *,
-    repository_id: str,
-    evidence: EvidenceSource,
-) -> tuple[m.AuthorityBinding, ...]:
-    by_locator = _inventory_locators(
-        tuple(item.evidence_ref for item in requested),
-        repository_id=repository_id,
-        evidence=evidence,
-    )
-    ids: set[str] = set()
-    for binding in requested:
-        reference = binding.evidence_ref
+    def resolve(reference: m.EvidenceRef, family: str) -> m.EvidenceRef:
+        locator = reference.locator
         if reference.repository_id != repository_id:
             raise ValueError(
-                f"authority binding {reference.locator!r} belongs to "
-                f"{reference.repository_id!r}"
+                f"authority {family} {locator!r} belongs to "
+                f"{reference.repository_id!r}, not {repository_id!r}"
             )
-        if reference.locator not in by_locator:
-            raise ValueError(
-                "unknown authority binding locator: " f"{reference.locator}"
-            )
+        if locator not in observed:
+            try:
+                result = evidence.read_exact(
+                    repository_id, m.EvidenceRequest(locator), None
+                )
+            except (OSError, ValueError) as exc:
+                raise ValueError(
+                    f"authority {family} provider failure for "
+                    f"{repository_id!r}/{locator!r}: {exc}"
+                ) from exc
+            if isinstance(result, m.EvidenceSourceFailure):
+                raise ValueError(
+                    f"authority {family} {result.kind.value.lower()} locator "
+                    f"{repository_id!r}/{locator!r}: {result.reason}"
+                )
+            found = result.evidence_ref
+            if found.repository_id != repository_id or found.locator != locator:
+                raise ValueError(
+                    f"authority {family} provider identity mismatch for "
+                    f"{repository_id!r}/{locator!r}"
+                )
+            observed[locator] = found
+        return observed[locator]
+
+    seeds = request.authority_seeds
+    if seeds is not None:
+        seeds = tuple(resolve(seed, "seed") for seed in seeds)
+    ids: set[str] = set()
+    for binding in request.authority_bindings or ():
+        reference = binding.evidence_ref
+        resolve(reference, "binding")
         key = reference.evidence_id.value
         if key in ids:
-            raise ValueError(f"duplicate authority binding: {key}")
+            raise ValueError(f"duplicate authority binding: {repository_id!r}/{key}")
         ids.add(key)
-    return requested
+    return replace(request, authority_seeds=seeds)
 
 
 def initialize_repository(
@@ -101,28 +86,19 @@ def initialize_repository(
     Semantics: omitted (``None``) preserves configured declarations, an
     explicit empty tuple clears them, and a non-empty tuple replaces them.
     """
-    existing_seeds = store.load_authority_seeds(repository_id)
-    existing_bindings = store.load_authority_bindings(repository_id)
-    if request.authority_seeds is None:
-        seeds = existing_seeds
-    elif not request.authority_seeds:
-        seeds = ()
-    else:
-        seeds = _resolve_seeds(
-            request.authority_seeds,
-            repository_id=repository_id,
-            evidence=evidence,
-        )
-    if request.authority_bindings is None:
-        bindings = existing_bindings
-    elif not request.authority_bindings:
-        bindings = ()
-    else:
-        bindings = _validate_bindings(
-            request.authority_bindings,
-            repository_id=repository_id,
-            evidence=evidence,
-        )
+    validated = validate_authority_configuration(
+        request, repository_id=repository_id, evidence=evidence
+    )
+    seeds = (
+        store.load_authority_seeds(repository_id)
+        if validated.authority_seeds is None
+        else validated.authority_seeds
+    )
+    bindings = (
+        store.load_authority_bindings(repository_id)
+        if validated.authority_bindings is None
+        else validated.authority_bindings
+    )
     store.register_repository(
         repository_id,
         canonical_root,

@@ -595,6 +595,107 @@ dispose();
         self.assertEqual(recovered["governed_initialization"]["repo-a"]["version"], 2)
         self.assertTrue(recovered["verify"]["acceptance_ok"])
 
+    def test_installed_field_scale_governed_authority(self):
+        import sqlite3
+
+        root = self.tmp / "field-scale"
+        repo_a, repo_b = root / "repo-a", root / "repo-b"
+        for repo, files in ((repo_a, _GOVERNED_A_FILES), (repo_b, _GOVERNED_B_FILES)):
+            repo.mkdir(parents=True)
+            _write_files(repo, files)
+        classification = repo_b / "docs/classification.json"
+        payload = _json.loads(classification.read_text())
+        parent = payload["rows"][0]
+        expected = {
+            row["document_ref"]
+            for row in payload["rows"]
+            if row["disposition"] == "place"
+        }
+        for index in range(1101):
+            locator = f"rules/field-{index:04}.md"
+            (repo_b / locator).write_text(f"# Field authority {index}\n")
+            expected.add(locator)
+            payload["rows"].append(
+                {
+                    "declaring_repository_id": "repo-b",
+                    "repository_id": "repo-b",
+                    "document_ref": locator,
+                    "disposition": "place",
+                    "layer": "P1",
+                    "scope": ".",
+                    "governing_documents": [
+                        {
+                            key: parent[key]
+                            for key in (
+                                "declaring_repository_id",
+                                "repository_id",
+                                "document_ref",
+                            )
+                        }
+                    ],
+                    "authority_kind": "REPOSITORY_RULE",
+                    "authority_status": "ACCEPTED",
+                }
+            )
+        classification.write_text(_json.dumps(payload))
+        data_dir = root / "data"
+        _, command, env = self._install_governed_runtime(repo_a, repo_b, data_dir)
+        receipt_path = data_dir / "install.json"
+        receipt = _json.loads(receipt_path.read_text())
+        self.assertTrue(receipt["verify"]["acceptance_ok"])
+        entry = receipt["governed_initialization"]["repo-b"]
+        bindings = entry["bindings"]
+        self.assertEqual(
+            {binding["evidence_ref"]["locator"] for binding in bindings}, expected
+        )
+        self.assertEqual(len(bindings), len(expected))
+        placed = set()
+        for locator in entry["artifacts"]:
+            generated = _json.loads((repo_b / locator).read_text())
+            if generated.get("version") == 3:
+                placed.update(
+                    placement["document"]["document_ref"]
+                    for placement in generated["placements"]
+                )
+        self.assertEqual(placed, expected)
+        connection = sqlite3.connect(data_dir / "repo-b.db")
+        try:
+            stored = connection.execute(
+                "SELECT authority_bindings_json FROM repositories "
+                "WHERE repository_id=?",
+                ("repo-b",),
+            ).fetchone()
+            self.assertEqual(_json.loads(stored[0]), bindings)
+        finally:
+            connection.close()
+        self._execute_installer(command, env)
+        repeated = _json.loads(receipt_path.read_text())["governed_initialization"][
+            "repo-b"
+        ]
+        self.assertEqual(repeated["version"], entry["version"])
+        self.assertEqual(repeated["bindings"], bindings)
+        self.assertEqual(
+            repeated["participation_results"], entry["participation_results"]
+        )
+
+        # A late invalid locator must fail before modifying accepted state.
+        previous = receipt_path.read_bytes()
+        missing = repo_b / "rules/field-1100.md"
+        missing.unlink()
+        rejected = _subprocess.run(
+            command,
+            cwd=str(self.tmp),
+            capture_output=True,
+            text=True,
+            timeout=900,
+            env=env,
+        )
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("field-1100.md", rejected.stderr + rejected.stdout)
+        self.assertEqual(receipt_path.read_bytes(), previous)
+        for locator in entry["artifacts"]:
+            self.assertTrue((repo_b / locator).is_file())
+
     def test_installed_cross_repository_governance_journey(self):
         root = self.tmp / "governed"
         repo_a = root / "repo-a"

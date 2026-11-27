@@ -173,6 +173,43 @@ def load_authority_files(
     return seeds, bindings
 
 
+def validate_authority_files(
+    targets: tuple[Path, ...],
+    seeds: dict[str, tuple[m.EvidenceRef, ...]],
+    bindings: dict[str, tuple[m.AuthorityBinding, ...]],
+) -> None:
+    """Preflight explicit replacements through the single service validator."""
+    from span.core import model as m
+    from span.service.administration import validate_authority_configuration
+    from span.shell.filesystem_evidence import FilesystemEvidenceSource
+    from span.shell.structural import (
+        canonical_root_from_config,
+        repository_id_from_config,
+    )
+
+    for target in targets:
+        repository_id = repository_id_from_config(str(target))
+        if not seeds.get(repository_id) and not bindings.get(repository_id):
+            continue
+        request = m.InitializeRepositoryRequest(
+            repository_locator=str(target),
+            authority_seeds=seeds.get(repository_id),
+            authority_bindings=bindings.get(repository_id),
+        )
+        try:
+            validate_authority_configuration(
+                request,
+                repository_id=repository_id,
+                evidence=FilesystemEvidenceSource(
+                    repository_id, canonical_root_from_config(str(target))
+                ),
+            )
+        except (OSError, ValueError) as exc:
+            raise SystemExit(
+                f"authority preflight rejected for {repository_id!r}: {exc}"
+            ) from None
+
+
 def load_seeds(
     path: str | Path | None,
     dry_run: bool = False,

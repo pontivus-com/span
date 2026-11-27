@@ -1,6 +1,6 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; field-remediation tasks S-FIELD-01–04 below are open, not implemented or verified.  
+**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 implementation candidate awaits verification; S-FIELD-02–04 remain open and unverified.  
 **Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
@@ -155,7 +155,7 @@ Static inspection of the exact field baseline confirms three distinct defects:
 | FIELD-02 | `shell/install/governed.py:461–501` records pending ownership and publishes generated files outside the data directory; `shell/install/recovery.py:335–405` restores only listed data artifacts. Restoring the prior receipt loses pending ownership without reconciling generated paths or absence. | FD-88A; TD §17.2 | S-FIELD-02 |
 | FIELD-03 | `shell/readiness.py:817–844` always reports `requires_governed_install`, irrespective of actual state. | FD-94; TD §17.2 | S-FIELD-03 |
 
-**Session finding traceability (all production work OPEN).** The following
+**Session finding traceability (all acceptance gates OPEN).** The following
 maps the reported defects and their review refinements to their existing
 design owners and executable work; it is not another task or acceptance
 programme. The owner-reported Legal-scale failure is part of FIELD-01/02.
@@ -179,8 +179,13 @@ CI or a successful count-only installation.
 
 ### S-FIELD-01 — Exhaustive exact administrative authority validation
 
-**Status:** OPEN. **Owner:** existing `service/administration.py` and
-installer preflight/provisioning composition, existing EvidenceSource port.
+**Status:** IMPLEMENTED IN CANDIDATE, VERIFICATION OPEN. **Owner:** existing
+`service/administration.py` and installer preflight/provisioning composition,
+existing EvidenceSource port. The exact-locator validator and installer
+preflight are implemented; unit and installed field-scale regressions added.
+Test-line ratchet records the measured added regression lines (193); no
+delivery or semantic budget changed. Do not accept this gate until focused
+and exact-candidate CI evidence is available; S-FIELD-02–04 remain open.
 
 1. Implement the exact unbounded-by-delivery validation mechanism in TD §20.
    Replace first-page inventory consumption for both ordinary seeds and bindings.

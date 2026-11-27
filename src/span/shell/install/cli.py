@@ -64,6 +64,7 @@ from span.shell.install.paths import (
 from span.shell.install.preflight import (
     load_authority_files,
     preflight_facts,
+    validate_authority_files,
 )
 from span.shell.install import governed
 from span.shell.install.receipt import (
@@ -432,6 +433,8 @@ def _provision_runtime(
     )
     if pending is not None:
         authority_bindings.update(governed.bindings_for(pending))
+    if not env.dry:
+        validate_authority_files(env.targets, authority_seeds, authority_bindings)
     preflight = preflight_facts(
         env.targets,
         binding_files=args.authority_bindings_file,

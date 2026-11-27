@@ -344,6 +344,96 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                     )
             ensure_venv.assert_not_called()
 
+    def test_exact_authority_validation_preserves_large_binding_set(self):
+        from span.service.administration import validate_authority_configuration
+        from tests.support.evidence import FixtureEvidenceSource
+
+        files = {f"docs/rule-{index:04}.md": "# Rule" for index in range(1101)}
+        refs = tuple(
+            m.EvidenceRef(
+                evidence_id=m.EvidenceId(f"declared-{locator}"),
+                repository_id="repo-a",
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator=locator,
+            )
+            for locator in files
+        )
+        bindings = tuple(
+            m.AuthorityBinding(
+                ref, m.AuthorityKind.REPOSITORY_RULE, m.AuthorityStatus.ACCEPTED
+            )
+            for ref in refs
+        )
+        source = FixtureEvidenceSource("repo-a", files)
+        request = m.InitializeRepositoryRequest("repo-a", refs, bindings)
+        with mock.patch.object(
+            source, "read_exact", wraps=source.read_exact
+        ) as read:
+            validated = validate_authority_configuration(
+                request, repository_id="repo-a", evidence=source
+            )
+        self.assertEqual(read.call_count, len(files))
+        self.assertEqual(validated.authority_bindings, bindings)
+        self.assertEqual(
+            tuple(ref.locator for ref in validated.authority_seeds or ()),
+            tuple(files),
+        )
+        self.assertTrue(
+            all(
+                ref.revision_or_fingerprint for ref in validated.authority_seeds or ()
+            )
+        )
+
+    def test_late_invalid_authority_rejected_before_pending_or_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            repo = root / "repo-a"
+            docs = repo / "docs"
+            docs.mkdir(parents=True)
+            bindings = []
+            for index in range(1101):
+                locator = f"docs/rule-{index:04}.md"
+                if index != 1100:
+                    (repo / locator).write_text("# Rule")
+                bindings.append(
+                    m.AuthorityBinding(
+                        m.EvidenceRef(
+                            m.EvidenceId(f"rule-{index}"),
+                            "repo-a",
+                            m.EvidenceSourceKind.DOCUMENTATION,
+                            locator,
+                        ),
+                        m.AuthorityKind.REPOSITORY_RULE,
+                        m.AuthorityStatus.ACCEPTED,
+                    )
+                )
+            payload = self._write_canonical_list(root, "bindings.json", bindings)
+            with (
+                mock.patch.object(cli, "check_prereqs"),
+                mock.patch.object(cli, "ensure_venv") as ensure_venv,
+                mock.patch.object(cli.governed, "retain_pending") as retain,
+            ):
+                with self.assertRaisesRegex(SystemExit, "missing locator.*rule-1100"):
+                    cli.main(
+                        [
+                            "--repo",
+                            str(repo),
+                            "--authority-bindings-file",
+                            "repo-a",
+                            str(payload),
+                            "--data-dir",
+                            str(root / "data"),
+                            "--span-repo",
+                            str(root),
+                            "--no-hooks",
+                        ]
+                    )
+            ensure_venv.assert_not_called()
+            retain.assert_not_called()
+            self.assertFalse((root / "data/install.json").exists())
+            self.assertFalse((root / "data/repo-a.db").exists())
+            self.assertFalse((repo / ".span").exists())
+
     def test_multi_repository_provisioning_preserves_tri_state_and_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
@@ -351,6 +441,8 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
             repo_b = root / "repo-b"
             repo_a.mkdir()
             repo_b.mkdir()
+            (repo_b / "docs").mkdir()
+            (repo_b / "docs/authority.md").write_text("# Authority\n")
             empty_seeds = root / "empty-seeds.json"
             empty_seeds.write_text("[]", encoding="utf-8")
             bindings = self._write_canonical_list(
