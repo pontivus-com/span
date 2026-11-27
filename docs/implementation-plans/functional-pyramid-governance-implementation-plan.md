@@ -317,8 +317,13 @@ participation write. No operator reconstruction of internal provenance.
 projection; depends on S-FIELD-02 for restore-intent guidance.
 
 Diagnostic run [45924116947](https://github.com/pontivus-com/span/actions/runs/45924116947)
-passed 165 focused tests and 30 subtests on the formatted tree. Apply its six
-Black corrections and fix both collection typing errors at their declarations.
+passed 165 focused tests and 30 subtests on the formatted tree. Its six
+Black corrections and both collection typing fixes were applied in
+`5884e4a1f251`; the temporary workflow was removed. An additional source
+review consolidates live registration and recovery's isolated expected-state
+registration in the existing service owner, and both readiness projections
+in one composition helper. These extractions preserve the canonical carriers,
+store writer, core graph evaluator and public bounds (FD-88A/94; TD §17.2).
 The measured test-line ratchet grows from 34,759 to 35,091 (+332 lines),
 covering readiness, finalized receipt agreement and restore interruption tests;
 no architectural gate or delivery limit changes. Full installed CI is required.

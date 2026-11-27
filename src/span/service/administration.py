@@ -15,7 +15,11 @@ from span.core import model as m
 from span.ports.evidence import EvidenceSource
 from span.ports.lifecycle import LifecycleStorePort
 
-__all__ = ["initialize_repository", "validate_authority_configuration"]
+__all__ = [
+    "initialize_repository",
+    "register_authority_configuration",
+    "validate_authority_configuration",
+]
 
 
 def validate_authority_configuration(
@@ -72,6 +76,36 @@ def validate_authority_configuration(
     return replace(request, authority_seeds=seeds)
 
 
+def register_authority_configuration(
+    request: m.InitializeRepositoryRequest,
+    *,
+    repository_id: str,
+    canonical_root: str,
+    store: LifecycleStorePort,
+) -> tuple[tuple[m.EvidenceRef, ...], tuple[m.AuthorityBinding, ...]]:
+    """Apply validated authority through the canonical registration owner.
+
+    Recovery uses this same operation only on its isolated baseline copy.
+    """
+    seeds = (
+        store.load_authority_seeds(repository_id)
+        if request.authority_seeds is None
+        else request.authority_seeds
+    )
+    bindings = (
+        store.load_authority_bindings(repository_id)
+        if request.authority_bindings is None
+        else request.authority_bindings
+    )
+    store.register_repository(
+        repository_id,
+        canonical_root,
+        authority_seeds=seeds,
+        authority_bindings=bindings,
+    )
+    return seeds, bindings
+
+
 def initialize_repository(
     request: m.InitializeRepositoryRequest,
     *,
@@ -89,21 +123,11 @@ def initialize_repository(
     validated = validate_authority_configuration(
         request, repository_id=repository_id, evidence=evidence
     )
-    seeds = (
-        store.load_authority_seeds(repository_id)
-        if validated.authority_seeds is None
-        else validated.authority_seeds
-    )
-    bindings = (
-        store.load_authority_bindings(repository_id)
-        if validated.authority_bindings is None
-        else validated.authority_bindings
-    )
-    store.register_repository(
-        repository_id,
-        canonical_root,
-        authority_seeds=seeds,
-        authority_bindings=bindings,
+    seeds, bindings = register_authority_configuration(
+        validated,
+        repository_id=repository_id,
+        canonical_root=canonical_root,
+        store=store,
     )
     warnings: list[str] = []
     if seeds:

@@ -324,6 +324,7 @@ def _expected_repository_states(
 ) -> set[str | None]:
     from tempfile import TemporaryDirectory
 
+    from span.service.administration import register_authority_configuration
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
 
@@ -340,19 +341,11 @@ def _expected_repository_states(
             allowed: set[str | None] = {_database_digest(expected)}
             if baseline is None:
                 allowed.add(None)
-            store.register_repository(
-                repository_id,
-                request.repository_locator,
-                authority_seeds=(
-                    store.load_authority_seeds(repository_id)
-                    if request.authority_seeds is None
-                    else request.authority_seeds
-                ),
-                authority_bindings=(
-                    store.load_authority_bindings(repository_id)
-                    if request.authority_bindings is None
-                    else request.authority_bindings
-                ),
+            register_authority_configuration(
+                request,
+                repository_id=repository_id,
+                canonical_root=request.repository_locator,
+                store=store,
             )
             allowed.add(_database_digest(expected))
         finally:

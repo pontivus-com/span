@@ -18,7 +18,7 @@ from span.shell.readiness import (
     probe_functional_pyramid_installation_store,
     observe_repositories,
     probe_governed_provenance,
-    project_activation_guidance,
+    project_repository_guidance,
 )
 from span.shell.structural import canonical_root_from_config, repository_id_from_config
 
@@ -164,7 +164,6 @@ def project_final_receipt(
     }
     if active != probe_active_functional_pyramid(data_dir, roots):
         raise ValueError("ACTIVE observations changed before receipt publication")
-    peers = {}
     for repo in repos:
         facts = typing.cast(dict[str, object], repo["functional_pyramid"])
         repository_id = str(facts["repository_id"])
@@ -174,17 +173,7 @@ def project_final_receipt(
             str(repo["canonical_root"]),
             receipt_context=receipt,
         )
-        peers[repository_id] = facts
-    for repo in repos:
-        facts = typing.cast(dict[str, object], repo["functional_pyramid"])
-        facts["activation_readiness"] = project_activation_guidance(
-            str(facts["repository_id"]),
-            facts,
-            typing.cast(dict[str, object], repo["store"]),
-            active,
-            receipt,
-            peers,
-        )
+    project_repository_guidance(repos, active, receipt)
     report["acceptance_ok"] = _acceptance(
         installation, active, repos, receipt, set(roots)
     )

@@ -20,7 +20,10 @@ span-install --verify-only
 ```
 
 Keep the reported repository ID. Ordinary installation verifies operational
-readiness, not semantic understanding or governed participation.
+readiness, not semantic understanding or governed participation. Inspect the
+reported `activation_readiness`: a healthy ACTIVE instance requires no
+initialization; pending recovery takes precedence over adoption. Use the
+supported action and [recovery guidance](recovery.md#interrupted-governed-installation).
 
 ## 2. Resolve project guidance before governed work
 

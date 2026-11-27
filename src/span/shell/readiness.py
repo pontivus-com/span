@@ -1144,7 +1144,6 @@ def observe_repositories(
     for member in _typing.cast(list[dict[str, object]], active.get("members", [])):
         expanded.setdefault(str(member["repository_id"]), str(member["canonical_root"]))
     reports: list[dict[str, object]] = []
-    peers: dict[str, dict[str, object]] = {}
     for repository_id, root in expanded.items():
         canonical_root = str(_pathlib.Path(root).resolve())
         readiness = probe_store(data_dir, repository_id).payload()
@@ -1159,7 +1158,6 @@ def observe_repositories(
             pending_setup=pending_setup,
             receipt_context=receipt,
         )
-        peers[repository_id] = facts
         reports.append(
             {
                 "locator": str(root),
@@ -1169,6 +1167,20 @@ def observe_repositories(
                 "functional_pyramid": facts,
             }
         )
+    project_repository_guidance(reports, active, receipt)
+    return reports
+
+
+def project_repository_guidance(
+    reports: list[dict[str, object]],
+    active: dict[str, object],
+    receipt: dict[str, object],
+) -> None:
+    """Compose the same instance-qualified guidance for every receipt context."""
+    peers: dict[str, dict[str, object]] = {}
+    for report in reports:
+        facts = _typing.cast(dict[str, object], report["functional_pyramid"])
+        peers[str(facts["repository_id"])] = facts
     for report in reports:
         facts = _typing.cast(dict[str, object], report["functional_pyramid"])
         facts["activation_readiness"] = project_activation_guidance(
@@ -1179,7 +1191,6 @@ def observe_repositories(
             receipt,
             peers,
         )
-    return reports
 
 
 def probe_functional_pyramid_repository(

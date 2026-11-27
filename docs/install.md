@@ -100,6 +100,13 @@ current install receipt when those bindings are available.
 A successful verification means Span is operational for the repository. It does
 **not** mean Span already understands the repository.
 
+The `activation_readiness` diagnostic distinguishes healthy participation or
+ordinary descriptive use (`not_required`), intended governed initialization
+(`requires_governed_install`), observed defects (`requires_repair`), incomplete
+observation (`unavailable`) and pending setup/restore (`pending_recovery`).
+A healthy ACTIVE instance does not need another initialization. Verification
+of a selected ACTIVE member observes its complete retained instance.
+
 Continue with [First investigation](onboarding-runbook.md). After the first
 end-to-end workflow, use [Using Span](usage.md) for ordinary work.
 
@@ -254,8 +261,11 @@ For each repository and authority family:
 - a mapped `[]` clears it; and
 - a mapped non-empty list replaces it exactly.
 
-All deterministic decoding and routing validation completes before the first
-repository-store mutation.
+All deterministic decoding, routing and exact repository-qualified authority
+validation completes before pending setup publication, generated declaration
+publication or repository-store mutation. The complete configuration is the
+validation unit: evidence-delivery pagination does not limit administrative
+authority capacity. Do not batch or reduce governance to fit a query budget.
 
 Ordinary provisioning does not activate Functional Pyramid participation.
 Explicit governed installation continues through the initialization contract

@@ -157,6 +157,25 @@ Restore snapshots the current data directory first, rejects live-held stores,
 clears stale SQLite sidecar files, restores the artifact, and verifies the
 restored content.
 
+## Interrupted governed installation
+
+Use the exact pending receipt and its original classification input to resume.
+If participation was accepted, complete the original operation and retain its
+effects rather than abandoning it. For an unaccepted pending setup with a
+verified pre-setup backup, stop every Span server and hook, then explicitly
+confirm restoration of that original backup using the full restore command
+above. The installer verifies the generated-file preimages and absences,
+selected repository state and installation state before changing anything.
+It retains the recovery snapshot and restores the receipt last; unrelated
+repository stores are not rolled back. If interrupted during restoration,
+repeat the same confirmed restore, not another initialization or backup.
+
+Unknown ownership, changed independent state, missing verified preimages or
+unavailable ownership are conflicts. An older pending receipt created before
+preimage protection cannot establish safe abandonment; resume its original
+input if possible. Do not manually delete generated declarations or stores
+on the assumption that they belong to a failed operation.
+
 ## Integrity and compatibility
 
 Both artifact classes verify:
