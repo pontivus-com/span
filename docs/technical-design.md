@@ -1847,6 +1847,35 @@ state through the installed `span-install`. That lane may not call
 for setup. Lower-level store/service tests may still construct state directly
 when that lower layer is the subject under test.
 
+**Installed identity and invocation preflight (FD-88A; acceptance 73/75).**
+Reuse the existing `scripts/build_identity.py` generation and package-data
+owner for all supported builds, including the source-checkout installer.
+Generate identity from the actual source used for packaging; include identity
+in existing synchronization and post-install proof. A changed build at the
+same version, stale/missing identity, a source change between generation and
+publication, or unverified runtime must not pass exact-candidate proof.
+Use the installed runtime's existing build-identity observation; keep requested
+checkout identity distinct from observed installed revision/digest. Handle
+clean, dirty and unavailable source identity honestly. Do not hand-edit or
+commit generated identity, add a provenance registry, or make verification
+mutate state. Keep source digest/probe mechanics private except existing
+operator-facing provenance evidence required to verify the chosen build.
+
+Validate invocation compatibility through the existing argument owner
+(`shell/install/arguments.py`) before administrative ownership and receipt
+inspection. Derive conflict names from actual supplied options, including
+classification mappings and the incompatible one-shot operations; remove
+the duplicate dispatch-level compatibility check. Reuse existing error/output
+boundaries. Keep expected operational causes typed at their owner; project
+stable user-facing cause, affected public input and supported action rather
+than serializing exceptions, internal enums or implementation coordinates.
+For administrative readiness, use the existing public graph-finding projection
+where applicable (FD-88B) and retain detailed diagnostics at their owner.
+Do not add public carrier shapes or expose pending/restore bookkeeping as
+API fields; the existing on-disk receipt and backup manifest retain their
+internal recovery role. Preserve public recovery references needed by
+operators. Existing MCP serializers and public schema stay unchanged.
+
 #### 20.1 `ask`
 
 **Authority:** F6, F10, F11, F12; L1–L3, L8, L12–L14, L16;
@@ -2166,6 +2195,19 @@ correctness boundary. It may reduce lifecycle adherence and therefore cannot be
 promoted into a successful delivery claim. A configured host integration,
 source-level invocation test, or installer wiring test is not proof of
 authenticated model delivery; FD-53/Acceptance own that evidence boundary.
+
+For FD-49 reachability, replace the OpenCode plugin's permanently latched
+single-tool observation with a current observation of the intended registered
+installation's exact L8 tool set through documented host capabilities.
+Registration changes, missing members of that set and loss of availability
+must not preserve a successful readiness claim. Use a documented native
+reconnect/refresh action only where supported; otherwise report the supported
+host restart or fresh-session action. No Span-owned transport manager,
+persistent readiness state, speculative event parsing, polling extension as a
+fix, or alternate tool-discovery API. Keep transport failures and raw host
+diagnostics at the adapter owner; deliver one actionable user-facing notice
+at the relevant lifecycle moment. Acceptance 74 includes native host evidence
+under FD-53, not just simulated catalogue tests.
 
 #### 22.4 Result-owned lifecycle transitions
 

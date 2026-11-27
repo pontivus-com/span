@@ -44,7 +44,7 @@ amendment extends FA-68 and FA-70 (and FA-67/69 where exercised): exhaustive
 authority, recovery isolation and exact affected-state proof, all durable
 interruption boundaries, instance-qualified health and finalized receipt
 agreement. These additional cases are OPEN pending executable evidence under
-S-FIELD-01–04 in the single
+S-FIELD-01–07 in the single
 [implementation plan](implementation-plans/functional-pyramid-governance-implementation-plan.md#3a-field-remediation-amendment--2026-11-27).
 Existing test names below are not proof of the new cases; add actual test
 names and results at closeout, not speculative evidence.
@@ -123,5 +123,8 @@ names and results at closeout, not speculative evidence.
 | FA-70 | Exclusive administrative ownership, existing-binding reuse, durable interruption recovery; scoped abandonment, continuous runtime exclusion, complete state proof, per-instance guidance and finalized receipt agreement (additional evidence OPEN) | `test_administrative_owner_blocks_alias_and_competing_maintenance`; `test_classification_reconciles_authority_without_claiming_ordinary_ownership`; `test_installed_document_only_governed_initialization` |
 | FA-71 | Public findings | `test_public_governance_findings_exclude_internal_diagnostics`; `test_installed_cross_repository_governance_journey` |
 | FA-72 | Complete bounded retrieval | `test_directory_continuation_recovers_every_placement` |
+| FA-73 | Installed runtime identity (FD-88A) | OPEN — S-FIELD-05; actual installed identity across checkout/distribution and same-version different builds |
+| FA-74 | Current complete native host reachability (FD-49/52/53/58) | OPEN — S-FIELD-06; adapter tests and recorded authenticated host delivery |
+| FA-75 | Early invocation compatibility and user-oriented administrative outputs (FD-27/88A/88B) | OPEN — S-FIELD-07; named flag conflicts before effects, stable public causes/actions, structured/free-text negative leak coverage |
 The matrix names enforcement boundaries; the CI execution receipt remains the
 evidence that those tests passed for a particular candidate.

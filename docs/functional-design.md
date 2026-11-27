@@ -674,6 +674,26 @@ declarations or changing registered state; a subsequent operational failure
 follows the recoverable setup contract below. Keep agent-facing retrieval
 bounds unchanged (FD-54).
 
+Administrative invocation compatibility is decided before consulting mutable
+installation state or performing setup effects. Reject incompatible supplied
+options by naming the user-visible options, why their combination is invalid
+and the supported way to proceed. Operational preflight and semantic
+validation retain their respective owners. Installation verification establishes
+the identity of the actually installed runtime independently of the requested
+source or package version. An unknown or inconsistent identity cannot establish
+that the requested build is installed; identify the uncertainty and supported
+correction without substituting requested identity for observed identity.
+
+Administrative results and guidance expose the outcome, affected user-selected
+repository or input, actionable cause and permitted next operation. Apply
+FD-27's diagnostic boundary to these user-facing surfaces: internal exception
+text, graph reason codes, private generated paths and recovery bookkeeping are
+not remedies. An operator may receive the exact public option, supplied document
+reference, observed build identity or supported recovery artifact reference
+needed for the next action; those coordinates are not a new agent API or
+semantic authority. Private recovery receipt contents remain owned by the
+installer and are never a caller-authored input.
+
 Select ACTIVATE for a fresh eligible explicitly selected member set. For the
 same complete member set of one existing ACTIVE instance, select REVISE when
 the requested and actual applied canonical governance configurations differ,
@@ -1294,6 +1314,15 @@ an internal carrier cannot silently change the wire contract. Structurally
 unambiguous branches need no discriminator merely to expose their implementation
 type. *(L8, A9, F10)*
 
+Host reachability is established only for the intended installation's complete
+L8 lifecycle surface, not a registration entry, a partial catalogue or a
+previously successful connection. Changed or unavailable host delivery must
+not be presented as ready. Where delivery cannot be established, the
+user-facing notice identifies the unavailable lifecycle capability and the
+supported reconnect/restart action; it does not expose host transport internals
+or require the agent to manage them. The host owns connection and catalogue
+management; FD-52 and FD-53 remain binding.
+
 **FD-50 — The host preserves request identity.**
 A retry must carry the same request identity if it is the same act. If a host
 cannot preserve it, replay safety is not claimed for that host. *(A2, D-3)*
@@ -1785,6 +1814,16 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     internal reasons/locators never leak.
 72. **Complete bounded retrieval.** FD-88C directory continuation returns all
     applicable placements in deterministic pages with complete unresolved state.
+73. **Installed runtime identity.** FD-88A verifies the actual requested build
+    across checkout and distribution installation, including same-version
+    differing builds and absent/stale identity; verification is observational.
+74. **Host reachability.** FD-49/52/53/58 distinguish complete, partial, lost
+    and restored lifecycle delivery for the intended installation. User-facing
+    recovery remains host-supported; live delivery needs recorded evidence.
+75. **Administrative invocation and output.** FD-88A rejects incompatible
+    options before operational effects; failure, readiness and recovery
+    messages contain public actionable coordinates and no private diagnostics.
+    FD-27/88B continue to govern every MCP result, including prose fields.
 ## 16. What this layer does not define
 
 Layer 3 does not choose storage layout, wire encoding, transport framing,

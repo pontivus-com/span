@@ -1,6 +1,6 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-02 and S-FIELD-03 implemented in candidate; final verification and S-FIELD-04 remain open.
+**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 and operator-output boundary review are OPEN.
 **Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
@@ -147,6 +147,32 @@ is the administrative first-page consumer, not the query policy. This
 corroborates FIELD-01 and FIELD-02, not a new implementation task. Neither
 a configurable installation cap nor a higher retrieval bound is authorized.
 
+**Follow-up adopter feedback (2026-11-27).** The owner reports a successful
+168-placement Legal installation at `8d6548d71f49`, previously failing at
+101 placements; healthy ACTIVE reports `not_required`, and directory retrieval
+worked with up to 99 placements per page. These are reported field observations,
+not independently captured evidence or distinct authority-locator counts.
+Exact candidate [CI 45924871018](https://github.com/pontivus-com/span/actions/runs/45924871018)
+passed 1,035 tests, 1 skipped, 218 subtests, zero typing errors and distribution
+verification. The prior recovery boundary evidence obligations remain open.
+The reported whole-document classification correction is adopter-owned;
+the Legal document was not retrievable from its default branch. Do not infer
+authority or alter the classification contract to compensate.
+
+Follow-up source findings at the exact green candidate: FIELD-04, checkout
+`venv.py` omits the existing build generator and synchronization hashes only
+Python sources; version-only distribution checks are insufficient for exact
+identity. FIELD-05, OpenCode `span-hooks.js` prompt readiness latches on an
+`_ask` suffix without complete current intended-tool observation. FIELD-06,
+`cli.py` checks classification/one-shot compatibility after receipt-dependent
+checks and discards conflicting option names. FIELD-07, administrative
+`readiness.py` emits raw graph reason values (lines 381/493/677) and interpolates
+exceptions in actions (716/729). These are source-supported output boundary
+risks, not evidence that MCP currently leaks them. FD-27/88B and lifecycle §5
+remain binding; administrative guidance is corrected under FD-88A. G5/G8,
+A2/A8/A9, F6/F8/F10/F12, L8 and lifecycle §7.1 justify the follow-up;
+Layers 0–2 require no new requirement.
+
 Static inspection of the exact field baseline confirms three distinct defects:
 
 | Finding | Root cause at field baseline | Governing correction | Task |
@@ -155,7 +181,7 @@ Static inspection of the exact field baseline confirms three distinct defects:
 | FIELD-02 | `shell/install/governed.py:461–501` records pending ownership and publishes generated files outside the data directory; `shell/install/recovery.py:335–405` restores only listed data artifacts. Restoring the prior receipt loses pending ownership without reconciling generated paths or absence. | FD-88A; TD §17.2 | S-FIELD-02 |
 | FIELD-03 | `shell/readiness.py:817–844` always reports `requires_governed_install`, irrespective of actual state. | FD-94; TD §17.2 | S-FIELD-03 |
 
-**Session finding traceability (all acceptance gates OPEN).** The following
+**Session finding traceability (acceptance closeout OPEN).** The following
 maps the reported defects and their review refinements to their existing
 design owners and executable work; it is not another task or acceptance
 programme. The owner-reported Legal-scale failure is part of FIELD-01/02.
@@ -173,6 +199,10 @@ reconciliation remain repository-owner work as noted above.
 | F-04: stale pending guidance in final receipt | FD-94 | TD §17.2 final receipt composition | S-FIELD-03 F-04; FA-70 |
 | F-05: incomplete or combined instance observation | FD-82/83/94 | TD §17.2 complete per-instance observation | S-FIELD-03 F-05; FA-70 |
 | F-06: insufficient interruption coverage | FD-88A, acceptance 70 | TD §17.2 durable recovery transitions | S-FIELD-02.7; FA-70 |
+| FIELD-04: installed build identity incomplete | FD-88A; acceptance 73 | TD §20 installed identity | S-FIELD-05; FA-73 |
+| FIELD-05: stale or partial host reachability | FD-49/52/53/58; acceptance 74 | TD §§15, 22.3 | S-FIELD-06; FA-74 |
+| FIELD-06: late/ambiguous invocation conflict | FD-88A; acceptance 75 | TD §20 argument owner | S-FIELD-07; FA-75 |
+| FIELD-07: private diagnostic values in administrative readiness | FD-27/88A/88B; acceptance 75 | TD §20 output projection | S-FIELD-03/07; FA-71/75 |
 
 S-FIELD-04 closes the entire mapping with executable evidence, not historical
 CI or a successful count-only installation.
@@ -358,9 +388,66 @@ Test descriptive UNCONFIGURED with and without explicit governed intent.
 **Gate:** coherent observed guidance and verification result across all
 administrative outputs; no false initialization requirement or false readiness.
 
+### S-FIELD-05 — Verifiable installed runtime identity
+
+**Status:** OPEN. Authority FD-88A, acceptance 73; mechanism TD §20.
+
+- Reuse the existing build generation and package-data owner in checkout and
+  distribution paths; prove actual installed identity, not requested checkout
+  revision or package-version equality. Detect missing, stale, changed and
+  unverifiable identity before claiming exact install acceptance. Keep clean/
+  dirty source provenance honest. No generated identity edits, new identity
+  carrier or copied receipt value as proof.
+- Exercise fresh and reused environments, same-version different builds,
+  generated identity missing/stale, dirty and unknown source, distribution
+  installation, and read-only verification. Assert observed identity agrees
+  with the installed artifact and requested build where verifiable. Expose
+  only meaningful operator-facing provenance and actionable failure; do not
+  expose build internals in MCP or require an agent to correlate receipt internals.
+
+### S-FIELD-06 — Correct host reachability observation and reconnection guidance
+
+**Status:** OPEN. Authority FD-49/52/53/58, acceptance 74; TD §§15, 22.3.
+
+- Correct the existing adapter observation of the intended installation's
+  complete native L8 tool set. A partial or foreign catalogue, lost connection,
+  re-registration or stale prior observation is not readiness. Use documented
+  native host capabilities; unsupported refresh requires explicit restart or
+  fresh-session guidance. Do not own transport lifecycle, add discovery tools,
+  increase polling limits as a fix or introduce persistent readiness state.
+- Test cold start, partial/foreign catalogue, disconnect after readiness,
+  re-registration, reconnect, unavailable native refresh and fresh-session
+  delivery. The notice identifies unavailable capability and supported user
+  action, never raw transport exception, private event state or internal names.
+  Record native authenticated delivery evidence separately under FD-53; adapter
+  simulation is not that evidence.
+
+### S-FIELD-07 — Deterministic invocation validation and public administrative guidance
+
+**Status:** OPEN. Authority FD-27/88A/88B, acceptance 75; TD §20.
+
+- Move compatibility validation into the existing argument-validation owner
+  before state-dependent checks or effects. Cover every incompatible operation
+  with classification input and applicable related options; name the actual
+  public flags, conflict and supported next invocation. Preserve valid modes,
+  dry-run and read-only behavior. No duplicate checks or new command grammar.
+- Close FIELD-07 at the readiness/projection owner: inspect all affected
+  verifier/doctor, install, recovery and host notice outputs for internal
+  finding codes, raw exceptions, private generated paths and bookkeeping.
+  Reuse canonical public findings and expected failure projection; retain
+  detailed diagnostic evidence internally. Do not remove a public user-input
+  coordinate or supported backup/receipt reference necessary for recovery.
+  The retained on-disk receipt is internal recovery evidence, not a new API.
+- Exercise structured and human-readable output, including nested detail,
+  recovery/action fields and errors before final publication; assert stable
+  actionable causes and absence of private diagnostics with deliberately
+  distinctive internal test values. Preserve existing FD-27/88B MCP schema
+  and installed negative leak tests. No new carrier/DTO, aliases, semantic
+  state, writer or public API. Run the complete existing CI unchanged.
+
 ### S-FIELD-04 — Exact-candidate regression and acceptance closeout
 
-**Status:** OPEN. Depends on S-FIELD-01–03.
+**Status:** OPEN. Depends on S-FIELD-01–03 and S-FIELD-05–07.
 
 - Extend the existing FA-68 and FA-70 evidence mappings (and FA-67/69
   installed evidence where exercised) in `docs/functional-acceptance.md`
@@ -381,18 +468,21 @@ administrative outputs; no false initialization requirement or false readiness.
   ownership, independent writes, scoped restoration, finalized receipt,
   per-instance membership and every durable interruption boundary. Retain
   original tests and prove no newly introduced administrative deadlock.
-- Independent review checks all three root causes and F-01–F-06 against the amended design.
+- Independent review checks FIELD-01–07 and F-01–F-06 against the amended
+  design. Map FA-73–75 to executable tests and native delivery evidence where
+  required; audit public outputs including free text against FD-27/88B/88A.
+  Preserve existing FA-71 schema and installed-wire evidence.
   A controlled local retest of the real adopter corpus is the next adopter
   gate; no publication, release tag, merge or live adopter mutation is
   authorized by this amendment.
 
-**Gate:** all three fixes demonstrated by executable evidence; complete
+**Gate:** all field fixes demonstrated by executable evidence; complete
 candidate CI green, then owner-authorized local Beta-5 retest. Prior green
 CI and the adopter's reported version 8 are not closure of FIELD-01–03.
 
 ## 4. Execution sequence
 
-Original delivery sequence (historical): S-DOC-01 → S-INIT-01 → S-INIT-02 → S-INIT-03 → S-PUBLIC-01 → S-PUBLIC-02 → S-VERIFY-01 → S-VERIFY-02 → S-VERIFY-03. Field amendment execution sequence: S-FIELD-01 → S-FIELD-02 → S-FIELD-03 → S-FIELD-04. The tests at each task gate must pass before dependent work is accepted. Public boundary tasks may be implemented independently after their canonical design is closed, but final installed acceptance is a single end-to-end gate. Reuse all existing owners; if a governing contradiction is discovered, stop at its owner and amend the design, not a downstream workaround.
+Original delivery sequence (historical): S-DOC-01 → S-INIT-01 → S-INIT-02 → S-INIT-03 → S-PUBLIC-01 → S-PUBLIC-02 → S-VERIFY-01 → S-VERIFY-02 → S-VERIFY-03. Field amendment execution sequence: S-FIELD-01 → S-FIELD-02 → S-FIELD-03; S-FIELD-05–07 follow the existing owners and design, then S-FIELD-04 closes all gates. The tests at each task gate must pass before dependent work is accepted. Public boundary tasks may be implemented independently after their canonical design is closed, but final installed acceptance is a single end-to-end gate. Reuse all existing owners; if a governing contradiction is discovered, stop at its owner and amend the design, not a downstream workaround.
 
 ## 5. Explicit non-scope
 
