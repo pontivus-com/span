@@ -83,6 +83,41 @@ _DDL = (
 )
 
 
+# The target schema's additive tables are defined once at the installation
+# SQLite owner. The offline transition initializes them before activation.
+SCHEMA2_DDL = (
+    """
+    CREATE TABLE delivery_selections(
+        selection_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        owner_repository_id TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        admission_context_id TEXT UNIQUE,
+        canonical_json TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE delivery_cursors(
+        cursor_id TEXT PRIMARY KEY,
+        selection_id TEXT NOT NULL
+            REFERENCES delivery_selections(selection_id) ON DELETE CASCADE,
+        position_json TEXT NOT NULL,
+        UNIQUE(selection_id, position_json)
+    )
+    """,
+    """
+    CREATE TABLE addressed_requests(
+        addressing_repository_id TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        owner_repository_id TEXT NOT NULL,
+        binding_kind TEXT NOT NULL,
+        PRIMARY KEY(addressing_repository_id, request_id)
+    )
+    """,
+)
+
+
 class FunctionalPyramidInstallationStoreError(ValueError):
     """The installation-scoped Functional Pyramid store cannot satisfy a request."""
 

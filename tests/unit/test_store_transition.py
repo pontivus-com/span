@@ -1896,5 +1896,111 @@ class InstallerCommandTest(unittest.TestCase):
                 store.close()
 
 
+class PubSchemaTransitionTest(unittest.TestCase):
+    def test_schema15_stage_preserves_complete_retained_database(self):
+        from span.shell.store_transition_schema15 import stage_schema15
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root = base / "demo"
+            paths = st.TransitionPaths(base / "data", "demo")
+            paths.transition_dir.mkdir(parents=True)
+            _schema14_store(paths.archive, root)
+            with sqlite3.connect(paths.archive) as connection:
+                from span.shell.sqlite_store.schema import DDL
+
+                for statement in DDL:
+                    connection.execute(statement)
+                connection.execute(
+                    "UPDATE meta SET value='15' WHERE key='schema_version'"
+                )
+            before = hashlib.sha256(paths.archive.read_bytes()).hexdigest()
+            stage_schema15(paths)
+            self.assertEqual(st._read_schema_version_ro(paths.staging), 16)
+            self.assertEqual(
+                hashlib.sha256(paths.archive.read_bytes()).hexdigest(), before
+            )
+            with sqlite3.connect(paths.staging) as connection:
+                raw = connection.execute(
+                    "SELECT canonical_json FROM record_receipts"
+                ).fetchone()[0]
+                receipt = json.loads(raw)
+                self.assertEqual(
+                    receipt["accepted_effect"]["$type"],
+                    "HistoricalAcceptanceDetailUnavailable",
+                )
+                self.assertEqual(
+                    receipt["accepted_effect"]["understanding_versions"][0][
+                        "understanding_id"
+                    ]["value"],
+                    "u-schema14",
+                )
+                self.assertEqual(
+                    receipt["context"]["context_id"]["value"], "ctx-schema14"
+                )
+
+    def test_installation1_stage_keeps_original_refs_without_inventing_causes(self):
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_store.functional_pyramid import (
+            FunctionalPyramidInstallationStore,
+        )
+        from span.shell.store_transition_schema15 import stage_installation_schema1
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = st.TransitionPaths(pathlib.Path(tmp), "installation")
+            paths.transition_dir.mkdir(parents=True)
+            store = FunctionalPyramidInstallationStore.create(
+                paths.archive, retention=DEFAULT_LIFECYCLE_RETENTION
+            )
+            store.close()
+            ref = m.ConclusionRevisionRef(
+                m.UnderstandingId("u"),
+                m.ConclusionId("c"),
+                m.ConclusionRevisionNumber(1),
+            )
+            with sqlite3.connect(paths.archive) as connection:
+                connection.execute(
+                    "INSERT INTO functional_pyramid_receipts VALUES"
+                    "(?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        "request",
+                        "sha256:original",
+                        NOW.isoformat(),
+                        None,
+                        "EXCLUDE",
+                        None,
+                        None,
+                        "[]",
+                        "[]",
+                        json.dumps([m.to_canonical(ref)]),
+                    ),
+                )
+            before = hashlib.sha256(paths.archive.read_bytes()).hexdigest()
+            stage_installation_schema1(paths)
+            self.assertEqual(st._read_schema_version_ro(paths.staging), 2)
+            self.assertEqual(
+                hashlib.sha256(paths.archive.read_bytes()).hexdigest(), before
+            )
+            with sqlite3.connect(paths.staging) as connection:
+                digest, payload = connection.execute(
+                    "SELECT content_digest, dependent_effect_refs_json"
+                    " FROM functional_pyramid_receipts"
+                ).fetchone()
+                self.assertEqual(digest, "sha256:original")
+                accepted = m.from_canonical(
+                    m.HistoricalAcceptanceDetailUnavailable, json.loads(payload)
+                )
+                self.assertEqual(accepted.dependent_effect_refs, (ref,))
+                for table in (
+                    "delivery_selections",
+                    "delivery_cursors",
+                    "addressed_requests",
+                ):
+                    self.assertEqual(
+                        connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                        0,
+                    )
+
+
 if __name__ == "__main__":
     unittest.main()
