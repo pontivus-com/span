@@ -7,6 +7,7 @@ delivery, database transition, or product acceptance.
 from __future__ import annotations
 
 import datetime
+import dataclasses
 import unittest
 
 from span.core import model as m
@@ -261,6 +262,89 @@ class CanonicalRoundTripTest(unittest.TestCase):
         del encoded["conclusions"]
         with self.assertRaises(m.CanonicalDecodeError):
             m.from_canonical(m.CreateUnderstandingCommand, encoded)
+
+
+class RecordedAuditProjectionTest(unittest.TestCase):
+    def test_verification_keeps_all_recorded_facts_without_live_support(self):
+        run = m.VerificationRun(
+            run_id=m.VerificationRunId("run-1"),
+            repository_id="repo-1",
+            scope=m.VerificationScope("exact execution", _scope()),
+            observations=(m.SourceObservationId("obs-1"),),
+            command="pytest -q",
+            scenario=None,
+            outcome=m.VerificationOutcome.FAIL,
+            observed_at=NOW,
+            observer="test operator",
+            environment_limitations=("offline", "one host"),
+            provenance="recorded failure",
+        )
+        view = m.verification_view(run, None)
+        self.assertEqual(view.facts.run_id, run.run_id)
+        self.assertEqual(view.facts.scope, run.scope)
+        self.assertEqual(view.facts.outcome, run.outcome)
+        self.assertEqual(view.facts.observed_at, NOW)
+        self.assertEqual(view.facts.provenance, run.provenance)
+        self.assertEqual(view.observations, run.observations)
+        self.assertEqual(view.environment_limitations, run.environment_limitations)
+        self.assertIsNone(view.qualification)
+        self.assertEqual(
+            m.from_canonical(m.VerificationView, m.to_canonical(view)), view
+        )
+        live = m.verification_view(run, m.SupportUnavailable("offline evaluator"))
+        self.assertEqual(live.facts, view.facts)
+        with self.assertRaises(ValueError):
+            m.AcceptedVerificationReceipt((live,))
+
+    def test_challenge_view_preserves_history_and_separately_recorded_resolution(self):
+        understanding, version, _ = _created()
+        challenge = create_challenge(
+            challenge_id=m.ChallengeId("ch-audit"),
+            understanding_id=understanding.understanding_id,
+            target_version=version.version,
+            target_conclusions=version.conclusions,
+            reason="disputed conclusion",
+            evidence=(_evidence(),),
+            provenance="recorded challenge",
+            now=NOW,
+        )
+        resolution = m.ChallengeResolution(
+            reasoning="resolved from exact evidence",
+            resulting_understanding_id=understanding.understanding_id,
+            resulting_version=m.UnderstandingVersionNumber(2),
+            conclusions=version.conclusions,
+            evidence=(_evidence("docs/adr.md"),),
+        )
+        history = m.ResolvedChallengeRecord(
+            challenge_revision=m.ChallengeRevision(2),
+            resolution=resolution,
+            recorded_at=LATER,
+        )
+        settled = dataclasses.replace(
+            challenge,
+            challenge_revision=m.ChallengeRevision(2),
+            state=m.ChallengeState.RESOLVED,
+            resolution=resolution,
+            dispositions=(history,),
+        )
+        view = m.challenge_view(settled)
+        self.assertEqual(view.facts.challenge_revision, settled.challenge_revision)
+        self.assertEqual(view.target_conclusions, challenge.target_conclusions)
+        self.assertEqual(view.evidence, challenge.evidence)
+        self.assertIsNone(view.resolution)
+        disposition = view.dispositions[0]
+        assert isinstance(disposition, m.AcceptedResolvedChallengeDisposition)
+        self.assertEqual(disposition.resolution.evidence, resolution.evidence)
+        self.assertEqual(disposition.decision.recorded_at, LATER)
+        inconsistent = dataclasses.replace(
+            settled, resolution=dataclasses.replace(resolution, reasoning="different")
+        )
+        separate = m.challenge_view(inconsistent)
+        self.assertIsNotNone(separate.resolution)
+        self.assertEqual(separate.dispositions, view.dispositions)
+        self.assertEqual(
+            m.from_canonical(m.ChallengeView, m.to_canonical(separate)), separate
+        )
 
 
 class IdentityDigestTest(unittest.TestCase):
