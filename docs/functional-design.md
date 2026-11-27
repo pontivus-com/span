@@ -652,6 +652,18 @@ owned section/span bindings may coexist with its unique whole-document binding
 and remain untouched, as the existing canonical resolver permits. The existing
 lower-level authority and declaration contracts are not narrowed by initialization.
 
+Administrative validation of explicitly supplied authority is exhaustive,
+repository-qualified and independent of evidence-delivery bounds (FD-54).
+This applies equally to ordinary authority seeds/bindings and derived or
+reconciled governed bindings. Validate every requested locator and identity
+before setup mutation, preserving seed resolution, binding identity, section/
+span and ordinary preserve/clear/replace semantics. A valid configuration
+cannot be rejected or shortened because it exceeds an agent-facing evidence
+page. Name actual missing, unreadable, foreign or conflicting authority; a
+provider failure remains an operational failure, not an unknown locator.
+Never require the owner to reduce or batch accepted governance to fit a query
+budget.
+
 Select ACTIVATE for a fresh eligible explicitly selected member set. For the
 same complete member set of one existing ACTIVE instance, select REVISE when
 the requested and actual applied canonical governance configurations differ,
@@ -672,7 +684,27 @@ stale. A failure is not successful initialization; retain the exact pending
 intent, affected-binding evidence and accepted receipt identity needed for
 recovery, and report actual operational state and outstanding obligations.
 Re-running the same input does not duplicate an accepted write. Never create
-semantic conclusions to clear effects. *(G7, G8, F1, F4, F7, F11, F12, L4, L11–L16)*
+semantic conclusions to clear effects.
+
+If an unaccepted pending operation cannot complete with the same input,
+explicit authorized recovery to its verified pre-setup state is the alternative
+to resumption, not another initialization route. Recovery owns the entire
+administrative effect of that pending setup: previous receipt, stores, registered
+authority, and repository-local generated artifacts. Restore previous owned
+metadata and absence where applicable; retire only exact artifacts proved
+created by the abandoned operation. Preserve independently owned or modified
+content, previous accepted sources, and retained semantic/receipt obligations.
+If ownership, prior bytes, absence or absence of competing semantic writes
+cannot be proved, report a recovery conflict before destructive mutation.
+An authorized restore must not strand generated artifacts without ownership
+evidence, require an operator to reconstruct that evidence, or report success
+while receipt, stores and generated metadata disagree. A fresh installation
+has a recoverable pre-setup state even when no store previously existed.
+Interruption of recovery remains recoverable without a new participation write.
+For an already accepted pending participation, resume/replay the accepted
+intent and preserve its immutable dependent-effect references; abandoning an
+unaccepted operation is not permission to roll back an accepted semantic write.
+*(G7, G8, F1, F4, F7, F11, F12, L4, L11–L16)*
 
 **FD-88B — Runtime results expose only the public governance reasons.**
 The public Functional Pyramid result carriers (`FunctionalPyramidView.unresolved`,
@@ -794,6 +826,19 @@ separate Pyramid action beyond ordinary governed orientation; ACTIVE/DEGRADED
 reports governance attention and the next existing lifecycle action.
 ACTIVE/DEGRADED means ACTIVE participation with DEGRADED live health, not a
 fourth participation state.
+
+Observational installation verification follows the same obligation rule,
+composed with actual store readiness, declaration/graph validity, installation
+provenance and pending administrative recovery. A verified ACTIVE/VALID
+installation with matching required provenance and no pending intent has no
+initialization obligation. Pending setup reports the existing recovery
+obligation; degraded or mismatched ACTIVE state reports the actual repair;
+EXCLUDED does not request activation; unavailable state names the operational
+blocker; only eligible UNCONFIGURED governed use requires initialization.
+Verification must not equate registration, successful structural setup or
+semantic currency with each other, invent a participation state, or perform
+a write. Guidance is a projection of observed facts, never an unconditional
+request to install.
 
 For an external edit/write, the same canonical changed-scope projection decides
 semantic, authority, route, premise, containment and cross-repository effects;
@@ -1676,6 +1721,10 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     runtime are observable without caller-generated intermediate configuration.
 68. **Strict preflight.** Invalid classification, identity, membership, authority
     or graph input fails before setup mutation; no semantic repair is inferred.
+    Ordinary and governed explicit authority configurations spanning more than
+    one evidence page are completely validated and applied, without changing
+    retrieval limits. Actual missing/foreign/conflicting/unreadable input and
+    provider failure are distinguished and rejected before setup mutation.
 69. **Repeat and revise.** Identical valid input is a no-op for participation;
     changed input for the same member set revises the exact instance, including
     V2 cutover. Conflicts and failed verification remain explicit; accepted
@@ -1690,7 +1739,16 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     and accepted receipt identity, never reports successful governed setup
     prematurely, and resumes without a duplicate write. Competing administrative
     mutations cannot replace pending intent or partially provision another setup.
-    Ordinary install and observation modes do not activate.
+    Explicit authorized abandonment of an unaccepted pending setup restores
+    the verified prior administrative state, including generated-file content
+    and absence, without orphaning ownership or requiring manual cleanup.
+    Fresh-state, previously accepted-state and interrupted restore cases are
+    covered; modified/unowned artifacts and competing writes fail closed.
+    An accepted pending write remains recoverable with its receipt/effects.
+    Ordinary install and observation modes do not activate. Observational
+    guidance distinguishes healthy ACTIVE, degraded/mismatched ACTIVE,
+    UNCONFIGURED, EXCLUDED, pending and unavailable state without a
+    contradictory initialization request (FD-94).
 71. **Public findings.** FD-88B applies across all public governance results;
     internal reasons/locators never leak.
 72. **Complete bounded retrieval.** FD-88C directory continuation returns all

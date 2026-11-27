@@ -1,7 +1,7 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Canonical tracked Beta-5 implementation plan; governing documentation amended, implementation and verification outstanding.  
-**Baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`.  
+**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; field-remediation tasks S-FIELD-01–04 below are open, not implemented or verified.  
+**Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
 
@@ -12,6 +12,11 @@ Implement the single governed installation journey specified in lifecycle §7.1 
 Success for a fresh installation is a verified ACTIVE/VALID instance, correct member set, exact derived governance, registered authority, installation provenance, and working ordinary MCP lifecycle, without a second setup command, manual configuration, manual Git commit of generated artifacts, or manually constructed MCP payload. Revision uses the same entry point. When an accepted change produces semantic obligations that Span cannot resolve deterministically, report those exact obligations and the receipt handoff; never claim semantic completion or invent dispositions. Keep external adopter rehearsal, managed-host preview, live cutover and release authorization as separate release gates, not additional setup responsibilities for an ordinary user.
 
 ## 2. Baseline and work classification
+
+The table and §3 retain the original delivery baseline, task definitions and
+intermediate evidence as history. They are not assertions about the current
+tree or instructions to rebuild already delivered capabilities. The current
+field-remediation delta and execution gates are in §3A.
 
 | Existing owner | Verified source at baseline | Treatment |
 |---|---|---|
@@ -29,13 +34,13 @@ Success for a fresh installation is a verified ACTIVE/VALID instance, correct me
 
 This is static inspection, not test execution. Historical green CI on V2 or partial V3 is not evidence of the required end-to-end outcome. Retain unrelated passing test obligations.
 
-**Non-regression boundary.** The closed Beta-5 read-API over-fetch remediation R-1–R-6, strict Version-3 source contract and existing route/authority/support separation are established design decisions, not legacy mechanisms to recreate or reverse. When a stale example, acceptance statement or derived guide contradicts those decisions, correct that document at its owning layer; do not change working code to reproduce stale wording. Preserve the compact public projection, no-public-impact-selector scope, internal bidirectional graph and cross-repository effects, root totality, exact directory/semantic scope, canonical binding support qualification, ACTIVE/VALID versus semantic currency, single writer and existing atomic replay/CAS. Keep the V2 navigation bootstrap distinct from the retired V2 declaration grammar. Test these invariants without weakening existing assertions. The only new production work is the identified initialization integration, public finding projection, continuation and their evidence; no implementation of a deferred capability or replacement of an established owner is authorized. Trace any genuinely necessary change to current governing intent, not a historical example.
+**Non-regression boundary.** The closed Beta-5 read-API over-fetch remediation R-1–R-6, strict Version-3 source contract and existing route/authority/support separation are established design decisions, not legacy mechanisms to recreate or reverse. When a stale example, acceptance statement or derived guide contradicts those decisions, correct that document at its owning layer; do not change working code to reproduce stale wording. Preserve the compact public projection, no-public-impact-selector scope, internal bidirectional graph and cross-repository effects, root totality, exact directory/semantic scope, canonical binding support qualification, ACTIVE/VALID versus semantic currency, single writer and existing atomic replay/CAS. Keep the V2 navigation bootstrap distinct from the retired V2 declaration grammar. Test these invariants without weakening existing assertions. The original production work is the initialization integration, public finding projection, continuation and their evidence. At the field-remediation baseline the only new authorized production changes are S-FIELD-01–03; S-FIELD-04 verifies them. No implementation of a deferred capability or replacement of an established owner is authorized. Trace any genuinely necessary change to current governing intent, not a historical example.
 
 ## 3. Ordered implementation tasks
 
 ### S-DOC-01 — Close governing design and public workflow
 
-The governing documents are amended in the same Git change as this plan. Before changing code, verify their alignment. Review the selected administrative contract, metadata publication/failure semantics, authority ownership, explicit initialization intent, and semantic-effects completion boundary. Check all normative references and derived guides for the retired materialise-only/manual activation workflow. Keep the current Functional Pyramid classification grammar; do not introduce a second external declaration grammar. Verify FD acceptance cases 13, 23, 31, 33, 43 and 67–72 and corresponding FA rows; FA records must show new tests as pending until execution. Retain the established R-1–R-6 over-fetch decision; stale Version-2 declaration examples and public reverse-impact wording are document defects, not code tasks. Keep `docs/implementation-plans/1.0.0-beta5.md` a release record. This tracked plan is the sole current task authority. Do not retain a second active plan or commit `.context/`.
+Original delivery task (historical): the governing documents were amended with this plan. Before changing code, verify their alignment. Review the selected administrative contract, metadata publication/failure semantics, authority ownership, explicit initialization intent, and semantic-effects completion boundary. Check all normative references and derived guides for the retired materialise-only/manual activation workflow. Keep the current Functional Pyramid classification grammar; do not introduce a second external declaration grammar. Verify FD acceptance cases 13, 23, 31, 33, 43 and 67–72 and corresponding FA rows; FA records must show new tests as pending until execution. Retain the established R-1–R-6 over-fetch decision; stale Version-2 declaration examples and public reverse-impact wording are document defects, not code tasks. Keep `docs/implementation-plans/1.0.0-beta5.md` a release record. This tracked plan is the sole current task authority. Do not retain a second active plan or commit `.context/`.
 
 **Gate:** owner confirms the one-command administrative boundary and derived metadata/revision failure behavior. No unresolved design choice is delegated to implementation. This amendment is documentation only; planned CLI syntax is not represented as already available.
 
@@ -112,9 +117,148 @@ Use the existing non-editable installed-MCP lane and neutral temporary repositor
 
 Run repository-prescribed full Python suite, Ruff, Black, typing ratchet, plugin suite, generated schema conformance, distribution build and installed-MCP acceptance. Record exact command, commit/tree, results, measured budget change and sanitized evidence in the existing acceptance/release record; no raw captures in Git. Do not lower a valid gate or mark planned rows complete. Check all old manual setup instructions and obsolete options have been removed from governed installation; check no new parallel carrier, writer, resolver, compatibility route, semantic interpretation or fourth MCP tool. Independent review and tasks 14–17 of the release programme remain open until their own evidence/authorization. No publication or live adopter mutation authorized here.
 
+## 3A. Field-remediation amendment — 2026-11-27
+
+**Evidence and disposition.** The original S-DOC/S-INIT/S-PUBLIC/S-VERIFY
+programme delivered the one-input initialization and passed [full CI run
+45907630622](https://github.com/pontivus-com/span/actions/runs/45907630622)
+at `261d055b4c2b` (1,021 passed, 1 skipped, 186 subtests; typing, lint,
+format, distribution and host plugin gates passed). This is prior candidate
+evidence, not proof of the new amendment. The adopter agent reports final
+version 8 ACTIVE/VALID, strict acceptance, 30/30 directory checks and
+idempotency. These local observations are reported, not independently
+verified. Its inferred scope/layer/parent decisions and self-referential
+verification were repository-input errors; no change to the semantic boundary
+or classification grammar is justified. A placement may have multiple
+governing references. The reported obsolete Pontivus-local guide and independent
+semantic reconciliation remain adopter work, not Span production tasks.
+
+Static inspection of the exact field baseline confirms three distinct defects:
+
+| Finding | Root cause at field baseline | Governing correction | Task |
+|---|---|---|---|
+| FIELD-01 | `service/administration.py:20–85` consumes the first page of `inventory_evidence`; `service/bounds.py:50–57` and `shell/evidence_source.py:137–169` establish the 96-unit evidence page, not an installation limit. Both seed and binding consumers can reject valid later locators. | FD-54, FD-88A; TD §20 | S-FIELD-01 |
+| FIELD-02 | `shell/install/governed.py:461–501` records pending ownership and publishes generated files outside the data directory; `shell/install/recovery.py:335–405` restores only listed data artifacts. Restoring the prior receipt loses pending ownership without reconciling generated paths or absence. | FD-88A; TD §17.2 | S-FIELD-02 |
+| FIELD-03 | `shell/readiness.py:817–844` always reports `requires_governed_install`, irrespective of actual state. | FD-94; TD §17.2 | S-FIELD-03 |
+
+### S-FIELD-01 — Exhaustive exact administrative authority validation
+
+**Status:** OPEN. **Owner:** existing `service/administration.py` and
+installer preflight/provisioning composition, existing EvidenceSource port.
+
+1. Implement the exact unbounded-by-delivery validation mechanism in TD §20.
+   Replace first-page inventory consumption for both ordinary seeds and bindings.
+   Reuse the canonical observed reference for seeds, preserve supplied canonical
+   binding identity and every binding attribute. Distinguish actual missing,
+   unreadable, wrong-repository, duplicate and provider-failure outcomes.
+2. Validate every explicit ordinary replacement and the entire final
+   reconciled governed authority configuration in read-only installer preflight
+   before pending publication or setup mutation, and reuse the same validator
+   at provisioning. No shell duplicate, larger query bound, caller batching
+   or partial registration. Omitted ordinary families preserve existing state;
+   explicit empty families clear it.
+3. Add service and installed tests with more than the existing maximum
+   evidence-page count of distinct locators, including both ordinary seed/
+   binding input and document-only governed setup. Exercise duplicate
+   locators with distinct section/span binding identities, invalid locator
+   beyond the old first page, foreign identity, unreadable/provider failure,
+   identity retention, and complete rejection before repository-state or
+   generated-artifact mutation. Preserve existing bounded retrieval tests.
+
+**Gate:** exact valid set registered and retrieved, no truncation and no
+delivery-budget change; exact invalid input diagnosed before setup mutation.
+
+### S-FIELD-02 — Restore pending governed setup without orphaned ownership
+
+**Status:** OPEN. **Owner:** existing installer receipt, governed artifact
+publication and full installation backup/restore owners. Depends on S-FIELD-01
+for the corrected preflight boundary, not for ownership semantics.
+
+1. Implement TD §17.2's verified pre-setup artifact/absence protection in the
+   existing backup manifest, including fresh setup with no existing DBs.
+   Capture all planned generated-path preimages, exact root identity and
+   absence, and bind backup identity/digest to pending intent before mutations.
+   Reuse existing manifest/carriers, atomic publication and administrative lock.
+2. Extend the existing `--restore-backup` confirmed operation. For an
+   unaccepted pending request, verify the exact baseline backup, all path/
+   digest/ownership and store-state preconditions, including no independent
+   writes to newly created stores. Take the verified pre-restore snapshot
+   with generated bytes. Persist restore intent in the pending receipt, then
+   reconcile only proven generated paths and affected data artifacts; restore
+   present/absent state, verify, and publish the restored receipt last. Preserve
+   previous accepted sources and independently owned material. A modified,
+   unknown, missing required preimage, wrong backup, or unverifiable write
+   history is a named conflict. Never blindly delete or adopt files.
+3. Resume the same restore after interruption before final receipt replacement,
+   without reconstructing intent or choosing another backup. Accepted pending
+   participation is a separate branch: query its original receipt and preserve
+   accepted effects, complete/replay rather than abandoning it. Retain ordinary
+   recovery scope outside pending governed setup; do not introduce another
+   recovery operation or receipt.
+4. Exercise installed failures after pending intent, after generated sources
+   and after one member provisions but before participation acceptance, both
+   fresh and existing installations. Prove changed-input initialization can
+   proceed after verified abandonment without manual generated-file cleanup,
+   and that prior bootstrap bytes, prior authority, active membership,
+   historical sources and independent bindings are preserved. Inject restore
+   interruption before final receipt and prove idempotent continuation. Test
+   modified/unowned artifacts, symlinks, wrong backup, unrelated/new store
+   activity, missing preimage and accepted-but-incomplete recovery. Verify
+   the competing-mutator and same-input replay tests remain green.
+
+**Gate:** exact restored state and ownership verified or explicit recoverable
+conflict; no orphaned generated files, lost accepted obligations or duplicate
+participation write. No operator reconstruction of internal provenance.
+
+### S-FIELD-03 — Correct observational initialization guidance
+
+**Status:** OPEN. **Owner:** existing readiness and installed verifier
+projection; depends on S-FIELD-02 for restore-intent guidance.
+
+Implement the TD §17.2 projection using existing observed state and complete
+active membership, with the exact documented status/action behavior. Remove
+the unconditional hint, preserve the ordinary descriptive installation
+contract and strict acceptance checks. Reuse the projection for doctor,
+installed verification and receipt; no additional semantic state or graph
+algorithm. Test every defined state, including mismatched provenance,
+incomplete membership observation, healthy ACTIVE, pending setup/restore,
+EXCLUDED, eligible UNCONFIGURED and unavailable. Assert observational
+verification does not mutate stores, receipts or generated files and that
+healthy ACTIVE never requests another initialization.
+
+**Gate:** coherent observed guidance and verification result across all
+administrative outputs; no false initialization requirement or false readiness.
+
+### S-FIELD-04 — Exact-candidate regression and acceptance closeout
+
+**Status:** OPEN. Depends on S-FIELD-01–03.
+
+- Extend the existing FA-68 and FA-70 evidence mappings (and FA-67/69
+  installed evidence where exercised) in `docs/functional-acceptance.md`
+  with the actual executable test names; do not create a parallel acceptance
+  matrix or claim new evidence before execution.
+- Reconcile affected installation, recovery and host guidance in their
+  existing derived owners (`docs/install.md`, `docs/recovery.md`, relevant
+  onboarding/skill references). Describe the single input, exact validation,
+  actual recovery choices and observed readiness. Do not document 96 as an
+  authority cap. Do not introduce a second grammar or activation command.
+- Run focused tests and the existing non-editable installed-MCP lane, then
+  full CI on the exact candidate per S-VERIFY-03. Retain original green
+  acceptance, public pagination, route/authority separation, CAS/replay,
+  and semantic effects; no weakened gate, increased delivery ceiling or
+  invented ratchet value. Record exact revision and sanitized results.
+- Independent review checks all three root causes against the amended design.
+  A controlled local retest of the real adopter corpus is the next adopter
+  gate; no publication, release tag, merge or live adopter mutation is
+  authorized by this amendment.
+
+**Gate:** all three fixes demonstrated by executable evidence; complete
+candidate CI green, then owner-authorized local Beta-5 retest. Prior green
+CI and the adopter's reported version 8 are not closure of FIELD-01–03.
+
 ## 4. Execution sequence
 
-S-DOC-01 → S-INIT-01 → S-INIT-02 → S-INIT-03 → S-PUBLIC-01 → S-PUBLIC-02 → S-VERIFY-01 → S-VERIFY-02 → S-VERIFY-03. The tests at each task gate must pass before dependent work is accepted. Public boundary tasks may be implemented independently after their canonical design is closed, but final installed acceptance is a single end-to-end gate. Reuse all existing owners; if a governing contradiction is discovered, stop at its owner and amend the design, not a downstream workaround.
+Original delivery sequence (historical): S-DOC-01 → S-INIT-01 → S-INIT-02 → S-INIT-03 → S-PUBLIC-01 → S-PUBLIC-02 → S-VERIFY-01 → S-VERIFY-02 → S-VERIFY-03. Field amendment execution sequence: S-FIELD-01 → S-FIELD-02 → S-FIELD-03 → S-FIELD-04. The tests at each task gate must pass before dependent work is accepted. Public boundary tasks may be implemented independently after their canonical design is closed, but final installed acceptance is a single end-to-end gate. Reuse all existing owners; if a governing contradiction is discovered, stop at its owner and amend the design, not a downstream workaround.
 
 ## 5. Explicit non-scope
 
