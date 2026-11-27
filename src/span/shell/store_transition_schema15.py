@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json as _json
 import sqlite3 as _sqlite3
+from collections import Counter as _Counter
 from collections.abc import Callable as _Callable
 from pathlib import Path as _Path
 
@@ -17,10 +18,12 @@ from span.shell.sqlite_store.functional_pyramid import SCHEMA2_DDL
 from span.shell.store_transition import (
     TransitionError,
     TransitionPaths,
+    _canonical_row,
     _catalog,
     _columns,
     _connect_read_only,
     _integrity,
+    _quoted,
     _table_names,
 )
 
@@ -440,10 +443,6 @@ def stage_installation_schema1(paths: TransitionPaths) -> None:
     verify_installation_schema1_staging(paths)
 
 
-def _quoted(name: str) -> str:
-    return '"' + name.replace('"', '""') + '"'
-
-
 def _verify_table(
     source: _sqlite3.Connection,
     staged: _sqlite3.Connection,
@@ -455,25 +454,30 @@ def _verify_table(
     columns = _columns(source, table)
     if columns != _columns(staged, table):
         raise TransitionError(f"migration changed retained table columns: {table}")
-    sql = f"SELECT * FROM {_quoted(table)} ORDER BY rowid"
+    sql = f"SELECT * FROM {_quoted(table)}"
     source_rows = source.execute(sql)
     staged_rows = staged.execute(sql)
-    for old, new in zip(source_rows, staged_rows, strict=True):
-        expected = list(old)
-        if table == "meta" and old[columns.index("key")] == "schema_version":
-            expected[columns.index("value")] = version
+    expected: _Counter[str] = _Counter()
+    actual: _Counter[str] = _Counter()
+    for row in source_rows:
+        values = list(row)
+        if table == "meta" and row[columns.index("key")] == "schema_version":
+            values[columns.index("value")] = version
+        if transform is not None:
+            position = columns.index(transform[0])
+            values[position] = _canonical_text(_json.loads(str(values[position])))
+        expected[_canonical_row(values)] += 1
+    for row in staged_rows:
+        values = list(row)
         if transform is not None:
             column, restore = transform
             position = columns.index(column)
-            actual = list(new)
-            actual[position] = _canonical_text(
-                restore(_json.loads(str(actual[position])))
+            values[position] = _canonical_text(
+                restore(_json.loads(str(values[position])))
             )
-            expected[position] = _canonical_text(_json.loads(str(expected[position])))
-        else:
-            actual = list(new)
-        if expected != actual:
-            raise TransitionError(f"migration changed retained cells in {table}")
+        actual[_canonical_row(values)] += 1
+    if expected != actual:
+        raise TransitionError(f"migration changed retained cells in {table}")
 
 
 def _verify_copy(

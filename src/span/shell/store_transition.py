@@ -368,18 +368,20 @@ def _table_names(connection: _sqlite3.Connection) -> tuple[str, ...]:
     return tuple(str(row[0]) for row in rows)
 
 
+def _quoted(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
 def _columns(connection: _sqlite3.Connection, table: str) -> tuple[str, ...]:
-    rows = connection.execute(f'PRAGMA table_info("{table}")').fetchall()
+    rows = connection.execute(f"PRAGMA table_info({_quoted(table)})").fetchall()
     return tuple(str(row[1]) for row in rows)
 
 
 def _row_order(connection: _sqlite3.Connection, table: str) -> str:
     columns = _columns(connection, table)
-    if "rowid" in columns:
-        return f'"{table}"'
     if not columns:
-        return f'"{table}"'
-    return f'"{table}" ORDER BY ' + ", ".join(f'"{name}"' for name in columns)
+        return _quoted(table)
+    return _quoted(table) + " ORDER BY " + ", ".join(map(_quoted, columns))
 
 
 def _scan_table(
@@ -1662,8 +1664,22 @@ def _prepare_member(
             manifest, staged_sha256=_sha256_file(paths.staging)
         )
         _write_manifest(paths, manifest)
+    _require_export_reconciliation(paths, manifest)
     _require_staged_digest(paths, manifest)
     return manifest, effects, limitations
+
+
+def _require_export_reconciliation(
+    paths: TransitionPaths, manifest: TransitionManifest
+) -> None:
+    _verify_archive(paths, manifest)
+    if (
+        not paths.export.is_file()
+        or _sha256_file(paths.export) != manifest.export_sha256
+    ):
+        raise TransitionError("verified export is missing or changed")
+    if _reconcile_export(paths) != manifest.tables:
+        raise TransitionError("archive/export reconciliation changed")
 
 
 def _require_staged_digest(
@@ -1800,6 +1816,27 @@ def _require_group(
 
 def _group_has_step(manifest: TransitionManifest, name: str) -> bool:
     return any(step.name == name for step in manifest.steps)
+
+
+def require_completed_installation_cutover(data_dir: _pathlib.Path) -> None:
+    """Shared-runtime admission observes the administrative intent, never migrates."""
+    paths = TransitionPaths(
+        data_dir, "installation", target_schema=2, installation=True
+    )
+    try:
+        manifest = _read_manifest(paths)
+    except TransitionError as exc:
+        raise _StoreHeldError(str(exc)) from exc
+    if manifest is None:
+        return
+    if _group_has_step(manifest, "coordinated-rollback"):
+        if manifest.state is not TransitionState.ROLLED_BACK:
+            raise _StoreHeldError("installation cutover rollback is incomplete")
+    elif (
+        _group_has_step(manifest, "coordinated-publication")
+        and manifest.state is not TransitionState.VERIFIED
+    ):
+        raise _StoreHeldError("installation cutover publication is incomplete")
 
 
 def _mark_group(
@@ -1981,7 +2018,7 @@ def _require_manifest_binding(
 def _require_published_digest(
     paths: TransitionPaths, manifest: TransitionManifest
 ) -> None:
-    _verify_archive(paths, manifest)
+    _require_export_reconciliation(paths, manifest)
     if (
         not manifest.staged_sha256
         or _sha256_file(paths.active) != manifest.staged_sha256
@@ -2110,10 +2147,7 @@ def _stage_step(
 ) -> tuple[TransitionManifest, tuple[str, ...], tuple[str, ...]]:
     if manifest.state is not TransitionState.STAGED:
         return manifest, (), ()
-    if _sha256_file(paths.export) != manifest.export_sha256:
-        raise TransitionError("verified export changed before staging")
-    if _reconcile_export(paths) != manifest.tables:
-        raise TransitionError("archive/export reconciliation changed before staging")
+    _require_export_reconciliation(paths, manifest)
     effects, binding_limitations = _stage_candidate(config, paths, manifest, root)
     _fsync_file(paths.staging)
     _fsync_dir(paths.transition_dir)
@@ -2218,19 +2252,12 @@ def verify(config: TransitionConfig) -> TransitionReport:
         raise TransitionError(
             f"active store is not schema {TARGET_SCHEMA}; the transition is not activated"
         )
-    _verify_archive(paths, manifest)
+    _require_export_reconciliation(paths, manifest)
     effects = [
         f"active store opens as schema {TARGET_SCHEMA}",
         f"archive integrity: {inspection.integrity}",
+        f"archive/export reconcile for {len(manifest.tables)} tables",
     ]
-    reconciled = _reconcile_export(paths)
-    effects.append(f"archive/export reconcile for {len(reconciled)} tables")
-    recorded = {(item.name, item.row_count, item.sha256) for item in manifest.tables}
-    observed = {(item.name, item.row_count, item.sha256) for item in reconciled}
-    if recorded != observed:
-        raise TransitionError(
-            "archive/export no longer matches the recorded transition manifest"
-        )
     _verify_active_binding(paths, config)
     effects.append("active root binding matches the transition manifest")
     counts = _semantic_counts(paths.active)
@@ -2413,9 +2440,7 @@ def _restore_archived_store(
             or _sha256_file(preserved) != manifest.rollback_sha256
             or _sha256_file(paths.active) != manifest.previous_sha256
         ):
-            raise TransitionError(
-                "published rollback cannot be proven from manifest"
-            )
+            raise TransitionError("published rollback cannot be proven from manifest")
         _fsync_file(paths.active)
         _fsync_dir(paths.active.parent)
         return manifest, preserved

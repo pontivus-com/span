@@ -2079,6 +2079,14 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     st._apply_installation_cutover(data, roots)
             self.assertEqual(st._read_schema_version_ro(data / "one.db"), 16)
             self.assertEqual(st._read_schema_version_ro(data / "two.db"), 15)
+            from span.shell.sqlite_ownership import (
+                StoreHeldError,
+                store_use_ownership,
+            )
+
+            with self.assertRaisesRegex(StoreHeldError, "publication is incomplete"):
+                with store_use_ownership(data):
+                    self.fail("mixed store set admitted")
             self.assertEqual(
                 st._read_schema_version_ro(functional_pyramid_installation_path(data)),
                 1,
@@ -2093,7 +2101,26 @@ class PubSchemaTransitionTest(unittest.TestCase):
                 )
                 with sqlite3.connect(paths.active) as connection:
                     connection.execute("INSERT INTO meta VALUES('new-write', 'kept')")
+            with store_use_ownership(data):
+                pass
+            restore = st._restore_archived_store
+
+            def interrupt_rollback(config, paths, manifest, source):
+                if paths.repository_id == "two":
+                    raise st.TransitionError("interrupted rollback")
+                return restore(config, paths, manifest, source)
+
+            with mock.patch.object(
+                st, "_restore_archived_store", side_effect=interrupt_rollback
+            ):
+                with self.assertRaisesRegex(st.TransitionError, "interrupted rollback"):
+                    st._rollback_installation_cutover(data, roots)
+            with self.assertRaisesRegex(StoreHeldError, "rollback is incomplete"):
+                with store_use_ownership(data):
+                    self.fail("mixed rollback set admitted")
             restored = st._rollback_installation_cutover(data, roots)
+            with store_use_ownership(data):
+                pass
             for (_, paths), manifest in zip(members, restored, strict=True):
                 self.assertEqual(manifest.state, st.TransitionState.ROLLED_BACK)
                 self.assertEqual(paths.active.read_bytes(), before[paths.active])
@@ -2288,6 +2315,34 @@ class PubSchemaTransitionTest(unittest.TestCase):
                 m.AcceptedDependencyEffect(surface, ref, causes)
         with self.assertRaises(ValueError):
             m.AcceptedDependencyEffects((effect, effect))
+
+    def test_staging_preserves_unknown_without_rowid_table(self):
+        from span.shell.store_transition_schema15 import (
+            stage_schema15,
+            verify_schema15_staging,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            paths = st.TransitionPaths(base / "data", "demo")
+            paths.transition_dir.mkdir(parents=True)
+            _schema14_store(paths.archive, base / "demo")
+            with sqlite3.connect(paths.archive) as connection:
+                connection.execute(
+                    "UPDATE meta SET value='15' WHERE key='schema_version'"
+                )
+                connection.execute(
+                    'CREATE TABLE "future""table"(identity TEXT PRIMARY KEY, '
+                    "content) WITHOUT ROWID"
+                )
+                connection.execute(
+                    'INSERT INTO "future""table" VALUES(?, ?)', ("k", 1)
+                )
+            stage_schema15(paths)
+            with sqlite3.connect(paths.staging) as connection:
+                connection.execute('UPDATE "future""table" SET content=1.0')
+            with self.assertRaisesRegex(st.TransitionError, "retained cells"):
+                verify_schema15_staging(paths)
 
     def test_staging_rejects_lost_retained_index(self):
         from span.shell import store_transition_schema15 as migration
