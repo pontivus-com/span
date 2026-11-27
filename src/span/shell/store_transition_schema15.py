@@ -186,6 +186,7 @@ def receipt_payload(value: object) -> dict[str, object]:
         )
     if not (understanding_ids or runs or challenges):
         raise TransitionError("historical receipt lacks accepted identity")
+    effect: object
     if len(runs) == 1 and not (understanding_ids or challenges or dependents):
         effect = {
             "$type": "AcceptedVerificationEffect",
