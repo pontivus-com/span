@@ -168,6 +168,18 @@ installer preflight/provisioning composition, existing EvidenceSource port.
 **Gate:** exact valid set registered and retrieved, no truncation and no
 delivery-budget change; exact invalid input diagnosed before setup mutation.
 
+### Review closure — 2026-11-27
+
+Independent static review at `8066997d18f2` confirmed FIELD-01–03 and
+identified six implementation-contract gaps. F-01 continuous isolation
+(`recovery.py::_assert_quiescent` releases its lease), F-02 complete store
+proof (`backup_io.py::database_facts` is not a write-history oracle), F-03
+affected scope (full backup includes unrelated stores), F-04 pending versus
+final receipt (`cli.py::_build_receipt` embeds pre-finalization verification),
+F-05 instance-qualified membership (`readiness.py::probe_active_functional_pyramid`
+iterates CLI roots), and F-06 durable-boundary fault injection are closed at
+design/task level below; no production correction or executable proof yet.
+
 ### S-FIELD-02 — Restore pending governed setup without orphaned ownership
 
 **Status:** OPEN. **Owner:** existing installer receipt, governed artifact
@@ -206,6 +218,35 @@ for the corrected preflight boundary, not for ownership semantics.
    activity, missing preimage and accepted-but-incomplete recovery. Verify
    the competing-mutator and same-input replay tests remain green.
 
+5. F-01: implement TD §17.2's shared runtime/exclusive restore store-use lease
+   in the existing ownership shell; cover context and installation runtime,
+   hooks and provisioning, with stable canonical lock identity, lock order
+   and lifetime. Keep SQLite handles through inspection/snapshot/in-place
+   restore; test idle runtime, racing admission after quiescence, absent
+   store retirement and alias paths. Existing ordinary installation semantics
+   remain unchanged; no runtime can enter an exclusively held recovery.
+6. F-02/F-03: record exact prior/planned canonical seed/binding configuration
+   and selected store scope in pending, including ordinary selected members.
+   Move baseline/pending protection before pointer publication in `cli.py`;
+   reuse baseline on retry. Implement complete logical state proof at
+   the existing SQLite/backup owner as defined in TD §17.2. Test independent
+   writes to existing and fresh stores (including same counts/max revision),
+   unrelated repository C modified after A/B setup, independent shared-store
+   changes, missing/reaped acceptance receipt, unchanged-request/no-op and
+   unexplained store creation. Preserve unrelated state or conflict before
+   effects; no whole-backup copy loop for abandonment.
+7. F-06: inject interruption after baseline capture before pending, after
+   pending before protected effects, after pointer and each generated-file
+   publication, after each store creation/registration, after restore snapshot
+   before restore intent, after restore intent, after each generated-file
+   restore/removal, after each store restore/removal, before and after final
+   receipt publication. Resume in a fresh process; assert allowed states,
+   unchanged original backup/snapshot identity, absence, exact restored
+   state, preserved ownership and no duplicate participation write. Wrong
+   backup, unexpected bytes or competing state must fail closed. Include
+   fresh and existing installations, and accepted-but-incomplete replay.
+   Do not implement the next task if proof or isolation cannot be established.
+
 **Gate:** exact restored state and ownership verified or explicit recoverable
 conflict; no orphaned generated files, lost accepted obligations or duplicate
 participation write. No operator reconstruction of internal provenance.
@@ -225,6 +266,22 @@ incomplete membership observation, healthy ACTIVE, pending setup/restore,
 EXCLUDED, eligible UNCONFIGURED and unavailable. Assert observational
 verification does not mutate stores, receipts or generated files and that
 healthy ACTIVE never requests another initialization.
+
+F-05: in the existing readiness/installed verifier composition, expand the
+retained membership by exact ACTIVE instance/version from the existing store
+and registered roots, not CLI target selection; evaluate independent instances
+separately through the existing graph owner. Cover partial selection,
+missing/inaccessible members, changing version, cross-repository graph and two
+independent ACTIVE instances. Assert no synthetic combined graph.
+
+F-04: retain actual pending guidance in pre-finalization strict verification.
+Build the candidate finalized receipt through `governed.finalize`, then use
+the same diagnostic projection and observed facts with that candidate
+receipt/provenance context before atomic publication, per TD §17.2. Do not
+override status in CLI or publish success for an incomplete state. Test a
+healthy completed receipt against fresh doctor and strict verification;
+inject failure before publication and confirm pending guidance persists.
+Test descriptive UNCONFIGURED with and without explicit governed intent.
 
 **Gate:** coherent observed guidance and verification result across all
 administrative outputs; no false initialization requirement or false readiness.
@@ -247,7 +304,12 @@ administrative outputs; no false initialization requirement or false readiness.
   acceptance, public pagination, route/authority separation, CAS/replay,
   and semantic effects; no weakened gate, increased delivery ceiling or
   invented ratchet value. Record exact revision and sanitized results.
-- Independent review checks all three root causes against the amended design.
+- Map F-01–F-06 to exact executable tests in FA-70 (and FA-68/69 where
+  applicable); record failure-before/fix-after evidence for continuous
+  ownership, independent writes, scoped restoration, finalized receipt,
+  per-instance membership and every durable interruption boundary. Retain
+  original tests and prove no newly introduced administrative deadlock.
+- Independent review checks all three root causes and F-01–F-06 against the amended design.
   A controlled local retest of the real adopter corpus is the next adopter
   gate; no publication, release tag, merge or live adopter mutation is
   authorized by this amendment.

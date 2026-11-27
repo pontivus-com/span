@@ -39,8 +39,15 @@ affected route only.
 **End-to-end initialization amendment.** FD-88A–C and functional acceptance
 cases 67–72 specify the single document-driven governed installation, strict
 preflight, replay/revision, metadata ownership, public projection and paging.
-These new acceptance rows are pending until the installed tests land; historical
-partial V3 verification does not close them.
+The original installed acceptance evidence is retained. The 2026-11-27 field
+amendment extends FA-68 and FA-70 (and FA-67/69 where exercised): exhaustive
+authority, recovery isolation and exact affected-state proof, all durable
+interruption boundaries, instance-qualified health and finalized receipt
+agreement. These additional cases are OPEN pending executable evidence under
+S-FIELD-01–04 in the single
+[implementation plan](implementation-plans/functional-pyramid-governance-implementation-plan.md#3a-field-remediation-amendment--2026-11-27).
+Existing test names below are not proof of the new cases; add actual test
+names and results at closeout, not speculative evidence.
 
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|

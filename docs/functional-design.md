@@ -700,7 +700,13 @@ An authorized restore must not strand generated artifacts without ownership
 evidence, require an operator to reconstruct that evidence, or report success
 while receipt, stores and generated metadata disagree. A fresh installation
 has a recoverable pre-setup state even when no store previously existed.
-Interruption of recovery remains recoverable without a new participation write.
+Recovery is limited to the pending setup's attributable effects, not every
+store captured by a full backup. Preserve unrelated stores and independent
+accepted state within shared stores; inability to establish the permitted
+state is a conflict. Exclude competing runtime and administrative writes
+continuously from recovery eligibility through final publication, including
+removal of a previously absent store. Interruption at each durable boundary
+remains recoverable without a new participation write.
 For an already accepted pending participation, resume/replay the accepted
 intent and preserve its immutable dependent-effect references; abandoning an
 unaccepted operation is not permission to roll back an accepted semantic write.
@@ -838,7 +844,11 @@ blocker; only eligible UNCONFIGURED governed use requires initialization.
 Verification must not equate registration, successful structural setup or
 semantic currency with each other, invent a participation state, or perform
 a write. Guidance is a projection of observed facts, never an unconditional
-request to install.
+request to install. Observe each relevant ACTIVE instance with its complete
+retained membership; never combine independent instances as one graph.
+Incomplete observation is not healthy. Pending acceptance is not completed
+installation: a finalized receipt and subsequent observation must agree for
+the same committed state, without prematurely clearing recovery.
 
 For an external edit/write, the same canonical changed-scope projection decides
 semantic, authority, route, premise, containment and cross-repository effects;
@@ -1744,11 +1754,17 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     and absence, without orphaning ownership or requiring manual cleanup.
     Fresh-state, previously accepted-state and interrupted restore cases are
     covered; modified/unowned artifacts and competing writes fail closed.
+    Protect both existing and newly created affected stores against independent
+    retained changes; preserve unrelated stores and accepted obligations.
+    Exclude live runtime admission throughout restoration and prove continuation
+    at every durable mutation boundary, including absence restoration.
     An accepted pending write remains recoverable with its receipt/effects.
     Ordinary install and observation modes do not activate. Observational
     guidance distinguishes healthy ACTIVE, degraded/mismatched ACTIVE,
     UNCONFIGURED, EXCLUDED, pending and unavailable state without a
-    contradictory initialization request (FD-94).
+    contradictory initialization request (FD-94). Partial target selection and
+    multiple independent ACTIVE instances cannot manufacture health. A completed
+    receipt agrees with subsequent observation for the same committed state.
 71. **Public findings.** FD-88B applies across all public governance results;
     internal reasons/locators never leak.
 72. **Complete bounded retrieval.** FD-88C directory continuation returns all

@@ -1244,6 +1244,31 @@ manifest digest and canonical identity in the existing pending entry. A
 legacy pending entry lacking necessary evidence is a named recovery conflict,
 not permission to infer ownership.
 
+**Continuous recovery isolation.** The existing `_assert_quiescent` releases
+SQLite ownership on return; SQLite file locks also cannot protect absent or
+replaced paths. Extend the existing shell ownership owner
+(`shell/sqlite_ownership.py`, reusing the stable advisory lock primitive of
+`shell/install/receipt.py`) with a stable installation-local store-use lock,
+distinct from `.install.lock`, receipts and databases. Runtime composition in
+`shell/context.py` and `shell/installation_runtime.py` (MCP, hooks and
+provisioning) takes shared store-use ownership before opening/creating stores
+and retains it until all handles close; nested composition reuses the lease.
+Governed restore takes exclusive store-use ownership after administrative
+ownership, before receipt/state inspection, and holds both until final receipt
+publication or failure. A live runtime, even idle, or a racing admission
+conflicts explicitly. Ordinary installation retains its existing administrative
+lock plus shared store-use ownership; ordinary runtimes never acquire the
+administrative lock. Canonicalize the installation path, use stable
+no-symlink lock files, never remove them while they can be held. This is shell
+isolation, not another recovery registry or semantic writer. Retain existing
+SQLite exclusive checks for nonparticipating SQLite holders; keep required
+ownership through inspection, snapshot and in-place database restoration
+using the held connection, not a second source connection. Do not unlink a
+store while an uncontrolled handle can write. Unsupported legacy runtime
+quiescence that cannot be proved is a conflict. The stable lease protects
+absent paths and remains held across retirement/replacement. Observation may
+report pending/unavailable without store mutation.
+
 While holding the existing exclusive administrative lock and with the
 installation runtimes quiesced, the existing restore owner verifies the
 selected manifest and pending binding, root identities, complete generated
@@ -1253,19 +1278,61 @@ symlinks, escapes, unmanaged files and unexpected bytes. A planned immutable
 source absent before setup and now exactly equal to the pending digest may
 be retired; a previously existing source is retained, and a changed owned
 bootstrap is restored from its verified preimage. Never remove a prior
-accepted or still-referenced source. A newly created store absent at preflight
-may be retired only when its creation by this pending operation and absence
-of independent writes are proved by the existing store/receipt owners;
-otherwise reject with the named conflict. Explicit absence for receipt and
-managed support artifacts must be restored, not ignored. Do not delete
-arbitrary files, directories, databases or independent authority.
+accepted or still-referenced source. **Affected scope and store proof.** Bind the complete selected initialization
+set (including ordinary selected repositories), canonical roots, selected
+store paths, prior and planned canonical seeds/bindings (including resolved
+seeds and preserve/clear/replace) and planned generated paths in the existing
+pending entry before mutation. Capture the verified baseline before the
+indexer pointer or other protected state changes; publish pending before the
+first such change. Same-input resume reuses that baseline, not a later
+reinstall backup. Although the full backup captures other stores, abandonment
+selects only pending-owned effects: selected stores, affected generated paths,
+managed indexer pointer, receipt and, only when necessary, installation store.
+Never restore unrelated repository stores from that backup.
+
+At the current schema, `sqlite_store/lifecycle.py::register_repository` changes
+only the selected `repositories` row (root, canonical seed and binding JSON).
+Fresh initialization can create the canonical schema/meta but not semantic
+rows. Under both leases compare the complete logical SQLite state against the
+verified baseline plus only these permitted changes: compare schema, metadata
+and every table's typed rows without depending on row order or physical
+database layout. Include observations, contexts, understandings, revisions,
+curation, support, challenges, verification, receipts and route dependencies.
+Counts, max revision, mtime, integrity and missing participation receipt are
+not sufficient proof. Existing stores may be at the baseline or exact
+post-registration state; fresh stores may be absent, canonical empty schema,
+or contain only their planned registration. Fresh-store retirement requires
+the absent baseline, pending path reservation and controlled creation by
+this operation; matching contents alone do not establish ownership. Ordinary
+runtime must remain non-provisioning. Use the existing schema and canonical
+registration owner, not a second writer or new ledger. Unexpected schema,
+rows or unverifiable attribution are conflicts.
+
+Resolve original participation receipt and exact retained instance/version/
+members through the existing owner. Missing or reaped receipt alone is not
+proof of nonacceptance; changed or unverifiable participation history conflicts.
+Request-less unchanged setup cannot roll back the prior accepted instance.
+Before acceptance the shared installation store may only be unchanged or
+newly created with canonical empty state. Preserve independent installation
+changes without restoring that store only if nonacceptance and the affected
+participation state are independently proved; otherwise conflict. Never
+replace shared state to discard unrelated versions, exclusions, receipts or
+effects. If retained facts cannot establish that discarded effects belong
+only to this setup, reject before destructive mutation. Complete logical-state
+comparison does not prove historical writes which left no retained trace;
+do not fabricate that evidence or introduce a semantic history ledger.
+Restore explicit receipt/support-file absence; never delete arbitrary files,
+directories, databases or independent authority.
 
 Take the existing verified pre-restore snapshot, including the current pending
 receipt and exact affected generated bytes, before destructive changes.
 Persist restoration intent (selected manifest identity/digest and pre-restore
 snapshot identity) within the existing pending entry; it takes precedence
-over setup resumption until resolved. Validate preimage/pending digests and
-allowed before/after states on every resume. Reconcile generated files and
+over setup resumption until resolved. Bind the pre-restore snapshot digest and exact selected effect set in the
+retained restore intent. On every resume accept only each selected artifact's
+verified pre-restore or restored state (complete logical comparison for
+databases); recheck acceptance and competing-write evidence under both leases.
+Never replace the original pre-restore snapshot after partial restoration. Reconcile generated files and
 restore the exact affected data artifacts, verify restored bytes/absence and
 store/participation identity against the selected backup, then publish the
 restored receipt last (atomic replacement, or durable removal for an
@@ -1353,8 +1420,13 @@ complete graph and matching required provenance reports no action; eligible
 UNCONFIGURED reports governed installation only when intended. For ordinary
 descriptive installation without governed intent, no mandatory activation
 is manufactured. Incomplete active-member observation is unavailable, not
-VALID. Use the complete existing retained membership when composing graph
-health, not a subset of CLI targets. Derive one consistent guidance value
+VALID. Resolve each relevant ACTIVE instance by retained pyramid ID and current
+version, using the existing participation owner and registered roots. Expand
+to its complete retained member set regardless of CLI targets; evaluate each
+instance separately through the existing graph owner. Never merge independent
+instances or use only selected roots. Missing root, member, version or
+incomplete observation is unavailable. Check identity/version consistency
+through observation; conflicting or changing observations are unavailable. Derive one consistent guidance value
 from these observed facts for doctor, strict installed verifier and receipt
 report; no new resolver, independent health classifier or persistent readiness
 state. Use the existing administrative field with status values
@@ -1367,6 +1439,24 @@ structural validity from semantic currency. Tests cover actual pending state
 (including accepted-but-incomplete and interrupted restore), healthy ACTIVE,
 degraded/provenance mismatch, EXCLUDED, UNCONFIGURED and unavailable, plus
 non-mutation and agreement between verification outputs.
+
+**Final receipt composition.** The current `cli.py` embeds the pending
+verification report into the completed receipt. Preserve strict installed
+acceptance with the real pending receipt; its guidance remains pending and
+cannot declare completion. After acceptance succeeds, `governed.finalize`
+constructs the candidate final receipt with accepted provenance, no pending
+entry and retained effects. Reuse the same observational facts and single
+pure diagnostic projection in `readiness.py` for the candidate committed
+receipt context; verify the candidate's provenance/identity and compose its
+final report before atomic receipt publication. The candidate projection is
+not an externally observable success until publication; on failure keep the
+pending receipt. Never copy pending guidance to a completed receipt, override
+a status string in the CLI, or write a success receipt merely to re-probe it.
+For descriptive UNCONFIGURED use existing explicit governed input/intent;
+where not supplied, present no mandatory activation, not inferred intent.
+Tests compare the embedded finalized projection with a subsequent independent
+doctor/strict observation for the same state; pending and interrupted
+finalization must still report recovery.
 
 ### 18. Pure resolver, health and support evaluation
 
