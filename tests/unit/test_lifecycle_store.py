@@ -1140,6 +1140,61 @@ class LifecycleStoreTest(unittest.TestCase):
         with self.assertRaises(RecordingValidationError):
             self.store.resolve_authority("repo-1", "auth-missing")
 
+    def test_accepted_dependents_traverse_historical_premises(self) -> None:
+        self._seed_understanding()
+        root = self.store.get_version("u-1", 1).conclusions[0]
+        for index, lineage in enumerate(("c-2", "c-3"), start=1):
+            self.store.record_understanding(
+                m.UpdateUnderstandingCommand(
+                    identity=_identity(f"chain-{lineage}"),
+                    understanding_id=root.understanding_id,
+                    expected_version=m.UnderstandingVersionNumber(index),
+                    add=(
+                        _proposed_with(
+                            lineage,
+                            lineage,
+                            (
+                                m.PremiseSupport(
+                                    premise=m.ConclusionRevisionRef(
+                                        root.understanding_id,
+                                        m.ConclusionId(f"c-{index}"),
+                                        m.ConclusionRevisionNumber(1),
+                                    )
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            )
+        # Replace the intermediate revision's support; the historical edge
+        # must still lead to the current third conclusion.
+        self.store.record_understanding(
+            m.UpdateUnderstandingCommand(
+                identity=_identity("change-intermediate"),
+                understanding_id=root.understanding_id,
+                expected_version=m.UnderstandingVersionNumber(3),
+                correct=(
+                    m.CorrectConclusion(
+                        conclusion_id=m.ConclusionId("c-2"),
+                        **_content("new intermediate"),
+                    ),
+                ),
+            )
+        )
+        receipt = self.store.record_understanding(
+            _update_command(expected=4, submission="change-root")
+        )
+        self.assertEqual(
+            receipt.dependent_effects,
+            (
+                m.ConclusionRevisionRef(
+                    root.understanding_id,
+                    m.ConclusionId("c-3"),
+                    m.ConclusionRevisionNumber(1),
+                ),
+            ),
+        )
+
     def test_support_dependency_index(self) -> None:
         self._seed_understanding()
         binding = _authority_binding()

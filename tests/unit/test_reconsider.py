@@ -397,6 +397,27 @@ class ReconsiderServiceTest(unittest.TestCase):
             (dependent,),
         )
 
+    def test_pure_premise_closure_preserves_cycles_and_forced_promotion(self) -> None:
+        refs = tuple(
+            m.ConclusionRevisionRef(
+                m.UnderstandingId(f"u-{index}"),
+                m.ConclusionId("c-1"),
+                m.ConclusionRevisionNumber(1),
+            )
+            for index in range(5)
+        )
+        a, b, c, d, e = refs
+        edges = {a: (b,), b: (c,), c: (a, d), d: (e,), e: ()}
+        traversal = support_rules.premise_closure({a, c}, {a})
+        observed = []
+        position = next(traversal)
+        while isinstance(position, m.ConclusionRevisionRef):
+            observed.append(position)
+            position = traversal.send(edges[position])
+        self.assertEqual(len(observed), len(refs))
+        self.assertEqual(set(observed), set(refs))
+        self.assertEqual(position, (set(refs), set(refs)))
+
     def test_curated_revision_reconsiders_without_mutating_curation(self) -> None:
         self.store.record_understanding(
             m.UpdateUnderstandingCommand(

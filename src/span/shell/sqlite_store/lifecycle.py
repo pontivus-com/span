@@ -1066,15 +1066,10 @@ class LifecycleStore:
             self._write_challenge_effects(connection, transition.challenge_effects)
             dependents: tuple[m.ConclusionRevisionRef, ...] = ()
             if not isinstance(command, m.CreateUnderstandingCommand):
-                before = {
-                    (selected.value, ref.conclusion_id.value, ref.revision.value)
-                    for ref in version.conclusions
-                }
-                after = {
-                    (selected.value, ref.conclusion_id.value, ref.revision.value)
-                    for ref in transition.new_version.conclusions
-                }
-                dependents = _dependents.premise_dependents(connection, before - after)
+                before = set(version.conclusions)
+                after = set(transition.new_version.conclusions)
+                reached = _dependents.premise_dependents(connection, before - after)
+                dependents = self._current_dependent_refs(connection, reached)
             receipt = build_receipt(
                 command.identity,
                 digest,
@@ -1415,20 +1410,26 @@ class LifecycleStore:
         self, dependency_kind: str, dependency_ref: str
     ) -> tuple[m.ConclusionRevisionRef, ...]:
         """Return exact revisions whose support references one identity."""
-        rows = self._connection.execute(
-            "SELECT understanding_id, conclusion_id, revision"
-            " FROM support_dependencies"
-            " WHERE dependency_kind=? AND dependency_ref=?"
-            " ORDER BY understanding_id, conclusion_id, revision",
-            (dependency_kind, dependency_ref),
-        ).fetchall()
+        return _dependents.support_dependents(
+            self._connection, dependency_kind, dependency_ref
+        )
+
+    def _current_dependent_refs(
+        self,
+        connection: _sqlite3.Connection,
+        reached: tuple[m.ConclusionRevisionRef, ...],
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        membership: dict[str, frozenset[m.ConclusionRevisionRef]] = {}
+        for ref in reached:
+            identity = ref.understanding_id.value
+            if identity not in membership:
+                understanding = self._get_understanding_in(connection, identity)
+                version = self._get_version_in(
+                    connection, identity, understanding.current_version.value
+                )
+                membership[identity] = frozenset(version.conclusions)
         return tuple(
-            m.ConclusionRevisionRef(
-                understanding_id=m.UnderstandingId(row["understanding_id"]),
-                conclusion_id=m.ConclusionId(row["conclusion_id"]),
-                revision=m.ConclusionRevisionNumber(row["revision"]),
-            )
-            for row in rows
+            ref for ref in reached if ref in membership[ref.understanding_id.value]
         )
 
     def current_functional_route_dependents(

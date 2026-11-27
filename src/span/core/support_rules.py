@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as _datetime
 import hashlib as _hashlib
+from collections.abc import Generator as _Generator
 
 from span.core.identity import payload_digest
 from span.core import model as _m
@@ -20,6 +21,48 @@ def unvisited_premises(
 ) -> tuple[_m.ConclusionRevisionRef, ...]:
     """Select new frontier members, independent of edge cause attribution."""
     return tuple(dict.fromkeys(ref for ref in dependents if ref not in visited))
+
+
+def premise_closure(
+    direct: set[_m.ConclusionRevisionRef],
+    forced: set[_m.ConclusionRevisionRef],
+) -> _Generator[
+    _m.ConclusionRevisionRef
+    | tuple[set[_m.ConclusionRevisionRef], set[_m.ConclusionRevisionRef]],
+    tuple[_m.ConclusionRevisionRef, ...],
+    None,
+]:
+    """Pure frontier protocol: yield exact read coordinates, consume supplied edges.
+
+    The final yield is the complete indirect/forced set. The caller owns every
+    index read; the core owns graph traversal and cause propagation.
+    """
+    forced = set(forced)
+    visited = direct | forced
+    pending = [
+        (ref, False) for ref in sorted(direct - forced, key=lambda ref: ref.sort_key)
+    ]
+    pending.extend((ref, True) for ref in sorted(forced, key=lambda ref: ref.sort_key))
+    indirect: set[_m.ConclusionRevisionRef] = set()
+    processed: set[_m.ConclusionRevisionRef] = set()
+    while pending:
+        ref, propagated = pending.pop()
+        if ref in processed:
+            continue
+        processed.add(ref)
+        dependents = yield ref
+        indirect.update(dependents)
+        unseen = unvisited_premises(dependents, visited)
+        if propagated:
+            promoted = set(dependents) - forced
+            forced.update(dependents)
+            pending.extend(
+                (item, True)
+                for item in sorted(promoted & direct, key=lambda item: item.sort_key)
+            )
+        visited.update(unseen)
+        pending.extend((item, propagated) for item in unseen)
+    yield indirect, forced
 
 
 def dependency_change_reasons(

@@ -711,24 +711,8 @@ class DependencyEffectService:
         forced: set[m.ConclusionRevisionRef],
     ) -> tuple[set[m.ConclusionRevisionRef], set[m.ConclusionRevisionRef]]:
         """Read each reached reverse-index entry once, forced roots first."""
-        visited = direct | forced
-        pending = [(ref, False) for ref in direct - forced]
-        pending.extend((ref, True) for ref in forced)
-        indirect: set[m.ConclusionRevisionRef] = set()
-        processed: set[m.ConclusionRevisionRef] = set()
-        while pending:
-            ref, propagated = pending.pop()
-            if ref in processed:
-                continue
-            processed.add(ref)
-            dependents = self._support_dependents("PREMISE", ref.label)
-            indirect.update(dependents)
-            unseen = _support_rules.unvisited_premises(dependents, visited)
-            if propagated:
-                # A queued direct root can itself be a forced descendant.
-                promoted = set(dependents) - forced
-                forced.update(dependents)
-                pending.extend((item, True) for item in promoted & direct)
-            visited.update(unseen)
-            pending.extend((item, propagated) for item in unseen)
-        return indirect, forced
+        traversal = _support_rules.premise_closure(direct, forced)
+        position = next(traversal)
+        while isinstance(position, m.ConclusionRevisionRef):
+            position = traversal.send(self._support_dependents("PREMISE", position.label))
+        return position
