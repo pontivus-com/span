@@ -155,6 +155,28 @@ Static inspection of the exact field baseline confirms three distinct defects:
 | FIELD-02 | `shell/install/governed.py:461–501` records pending ownership and publishes generated files outside the data directory; `shell/install/recovery.py:335–405` restores only listed data artifacts. Restoring the prior receipt loses pending ownership without reconciling generated paths or absence. | FD-88A; TD §17.2 | S-FIELD-02 |
 | FIELD-03 | `shell/readiness.py:817–844` always reports `requires_governed_install`, irrespective of actual state. | FD-94; TD §17.2 | S-FIELD-03 |
 
+**Session finding traceability (all production work OPEN).** The following
+maps the reported defects and their review refinements to their existing
+design owners and executable work; it is not another task or acceptance
+programme. The owner-reported Legal-scale failure is part of FIELD-01/02.
+The adopter's classification decisions, obsolete local guidance and semantic
+reconciliation remain repository-owner work as noted above.
+
+| Finding | Functional authority | Technical mechanism | Task and acceptance |
+|---|---|---|---|
+| FIELD-01: valid authority rejected above evidence page, including Legal scale | FD-54, FD-88A | TD §20 exact validation, no administrative cap | S-FIELD-01.1–4; FA-68/69 |
+| FIELD-02: orphaned generated declarations and incomplete restore | FD-88A | TD §17.2 preimages, absence, scoped restore and accepted-intent recovery | S-FIELD-02.1–7; FA-70 |
+| FIELD-03: misleading activation guidance | FD-94 | TD §17.2 observational guidance | S-FIELD-03; FA-70 |
+| F-01: ownership check releases before restore | FD-88A | TD §17.2 continuous recovery isolation | S-FIELD-02.5; FA-70 |
+| F-02: independent-write proof insufficient | FD-88A | TD §17.2 complete logical affected-state proof | S-FIELD-02.6; FA-70 |
+| F-03: unrelated stores at risk | FD-88A | TD §17.2 exact affected scope | S-FIELD-02.6; FA-70 |
+| F-04: stale pending guidance in final receipt | FD-94 | TD §17.2 final receipt composition | S-FIELD-03 F-04; FA-70 |
+| F-05: incomplete or combined instance observation | FD-82/83/94 | TD §17.2 complete per-instance observation | S-FIELD-03 F-05; FA-70 |
+| F-06: insufficient interruption coverage | FD-88A, acceptance 70 | TD §17.2 durable recovery transitions | S-FIELD-02.7; FA-70 |
+
+S-FIELD-04 closes the entire mapping with executable evidence, not historical
+CI or a successful count-only installation.
+
 ### S-FIELD-01 — Exhaustive exact administrative authority validation
 
 **Status:** OPEN. **Owner:** existing `service/administration.py` and
@@ -184,8 +206,9 @@ installer preflight/provisioning composition, existing EvidenceSource port.
    exceeding both numerical query bounds without changing either. This is
    owner-reported field-scale regression evidence, not a capacity threshold
    or assertion about the adopter's distinct-locator count. Verify the exact
-   complete persisted binding set by canonical identity and attributes, not
-   by a single bounded evidence response or count alone. Repeat identical
+   complete persisted binding set by canonical identity and attributes and
+   the complete placed document coverage, not by a single bounded evidence
+   response or count alone. Repeat identical
    input without a duplicate participation write; test a missing/unreadable
    locator late in the large set and prove rejection before pending intent,
    generated declarations or repository-state mutation. Use the existing

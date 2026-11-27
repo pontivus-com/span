@@ -661,8 +661,18 @@ span and ordinary preserve/clear/replace semantics. A valid configuration
 cannot be rejected or shortened because it exceeds an agent-facing evidence
 page. Name actual missing, unreadable, foreign or conflicting authority; a
 provider failure remains an operational failure, not an unknown locator.
-Never require the owner to reduce or batch accepted governance to fit a query
-budget.
+There is no fixed administrative capacity ceiling on the number of valid
+authority locators, bindings or governed document placements per repository
+or selected member set imposed by an evidence-delivery budget. The complete
+owner-supplied configuration is the validation and registration unit, even
+when it contains thousands of entries. No raised or configurable query cap,
+operator batching, omitted placement or reduced governance coverage is a
+supported solution. Genuine resource/provider failure remains an explicit
+operational failure, never evidence that a locator is missing. Reject invalid
+authority during preflight before publishing pending intent, generated
+declarations or changing registered state; a subsequent operational failure
+follows the recoverable setup contract below. Keep agent-facing retrieval
+bounds unchanged (FD-54).
 
 Select ACTIVATE for a fresh eligible explicitly selected member set. For the
 same complete member set of one existing ACTIVE instance, select REVISE when
@@ -1731,10 +1741,16 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     runtime are observable without caller-generated intermediate configuration.
 68. **Strict preflight.** Invalid classification, identity, membership, authority
     or graph input fails before setup mutation; no semantic repair is inferred.
-    Ordinary and governed explicit authority configurations spanning more than
-    one evidence page are completely validated and applied, without changing
-    retrieval limits. Actual missing/foreign/conflicting/unreadable input and
-    provider failure are distinguished and rejected before setup mutation.
+    Ordinary and governed explicit authority configurations are completely
+    validated and applied regardless of evidence-delivery bounds, including
+    a field-scale configuration of more than a thousand distinct valid
+    locators. The exact complete binding identities, attributes and placed
+    document coverage are retained; repeat identical input does not duplicate
+    participation. Actual missing/foreign/conflicting/unreadable input
+    (including a locator late in the large input) and provider failure are
+    distinguished and rejected before pending intent, generated declarations
+    or registered-state mutation. Retrieval limits remain unchanged. This
+    acceptance scale is evidence of the behavior, not an installation limit.
 69. **Repeat and revise.** Identical valid input is a no-op for participation;
     changed input for the same member set revises the exact instance, including
     V2 cutover. Conflicts and failed verification remain explicit; accepted

@@ -1278,7 +1278,9 @@ symlinks, escapes, unmanaged files and unexpected bytes. A planned immutable
 source absent before setup and now exactly equal to the pending digest may
 be retired; a previously existing source is retained, and a changed owned
 bootstrap is restored from its verified preimage. Never remove a prior
-accepted or still-referenced source. **Affected scope and store proof.** Bind the complete selected initialization
+accepted or still-referenced source.
+
+**Affected scope and store proof.** Bind the complete selected initialization
 set (including ordinary selected repositories), canonical roots, selected
 store paths, prior and planned canonical seeds/bindings (including resolved
 seeds and preserve/clear/replace) and planned generated paths in the existing
@@ -1787,8 +1789,14 @@ The exact mechanism is:
    applicability or precedence with observed seed references. Distinguish
    `EvidenceSourceFailure` missing/unreadable outcomes and provider errors;
    preserve the repository and locator in the administrative diagnostic.
-   No bounded inventory, new numeric ceiling, caller batching, parallel
-   evidence identity or alternate provider path is necessary. Cache/deduplicate
+   The former inventory path paginates distinct locators by
+   `max_evidence_units` (96 at the field baseline); `max_results` (250)
+   does not control this path. Neither value limits administrative authority
+   capacity. Leave both retrieval bounds unchanged and remove their
+   dependency from administrative validation, not from public retrieval.
+   No bounded inventory, numeric ceiling or configurable override, caller
+   batching, parallel evidence identity or alternate provider path is
+   authorized. Cache/deduplicate
    within this operation by repository-qualified locator, not by bare evidence
    id. Validate all explicit non-empty ordinary replacements and the complete
    final reconciled governed binding set across all selected members before
@@ -1799,7 +1807,13 @@ The exact mechanism is:
    replacement/validation request; an explicit empty family clears it. Do not
    duplicate validation rules in the shell. Preserve exact owner-provided
    authority; invalid input cannot be made valid by truncation, silent
-   omission or semantic inference.
+   omission or semantic inference. Verify the field-scale installed
+   journey with more than 1,100 distinct valid locators, exact complete
+   canonical bindings and placed document coverage, identical-input replay,
+   and a late invalid locator rejected before pending publication or
+   generated/repository effects (FD acceptance 68; S-FIELD-01). This is a
+   synthetic regression workload, not a new limit or an assertion about
+   the adopter's distinct-locator count.
 6. After runtime/indexer preparation, the installer invokes
    `provision_repository_runtime` exactly once for each selected repository
    with one canonical `InitializeRepositoryRequest`, retains the returned

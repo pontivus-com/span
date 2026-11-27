@@ -118,9 +118,9 @@ names and results at closeout, not speculative evidence.
 | FA-65 | Three-tool host surface remains exact | `test_only_the_three_core_tools_are_registered` |
 | FA-66 | Installed lifecycle closes the loop | `test_installed_cross_repository_governance_journey` |
 | FA-67 | Document-only governed initialization | `test_installed_document_only_governed_initialization` |
-| FA-68 | Strict preflight | `test_strict_classification_document`; `test_installed_document_only_governed_initialization` |
+| FA-68 | Strict preflight; exhaustive ordinary/governed authority validation independent of retrieval bounds; field-scale exact bindings/placement coverage and late invalid-input rejection (additional evidence OPEN) | `test_strict_classification_document`; `test_installed_document_only_governed_initialization` |
 | FA-69 | Repeat and revise; authority-only delta effects | `test_installed_document_only_governed_initialization`; `test_installed_cross_repository_governance_journey` |
-| FA-70 | Exclusive administrative ownership, existing-binding reuse and durable interruption recovery | `test_administrative_owner_blocks_alias_and_competing_maintenance`; `test_classification_reconciles_authority_without_claiming_ordinary_ownership`; `test_installed_document_only_governed_initialization` |
+| FA-70 | Exclusive administrative ownership, existing-binding reuse, durable interruption recovery; scoped abandonment, continuous runtime exclusion, complete state proof, per-instance guidance and finalized receipt agreement (additional evidence OPEN) | `test_administrative_owner_blocks_alias_and_competing_maintenance`; `test_classification_reconciles_authority_without_claiming_ordinary_ownership`; `test_installed_document_only_governed_initialization` |
 | FA-71 | Public findings | `test_public_governance_findings_exclude_internal_diagnostics`; `test_installed_cross_repository_governance_journey` |
 | FA-72 | Complete bounded retrieval | `test_directory_continuation_recovers_every_placement` |
 The matrix names enforcement boundaries; the CI execution receipt remains the
