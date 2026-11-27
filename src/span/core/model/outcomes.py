@@ -14,13 +14,33 @@ from span.core.model.primitives import (
 )
 from span.core.model.recording import RecordReceipt
 from span.core.model.support import (
+    SupportQualification,
     SupportUnavailable,
     UnderstandingQualification,
     VerificationQualification,
 )
 from span.core.model.surfaces import SurfaceStatus, SurfaceStatusUnavailable
-from span.core.model.understanding import Challenge, ReceiptRetrievalSelector
+from span.core.model.understanding import (
+    AcceptedRevisionEffect,
+    Challenge,
+    ReceiptRetrievalSelector,
+    RevisionEffectAction,
+)
 from span.core.model.verification import VerificationOutcome
+
+
+@_dataclass(frozen=True)
+class RecordedRevisionEffect:
+    """An immutable accepted action and its independent live qualification."""
+
+    effect: AcceptedRevisionEffect
+    qualification: SupportQualification | SupportUnavailable | None
+
+    def __post_init__(self) -> None:
+        if (self.qualification is None) != (
+            self.effect.action is RevisionEffectAction.WITHDRAW
+        ):
+            raise ValueError("withdrawal alone has no live support qualification")
 
 
 @_dataclass(frozen=True)

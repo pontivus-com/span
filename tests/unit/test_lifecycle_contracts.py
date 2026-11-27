@@ -502,6 +502,60 @@ class AcceptedRevisionEffectTest(unittest.TestCase):
         self.assertEqual(accepted.version, transition.new_version.version)
 
 
+class ExactEffectProjectionTest(unittest.TestCase):
+    def test_accepted_action_requires_live_support_except_withdrawal(self):
+        _, version, _ = _created()
+        ref = version.conclusions[0]
+        accepted = m.AcceptedRevisionEffect(
+            m.RevisionEffectAction.CONFIRM, ref, False, m.CurationState.CAPTURED
+        )
+        current = m.SupportQualification(m.SupportState.CURRENT, NOW, "", (), ())
+        for support in (current, m.SupportUnavailable("evaluation unavailable")):
+            effect = m.RecordedRevisionEffect(accepted, support)
+            self.assertEqual(
+                m.from_canonical(m.RecordedRevisionEffect, m.to_canonical(effect)),
+                effect,
+            )
+        with self.assertRaises(ValueError):
+            m.RecordedRevisionEffect(accepted, None)
+        withdrawn = m.AcceptedRevisionEffect(
+            m.RevisionEffectAction.WITHDRAW, ref, True, None
+        )
+        self.assertEqual(m.RecordedRevisionEffect(withdrawn, None).effect, withdrawn)
+        with self.assertRaises(ValueError):
+            m.RecordedRevisionEffect(withdrawn, current)
+
+    def test_pinned_disposition_requires_real_support_or_recovery(self):
+        _, version, _ = _created()
+        ref = version.conclusions[0]
+        causes = (m.ChangeReason.DIRECT, m.ChangeReason.INDIRECT)
+        current = m.SupportQualification(m.SupportState.CURRENT, NOW, "", (), ())
+        settled = m.EffectDisposition(
+            ref, causes, m.EffectDispositionState.CURRENT, "verified", support=current
+        )
+        unavailable = m.EffectDisposition(
+            ref,
+            causes,
+            m.EffectDispositionState.UNAVAILABLE,
+            "owner cannot be established",
+            recovery="restore owner availability",
+        )
+        for item in (settled, unavailable):
+            self.assertEqual(
+                m.from_canonical(m.EffectDisposition, m.to_canonical(item)), item
+            )
+        with self.assertRaises(ValueError):
+            dataclasses.replace(settled, support=None)
+        with self.assertRaises(ValueError):
+            dataclasses.replace(unavailable, recovery=None)
+        with self.assertRaises(ValueError):
+            dataclasses.replace(unavailable, support=current)
+        with self.assertRaises(ValueError):
+            dataclasses.replace(unavailable, reasons=(m.ChangeReason.CONTAINMENT,))
+        with self.assertRaises(ValueError):
+            dataclasses.replace(unavailable, reasons=(m.ChangeReason.DIRECT,) * 2)
+
+
 class CreateUnderstandingTest(unittest.TestCase):
     def test_question_context_uses_bound_target(self):
         understanding, version, revisions = _created()

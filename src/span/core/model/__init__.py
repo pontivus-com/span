@@ -326,6 +326,7 @@ from span.core.model.administration import (  # noqa: F401
 from span.core.model.outcomes import (  # noqa: F401
     ChallengeRecorded,
     RecordOutcome,
+    RecordedRevisionEffect,
     UnderstandingRecorded,
     VerificationRecorded,
 )
@@ -362,6 +363,8 @@ from span.core.model.answers import (  # noqa: F401
     Challenged,
     ConclusionView,
     EvidencePage,
+    EffectDisposition,
+    EffectDispositionState,
     FunctionalPyramidRecorded,
     Gap,
     GapReason,
@@ -658,6 +661,7 @@ __all__ = [
     "RetrieveResult",
     "SupportUnavailable",
     "UnderstandingRecorded",
+    "RecordedRevisionEffect",
     "VerificationRecorded",
     "ChallengeRecorded",
     "RecordOutcome",
@@ -687,6 +691,8 @@ __all__ = [
     "Challenged",
     "ConclusionView",
     "EvidencePage",
+    "EffectDisposition",
+    "EffectDispositionState",
     "Gap",
     "GapReason",
     "HistoricalConclusion",
