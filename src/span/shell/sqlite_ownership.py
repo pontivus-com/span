@@ -63,7 +63,9 @@ def store_use_ownership(
     """Shared runtime admission or exclusive installation recovery."""
     with stable_ownership(data_dir, ".store-use.lock", exclusive=exclusive):
         if not exclusive:
-            from span.shell.store_transition import require_completed_installation_cutover
+            from span.shell.store_transition import (
+                require_completed_installation_cutover,
+            )
 
             require_completed_installation_cutover(Path(data_dir).resolve())
         yield

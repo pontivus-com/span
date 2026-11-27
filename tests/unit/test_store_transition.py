@@ -2335,9 +2335,7 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     'CREATE TABLE "future""table"(identity TEXT PRIMARY KEY, '
                     "content) WITHOUT ROWID"
                 )
-                connection.execute(
-                    'INSERT INTO "future""table" VALUES(?, ?)', ("k", 1)
-                )
+                connection.execute('INSERT INTO "future""table" VALUES(?, ?)', ("k", 1))
             stage_schema15(paths)
             with sqlite3.connect(paths.staging) as connection:
                 connection.execute('UPDATE "future""table" SET content=1.0')
