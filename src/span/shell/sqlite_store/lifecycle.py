@@ -1160,27 +1160,29 @@ class LifecycleStore:
                     "a verification run belongs to another repository"
                 )
             run = m.VerificationRun(
-                run_id=m.VerificationRunId(
-                    f"run:{command.identity.context_id.value}:"
-                    f"{command.identity.request_id.value}"
+                facts=m.VerificationRunFacts(
+                    run_id=m.VerificationRunId(
+                        f"run:{command.identity.context_id.value}:"
+                        f"{command.identity.request_id.value}"
+                    ),
+                    repository_id=command.run.repository_id,
+                    scope=command.run.scope,
+                    command=command.run.command,
+                    scenario=command.run.scenario,
+                    outcome=command.run.outcome,
+                    observed_at=command.run.observed_at,
+                    observer=command.run.observer,
+                    provenance=command.run.provenance,
                 ),
-                repository_id=command.run.repository_id,
-                scope=command.run.scope,
                 observations=command.run.observations,
-                command=command.run.command,
-                scenario=command.run.scenario,
-                outcome=command.run.outcome,
-                observed_at=command.run.observed_at,
-                observer=command.run.observer,
                 environment_limitations=command.run.environment_limitations,
-                provenance=command.run.provenance,
             )
             connection.execute(
                 "INSERT INTO verification_runs"
                 "(run_id, repository_id, canonical_json) VALUES(?,?,?)",
                 (
-                    run.run_id.value,
-                    run.repository_id,
+                    run.facts.run_id.value,
+                    run.facts.repository_id,
                     _json.dumps(m.to_canonical(run), sort_keys=True),
                 ),
             )
@@ -1188,13 +1190,13 @@ class LifecycleStore:
                 connection.execute(
                     "INSERT INTO verification_observations"
                     "(repository_id, run_id, observation_id) VALUES(?,?,?)",
-                    (run.repository_id, run.run_id.value, observation.value),
+                    (run.facts.repository_id, run.facts.run_id.value, observation.value),
                 )
             receipt = build_receipt(
                 command.identity,
                 digest,
                 now,
-                verification_run_id=run.run_id,
+                verification_run_id=run.facts.run_id,
                 replay_expires_at=now + self.retention.replay_retention,
             )
             self._write_receipt(connection, receipt)
@@ -1520,10 +1522,10 @@ class LifecycleStore:
             self._validate_challenge_in(connection, challenge)
             if connection.execute(
                 "SELECT 1 FROM challenges WHERE challenge_id=?",
-                (challenge.challenge_id.value,),
+                (challenge.facts.challenge_id.value,),
             ).fetchone():
                 raise RecordingValidationError(
-                    f"challenge already exists: {challenge.challenge_id.value}",
+                    f"challenge already exists: {challenge.facts.challenge_id.value}",
                     cause_kind=RejectionCauseKind.ALREADY_EXISTS,
                 )
             self._insert_challenge(connection, challenge)
@@ -1534,12 +1536,12 @@ class LifecycleStore:
         challenge: m.Challenge,
     ) -> None:
         understanding = self._get_understanding_in(
-            connection, challenge.understanding_id.value
+            connection, challenge.facts.understanding_id.value
         )
         version = self._get_version_in(
             connection,
-            challenge.understanding_id.value,
-            challenge.target_version.value,
+            challenge.facts.understanding_id.value,
+            challenge.facts.target_version.value,
         )
         for ref in challenge.target_conclusions:
             if ref not in version.conclusions:
@@ -1563,8 +1565,8 @@ class LifecycleStore:
             "(challenge_id, understanding_id, canonical_json)"
             " VALUES(?,?,?)",
             (
-                challenge.challenge_id.value,
-                challenge.understanding_id.value,
+                challenge.facts.challenge_id.value,
+                challenge.facts.understanding_id.value,
                 _json.dumps(m.to_canonical(challenge), sort_keys=True),
             ),
         )
@@ -1809,8 +1811,11 @@ class LifecycleStore:
             challenge = self._get_challenge_in(connection, effect.challenge_id.value)
             updated = _dataclasses.replace(
                 challenge,
-                challenge_revision=effect.new_revision,
-                state=effect.state,
+                facts=_dataclasses.replace(
+                    challenge.facts,
+                    challenge_revision=effect.new_revision,
+                    state=effect.state,
+                ),
                 resolution=effect.resolution,
                 dispositions=challenge.dispositions + (effect.disposition,),
             )
@@ -1818,7 +1823,7 @@ class LifecycleStore:
                 "UPDATE challenges SET canonical_json=? WHERE challenge_id=?",
                 (
                     _json.dumps(m.to_canonical(updated), sort_keys=True),
-                    updated.challenge_id.value,
+                    updated.facts.challenge_id.value,
                 ),
             )
 

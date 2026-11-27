@@ -35,23 +35,25 @@ class VerificationScope:
         _require_non_empty("VerificationScope.description", self.description)
 
 
-def _validate_run(
+def _validate_execution(
     *,
     repository_id: str,
-    observations: tuple[SourceObservationId, ...],
     command: str | None,
     scenario: str | None,
     observer: str,
     observed_at: _datetime.datetime,
 ) -> None:
     _require_non_empty("VerificationRun.repository_id", repository_id)
-    if not observations:
-        raise ValueError("a verification run requires source observations")
     if not command and not scenario:
         raise ValueError("a verification run requires a command or scenario")
     _require_non_empty("VerificationRun.observer", observer)
     if observed_at.tzinfo is None or observed_at.utcoffset() is None:
         raise ValueError("VerificationRun.observed_at must be aware")
+
+
+def _require_observations(observations: tuple[SourceObservationId, ...]) -> None:
+    if not observations:
+        raise ValueError("a verification run requires source observations")
 
 
 @_dataclass(frozen=True)
@@ -70,9 +72,33 @@ class ProposedVerificationRun:
     provenance: str = ""
 
     def __post_init__(self) -> None:
-        _validate_run(
+        _require_observations(self.observations)
+        _validate_execution(
             repository_id=self.repository_id,
-            observations=self.observations,
+            command=self.command,
+            scenario=self.scenario,
+            observer=self.observer,
+            observed_at=self.observed_at,
+        )
+
+
+@_dataclass(frozen=True)
+class VerificationRunFacts:
+    """Immutable fixed execution facts shared by the retained and public run."""
+
+    run_id: VerificationRunId
+    repository_id: str
+    scope: VerificationScope
+    command: str | None
+    scenario: str | None
+    outcome: VerificationOutcome
+    observed_at: _datetime.datetime
+    observer: str
+    provenance: str = ""
+
+    def __post_init__(self) -> None:
+        _validate_execution(
+            repository_id=self.repository_id,
             command=self.command,
             scenario=self.scenario,
             observer=self.observer,
@@ -82,26 +108,11 @@ class ProposedVerificationRun:
 
 @_dataclass(frozen=True)
 class VerificationRun:
-    """One immutable accepted execution, independent of semantic submission."""
+    """One complete immutable accepted execution."""
 
-    run_id: VerificationRunId
-    repository_id: str
-    scope: VerificationScope
+    facts: VerificationRunFacts
     observations: tuple[SourceObservationId, ...]
-    command: str | None
-    scenario: str | None
-    outcome: VerificationOutcome
-    observed_at: _datetime.datetime
-    observer: str
     environment_limitations: tuple[str, ...] = ()
-    provenance: str = ""
 
     def __post_init__(self) -> None:
-        _validate_run(
-            repository_id=self.repository_id,
-            observations=self.observations,
-            command=self.command,
-            scenario=self.scenario,
-            observer=self.observer,
-            observed_at=self.observed_at,
-        )
+        _require_observations(self.observations)

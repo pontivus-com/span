@@ -91,7 +91,9 @@ class UnderstandService:
             )
         try:
             verification_runs = tuple(
-                self._store.get_verification_run(run_id.value)
+                m.VerificationView.from_run(
+                    self._store.get_verification_run(run_id.value), None
+                )
                 for run_id in receipt.accepted_verification_run_ids
             )
         except (OSError,) + self._store.operational_errors:
@@ -152,20 +154,20 @@ class UnderstandService:
                 receipt.accepted_challenge_ids[0].value
             )
             opening = create_challenge(
-                challenge_id=retained.challenge_id,
-                understanding_id=retained.understanding_id,
-                target_version=retained.target_version,
+                challenge_id=retained.facts.challenge_id,
+                understanding_id=retained.facts.understanding_id,
+                target_version=retained.facts.target_version,
                 target_conclusions=retained.target_conclusions,
-                reason=retained.reason,
+                reason=retained.facts.reason,
                 evidence=retained.evidence,
-                provenance=retained.provenance,
-                now=retained.created_at,
+                provenance=retained.facts.provenance,
+                now=retained.facts.created_at,
             )
             version = self._store.get_version(
-                opening.understanding_id.value, opening.target_version.value
+                opening.facts.understanding_id.value, opening.facts.target_version.value
             )
             curations = self._store.get_curations(
-                opening.understanding_id.value, as_of_version=version.version
+                opening.facts.understanding_id.value, as_of_version=version.version
             )
             conclusions = self._audit_membership(
                 version, curations, selected=opening.target_conclusions
@@ -179,7 +181,7 @@ class UnderstandService:
         return m.Challenged(
             receipt_selector=selector,
             committed_at=receipt.committed_at,
-            challenge=opening,
+            challenge=m.challenge_view(opening),
             context=m.InvestigationContextRef(
                 repository_id=receipt.identity.repository_id,
                 context_id=receipt.identity.context_id,
@@ -230,9 +232,9 @@ class UnderstandService:
             gaps=version.gaps,
             conclusions=conclusions,
             challenges=tuple(
-                challenge
+                m.challenge_view(challenge)
                 for challenge in self._store.get_challenges(identity)
-                if challenge.target_version == version.version
+                if challenge.facts.target_version == version.version
             ),
             curations=curations,
         )

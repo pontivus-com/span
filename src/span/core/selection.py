@@ -98,9 +98,9 @@ def immediate_children(
 def verification_covers(
     run: m.VerificationRun, repository_id: str, scope: m.EvidenceScope
 ) -> bool:
-    if run.repository_id != repository_id:
+    if run.facts.repository_id != repository_id:
         return False
-    outer = run.scope.scope
+    outer = run.facts.scope.scope
     if any(ref.repository_id != repository_id for ref in outer.evidence_refs):
         return False
     if any(ref.repository_id != repository_id for ref in scope.evidence_refs):
@@ -113,7 +113,7 @@ def _verification_group(
 ) -> tuple[
     tuple[str, ...], tuple[tuple[str, ...], ...], str, str, str, tuple[str, ...]
 ]:
-    run = view.run
+    facts = view.facts
     refs = tuple(
         sorted(
             {
@@ -125,17 +125,17 @@ def _verification_group(
                     ref.revision_or_fingerprint or "",
                     ref.section_or_span or "",
                 )
-                for ref in run.scope.scope.evidence_refs
+                for ref in facts.scope.scope.evidence_refs
             }
         )
     )
     return (
-        tuple(sorted(set(run.scope.scope.paths))),
+        tuple(sorted(set(facts.scope.scope.paths))),
         refs,
-        run.scope.description,
-        run.command or "",
-        run.scenario or "",
-        tuple(item.strip() for item in run.environment_limitations),
+        facts.scope.description,
+        facts.command or "",
+        facts.scenario or "",
+        tuple(item.strip() for item in view.environment_limitations),
     )
 
 
@@ -154,15 +154,15 @@ def select_verification(
     primary: list[m.VerificationView] = []
     history: list[m.VerificationView] = []
     for key in sorted(groups):
-        ordered = sorted(groups[key], key=lambda item: item.run.run_id.value)
-        ordered.sort(key=lambda item: item.run.observed_at, reverse=True)
-        latest = ordered[0].run.observed_at
+        ordered = sorted(groups[key], key=lambda item: item.facts.run_id.value)
+        ordered.sort(key=lambda item: item.facts.observed_at, reverse=True)
+        latest = ordered[0].facts.observed_at
         current_times = {
             outcome: max(
                 (
-                    item.run.observed_at
+                    item.facts.observed_at
                     for item in ordered
-                    if item.run.outcome is outcome
+                    if item.facts.outcome is outcome
                     and isinstance(item.qualification, m.VerificationQualification)
                     and item.qualification.state is m.SupportState.CURRENT
                 ),
@@ -174,10 +174,10 @@ def select_verification(
             current = (
                 isinstance(item.qualification, m.VerificationQualification)
                 and item.qualification.state is m.SupportState.CURRENT
-                and item.run.observed_at == current_times[item.run.outcome]
+                and item.facts.observed_at == current_times[item.facts.outcome]
             )
             destination = (
-                primary if item.run.observed_at == latest or current else history
+                primary if item.facts.observed_at == latest or current else history
             )
             destination.append(item)
     return tuple(primary), tuple(history)

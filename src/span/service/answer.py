@@ -587,7 +587,7 @@ class AnswerService:
             ):
                 continue
             try:
-                detailed = self._support.evaluate_verification(run.run_id.value)
+                detailed = self._support.evaluate_verification(run.facts.run_id.value)
                 qualification: m.VerificationQualification | m.SupportUnavailable = (
                     self._support.qualify_verification(detailed)
                 )
@@ -595,7 +595,7 @@ class AnswerService:
                 qualification = m.SupportUnavailable(
                     "verification support evaluation is unavailable"
                 )
-            candidates.append(m.VerificationView(run=run, qualification=qualification))
+            candidates.append(m.VerificationView.from_run(run, qualification))
         selected, _history = selection.select_verification(tuple(candidates))
         return selected
 

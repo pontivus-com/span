@@ -17,6 +17,7 @@ import sqlite3 as _sqlite3
 import typing as _typing
 
 from span.core import model as m
+from span.shell.store_transition_schema15 import challenge_payload, verification_payload
 from span.shell.store_transition import (
     TARGET_SCHEMA,
     TransitionConfig,
@@ -602,11 +603,11 @@ def _import_challenges(
         " WHERE understandings.repository_id=?",
         (repository_id,),
     ).fetchall():
-        challenge = m.from_canonical(m.Challenge, _json.loads(row[1]))
+        challenge = m.from_canonical(m.Challenge, challenge_payload(_json.loads(row[1])))
         if (
             connection.execute(
                 "SELECT 1 FROM understandings WHERE understanding_id=?",
-                (challenge.understanding_id.value,),
+                (challenge.facts.understanding_id.value,),
             ).fetchone()
             is None
         ):
@@ -614,7 +615,7 @@ def _import_challenges(
                 records,
                 limitations,
                 "challenges",
-                challenge.challenge_id.value,
+                challenge.facts.challenge_id.value,
                 row[1],
                 "owning understanding is unresolved",
             )
@@ -622,14 +623,14 @@ def _import_challenges(
         connection.execute(
             "INSERT OR REPLACE INTO challenges"
             "(challenge_id, understanding_id, canonical_json) VALUES(?,?,?)",
-            (challenge.challenge_id.value, challenge.understanding_id.value, row[1]),
+            (challenge.facts.challenge_id.value, challenge.facts.understanding_id.value, row[1]),
         )
         _mapping(
             records,
             source_table="challenges",
-            source_id=challenge.challenge_id.value,
+            source_id=challenge.facts.challenge_id.value,
             target_table="challenges",
-            target_id=challenge.challenge_id.value,
+            target_id=challenge.facts.challenge_id.value,
             classification="preserved",
             source_payload=row[1],
             target_payload=row[1],
@@ -646,18 +647,18 @@ def _import_verifications(
         "SELECT run_id, canonical_json FROM verification_runs" " WHERE repository_id=?",
         (config.repository_id,),
     ).fetchall():
-        run = m.from_canonical(m.VerificationRun, _json.loads(row[1]))
+        run = m.from_canonical(m.VerificationRun, verification_payload(_json.loads(row[1])))
         connection.execute(
             "INSERT OR REPLACE INTO verification_runs"
             "(run_id, repository_id, canonical_json) VALUES(?,?,?)",
-            (run.run_id.value, run.repository_id, row[1]),
+            (run.facts.run_id.value, run.facts.repository_id, row[1]),
         )
         _mapping(
             records,
             source_table="verification_runs",
-            source_id=run.run_id.value,
+            source_id=run.facts.run_id.value,
             target_table="verification_runs",
-            target_id=run.run_id.value,
+            target_id=run.facts.run_id.value,
             classification="preserved",
             source_payload=row[1],
             target_payload=row[1],

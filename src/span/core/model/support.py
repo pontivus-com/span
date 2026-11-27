@@ -11,7 +11,7 @@ import enum as _enum
 import typing as _typing
 from dataclasses import dataclass as _dataclass
 
-from span.core.model.verification import VerificationRun
+from span.core.model.verification import VerificationRun, VerificationRunFacts
 from span.core.model.functional_pyramid import (
     FunctionalPyramidId,
     FunctionalRouteSupport,
@@ -316,6 +316,29 @@ class VerificationQualification:
     def __post_init__(self) -> None:
         if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
             raise ValueError("VerificationQualification.observed_at must be aware")
+
+
+@_dataclass(frozen=True)
+class VerificationView:
+    """Execution facts with independently deliverable collections and qualification."""
+
+    facts: VerificationRunFacts
+    observations: tuple[SourceObservationId, ...]
+    environment_limitations: tuple[str, ...]
+    qualification: VerificationQualification | SupportUnavailable | None
+
+    @classmethod
+    def from_run(
+        cls,
+        run: VerificationRun,
+        qualification: VerificationQualification | SupportUnavailable | None,
+    ) -> VerificationView:
+        return cls(
+            facts=run.facts,
+            observations=run.observations,
+            environment_limitations=run.environment_limitations,
+            qualification=qualification,
+        )
 
 
 def basis_evidence(bases: tuple[SupportBasis, ...]) -> tuple[EvidenceRef, ...]:

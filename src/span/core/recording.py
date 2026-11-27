@@ -54,7 +54,10 @@ from span.core.model.recording import (
 from span.core.model.understanding import (
     Challenge,
     ChallengeDispositionRecord,
+    ChallengeDispositionDecision,
+    ChallengeFacts,
     ChallengeResolution,
+    ChallengeResolutionFacts,
     ChallengeState,
     AcceptedRevisionEffect,
     CurationDisposition,
@@ -868,21 +871,22 @@ def _resolved_challenge_effect(
             conclusions.append(ref)
 
     resolution = ChallengeResolution(
-        reasoning=disposition.reasoning,
-        resulting_understanding_id=resulting_understanding.understanding_id,
-        resulting_version=resulting_understanding.version,
+        facts=ChallengeResolutionFacts(
+            reasoning=disposition.reasoning,
+            resulting_understanding_id=resulting_understanding.understanding_id,
+            resulting_version=resulting_understanding.version,
+        ),
         conclusions=tuple(conclusions),
         withdrawn=tuple(withdrawn),
         evidence=disposition.evidence,
     )
     record = ResolvedChallengeRecord(
-        challenge_revision=new_revision,
+        decision=ChallengeDispositionDecision(new_revision, now),
         resolution=resolution,
-        recorded_at=now,
     )
     return ChallengeEffect(
-        challenge_id=challenge.challenge_id,
-        previous_revision=challenge.challenge_revision,
+        challenge_id=challenge.facts.challenge_id,
+        previous_revision=challenge.facts.challenge_revision,
         new_revision=new_revision,
         state=ChallengeState.RESOLVED,
         disposition=record,
@@ -908,7 +912,7 @@ def apply_challenge_dispositions(
     now: _datetime.datetime,
 ) -> tuple[ChallengeEffect, ...]:
     """Validate and apply only explicitly addressed challenge dispositions."""
-    by_id = {challenge.challenge_id: challenge for challenge in existing_challenges}
+    by_id = {challenge.facts.challenge_id: challenge for challenge in existing_challenges}
     by_revision = {
         (item.conclusion_id, item.revision.value): item for item in known_revisions
     }
@@ -923,18 +927,18 @@ def apply_challenge_dispositions(
             raise RecordingValidationError(
                 f"unknown challenge: {disposition.challenge_id.value}"
             )
-        if challenge.understanding_id != resulting_understanding_id:
+        if challenge.facts.understanding_id != resulting_understanding_id:
             raise RecordingValidationError(
                 "challenge targets a different understanding"
             )
-        if challenge.challenge_revision != disposition.expected_challenge_revision:
+        if challenge.facts.challenge_revision != disposition.expected_challenge_revision:
             raise RecordingConflict(
                 "challenge revision "
                 f"{disposition.expected_challenge_revision.value} does not match "
-                f"current {challenge.challenge_revision.value}",
-                current_version=challenge.challenge_revision.value,
+                f"current {challenge.facts.challenge_revision.value}",
+                current_version=challenge.facts.challenge_revision.value,
             )
-        new_revision = ChallengeRevision(challenge.challenge_revision.value + 1)
+        new_revision = ChallengeRevision(challenge.facts.challenge_revision.value + 1)
         record: ChallengeDispositionRecord
         if isinstance(disposition, UnresolvedChallengeDisposition):
             record = UnresolvedChallengeRecord(
@@ -945,8 +949,8 @@ def apply_challenge_dispositions(
             )
             effects.append(
                 ChallengeEffect(
-                    challenge_id=challenge.challenge_id,
-                    previous_revision=challenge.challenge_revision,
+                    challenge_id=challenge.facts.challenge_id,
+                    previous_revision=challenge.facts.challenge_revision,
                     new_revision=new_revision,
                     state=ChallengeState.UNRESOLVED,
                     disposition=record,
@@ -985,14 +989,16 @@ def create_challenge(
 ) -> Challenge:
     """Create one explicit dispute at its initial revision (1)."""
     return Challenge(
-        challenge_id=challenge_id,
-        understanding_id=understanding_id,
-        target_version=target_version,
+        facts=ChallengeFacts(
+            challenge_id=challenge_id,
+            understanding_id=understanding_id,
+            target_version=target_version,
+            reason=reason,
+            provenance=provenance,
+            challenge_revision=ChallengeRevision(1),
+            state=ChallengeState.OPEN,
+            created_at=now,
+        ),
         target_conclusions=target_conclusions,
-        reason=reason,
         evidence=tuple(evidence),
-        provenance=provenance,
-        challenge_revision=ChallengeRevision(1),
-        state=ChallengeState.OPEN,
-        created_at=now,
     )
