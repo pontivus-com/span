@@ -454,6 +454,21 @@ The longest function is 131 lines, below the existing 141-line ceiling.
 The temporary diagnostic workflow is removed before final full CI. Simulated
 host catalogue observations do not establish live authenticated delivery.
 
+**Preview executable-selection investigation (release programme follow-up).**
+S-FIELD-05 owns the reported custom binary-directory collision; S-FIELD-06
+and the managed-host preview gate consume its verified outcome. Reproduce in
+an isolated GitHub Actions fixture with an existing Span executable earlier
+on PATH and a distinct verified preview executable in the configured binary
+directory. Inspect the actual registration executable for each selected host
+and the launched build identity; do not infer either from the requested
+version or install receipt. If registration resolves the wrong executable,
+correct the existing registration/verified-install identity owner, not host
+launch behavior with a second resolver or fallback. Require failure-before
+and fix-after evidence, preserve ordinary install and custom-directory
+behavior, and record exact source/run evidence against FA-73/74. No defect
+cause or completion is asserted before reproduction; isolated native host
+preview remains separately required.
+
 Closeout review of `6d66e89ad222`: [CI 45935891140](https://github.com/pontivus-com/span/actions/runs/45935891140)
 passed 1,035 tests with 2 failed acceptance-matrix checks (FA-73–75 were
 unmapped and the ordinal assertion stopped at FA-72). It did not establish
@@ -632,7 +647,7 @@ claims of already passing tests.
 | API-22 | §4.1 admission pages | FD-29,54–57 | §§9.2,13 | PUB-04 / FA-28,72 |
 | API-23 | §4.1 directory/location | FD-62,74,88B–C | §§17,17.1,20.1 | PUB-06 / FA-09,10,14,16,72 |
 
-### Ordered implementation tasks (all OPEN)
+### Ordered implementation tasks and effective execution state
 
 **PUB-01 — Executable baseline and conformance preflight (OWNER-CONFIRMED COMPLETE).** Before production
 changes, generate the actual three tool request/result schemas at the pinned
@@ -720,9 +735,9 @@ including edit notices. It does not change retained support records or
 store versions. The existing wire registry is extended for the seven
 canonical semantic carriers (measured carrier count 226 → 233); the
 recorded-source equivalence test adds 25 test lines. The raw historical
-audit and receipt projection, full PUB-01 audit, schema transition, and
-all acceptance evidence remain open. This candidate is not permission
-to close PUB-01, PUB-02 or proceed to deployment.
+audit and receipt projection, task-specific recursive public boundary audit, schema transition, and
+all acceptance evidence remain open. This historical increment did not establish PUB-02 acceptance or permission
+to deploy. PUB-01 is owner-confirmed complete as recorded above.
 
 **PUB-02 exact retrieval owner reconciliation (OPEN).** CI 45956749986
 passed formatting and stopped at the typing ratchet: the older internal
@@ -1058,6 +1073,39 @@ supersedes earlier independent-task wording for this track.
 PUB-02–10 remain OPEN pending executable acceptance evidence. PUB-01 is
 owner-confirmed complete. The documented
 contracts are design targets; the source baseline still contains the defects.
+
+**Effective execution ledger (2026-11-27, source inspection at `04a9dfbd345c`).**
+Owner-confirmed baseline acceptance is not an assertion of additional test evidence.
+The following records implementation progress, not a new acceptance matrix or
+new task authority. The existing task gates and FA/invariant evidence remain binding.
+
+| Task | Observed source increment | Effective gate state |
+|---|---|---|
+| PUB-01 | Owner direction above supersedes the historical OPEN records | ACCEPTED (baseline only) |
+| PUB-02 | Shared support/audit projection and `UnderstandService` retrieval owner | STARTED; integrated cutover and audit equivalence unverified |
+| PUB-03 | Complete traversal and per-ref reason projection | STARTED; accepted effect persistence/replay unverified |
+| PUB-07A | `store_transition_schema15.py` repository/installation staging and preservation checks; schema 2 DDL | STARTED; existing runtime still 15/1; administrative transition, atomic activation and all-source verification open |
+| PUB-04 | Existing evidence-only cursor and per-family fitters remain | OPEN; replace through singular delivery owner |
+| PUB-07B | Accepted-effect model increments; `UnderstandingRecorded` still carries broad qualification/status | STARTED; exact transition outcomes and surface receipts open |
+| PUB-05 | `core/selection.py` and scoped status/verification selection | STARTED; history calculated but not yet delivered; dependent integration open |
+| PUB-06 | Compact governance carriers and `service/addressing.py` | STARTED; shared end-to-end address/transaction/delivery contract open |
+| PUB-08 | `UnderstandService.challenge_opening` retrieval increment | STARTED; exact acceptance, replay and pagination open |
+| PUB-09 | No integration acceptance recorded | OPEN |
+| PUB-10 | No exact-head green evidence established in this review | OPEN |
+
+STARTED means source work exists, not that a gate has passed. INTEGRATED means
+the complete owning implementation and required dependency cutover are in place;
+VERIFIED requires exact-candidate executable evidence; ACCEPTED requires the
+applicable task gate and review disposition. Independent pure/model increments
+may be developed before a predecessor is accepted, but cannot be integrated
+as a dependent runtime or accepted out of the declared sequence. Keep the
+existing runtime/store version coherent until the integrated cutover.
+All executable verification uses GitHub Actions on the canonical release
+branch, with the existing CI workflow as the full acceptance authority. Record
+actual run/job IDs, revision and outcomes in the existing evidence owners;
+no local execution is required for this campaign. Focused Actions diagnostics
+may isolate a failing owner without substituting for full CI. Do not advance
+an acceptance gate from a scheduled, running, inaccessible or failing run.
 
 **Review closure trace (F01–F09).** F01: G7/F9/F11 and L1/L9 reconciled
 (PUB-01/09); F02: P2 §4.1, P3 §2/FD-62, TD §17.1 (PUB-06/07);
