@@ -135,6 +135,53 @@ def challenge_payload(value: object) -> dict[str, object]:
     return payload
 
 
+def _unfactor(
+    value: object, tag: str, component: str, component_tag: str
+) -> dict[str, object]:
+    """Reconstruct source fields from staged facts, independently of factoring."""
+    payload = _object(value, tag)
+    facts = _object(payload.pop(component), component_tag)
+    del facts["$type"]
+    if set(payload) & set(facts):
+        raise TransitionError(f"{tag} staged facts overlap retained fields")
+    payload.update(facts)
+    return payload
+
+
+def _restore_verification(value: object) -> dict[str, object]:
+    return _unfactor(value, "VerificationRun", "facts", "VerificationRunFacts")
+
+
+def _restore_resolution(value: object) -> dict[str, object]:
+    return _unfactor(
+        value, "ChallengeResolution", "facts", "ChallengeResolutionFacts"
+    )
+
+
+def _restore_disposition(value: object) -> dict[str, object]:
+    if isinstance(value, dict) and value.get("$type") == "UnresolvedChallengeRecord":
+        return _object(value, "UnresolvedChallengeRecord")
+    payload = _unfactor(
+        value, "ResolvedChallengeRecord", "decision", "ChallengeDispositionDecision"
+    )
+    payload["resolution"] = _restore_resolution(payload["resolution"])
+    return payload
+
+
+def _restore_challenge(value: object) -> dict[str, object]:
+    payload = _unfactor(value, "Challenge", "facts", "ChallengeFacts")
+    if payload.get("resolution") is not None:
+        payload["resolution"] = _restore_resolution(payload["resolution"])
+    payload["dispositions"] = [
+        _restore_disposition(item) for item in _sequence(payload["dispositions"])
+    ]
+    return payload
+
+
+_HISTORICAL_REASON = "exact accepted detail was not retained by the historical schema"
+_HISTORICAL_RECOVERY = "retrieve the named historical records; do not repeat the write"
+
+
 def _historical(
     *,
     understanding_versions: tuple[m.UnderstandingVersionRef, ...] = (),
@@ -148,8 +195,8 @@ def _historical(
             verification_run_ids=verification_run_ids,
             challenge_ids=challenge_ids,
             dependent_effect_refs=dependent_effect_refs,
-            reason="exact accepted detail was not retained by the historical schema",
-            recovery="retrieve the named historical records; do not repeat the write",
+            reason=_HISTORICAL_REASON,
+            recovery=_HISTORICAL_RECOVERY,
         )
     )
 
@@ -226,6 +273,76 @@ def installation_dependency_payload(value: object) -> object:
     if refs:
         return _historical(dependent_effect_refs=refs)
     return {"$type": "AcceptedDependencyEffects", "effects": []}
+
+
+def _historical_detail(value: object) -> m.HistoricalAcceptanceDetailUnavailable:
+    detail = m.from_canonical(m.HistoricalAcceptanceDetailUnavailable, value)
+    if (
+        detail.reason != _HISTORICAL_REASON
+        or detail.recovery != _HISTORICAL_RECOVERY
+    ):
+        raise TransitionError("historical acceptance recovery changed")
+    return detail
+
+
+def _restore_receipt(value: object) -> dict[str, object]:
+    payload = _object(value, "RecordReceipt")
+    key = _object(payload.pop("key"), "RecordingKey")
+    context = _object(payload.pop("context"), "InvestigationContextRef")
+    origin = payload.pop("original_addressing_repository_id")
+    if (
+        origin != key["repository_id"]
+        or origin != context["repository_id"]
+        or set(key) != {"$type", "repository_id", "request_id"}
+        or set(context) != {"$type", "repository_id", "context_id"}
+    ):
+        raise TransitionError("historical receipt ownership changed")
+    effect = payload.pop("accepted_effect")
+    understanding_ids: tuple[m.UnderstandingId, ...] = ()
+    versions: tuple[m.UnderstandingVersionNumber, ...] = ()
+    challenges: tuple[m.ChallengeId, ...] = ()
+    dependents: tuple[m.ConclusionRevisionRef, ...] = ()
+    if isinstance(effect, dict) and effect.get("$type") == "AcceptedVerificationEffect":
+        if set(effect) != {"$type", "run_id"}:
+            raise TransitionError("unexpected accepted verification detail")
+        runs = (m.from_canonical(m.VerificationRunId, effect["run_id"]),)
+    else:
+        historical = _historical_detail(effect)
+        understanding_ids = tuple(
+            item.understanding_id for item in historical.understanding_versions
+        )
+        versions = tuple(item.version for item in historical.understanding_versions)
+        runs = historical.verification_run_ids
+        challenges = historical.challenge_ids
+        dependents = historical.dependent_effect_refs
+    payload.update(
+        identity={
+            "$type": "RecordingIdentity",
+            "repository_id": key["repository_id"],
+            "request_id": key["request_id"],
+            "context_id": context["context_id"],
+        },
+        accepted_understanding_ids=m.to_canonical(understanding_ids),
+        accepted_understanding_versions=m.to_canonical(versions),
+        accepted_verification_run_ids=m.to_canonical(runs),
+        accepted_challenge_ids=m.to_canonical(challenges),
+        dependent_effects=m.to_canonical(dependents),
+    )
+    return payload
+
+
+def _restore_installation_dependencies(value: object) -> object:
+    if value == {"$type": "AcceptedDependencyEffects", "effects": []}:
+        return []
+    detail = _historical_detail(value)
+    if (
+        detail.understanding_versions
+        or detail.verification_run_ids
+        or detail.challenge_ids
+        or not detail.dependent_effect_refs
+    ):
+        raise TransitionError("historical participation acceptance changed")
+    return m.to_canonical(detail.dependent_effect_refs)
 
 
 def _canonical_text(value: object) -> str:
@@ -325,12 +442,18 @@ def _verify_table(
         if table == "meta" and old[columns.index("key")] == "schema_version":
             expected[columns.index("value")] = version
         if transform is not None:
-            column, convert = transform
+            column, restore = transform
             position = columns.index(column)
-            expected[position] = _canonical_text(
-                convert(_json.loads(str(expected[position])))
+            actual = list(new)
+            actual[position] = _canonical_text(
+                restore(_json.loads(str(actual[position])))
             )
-        if tuple(expected) != tuple(new):
+            expected[position] = _canonical_text(
+                _json.loads(str(expected[position]))
+            )
+        else:
+            actual = list(new)
+        if expected != actual:
             raise TransitionError(f"migration changed retained cells in {table}")
 
 
@@ -370,9 +493,9 @@ def verify_schema15_staging(paths: TransitionPaths) -> None:
         paths,
         "16",
         {
-            "verification_runs": ("canonical_json", verification_payload),
-            "challenges": ("canonical_json", challenge_payload),
-            "record_receipts": ("canonical_json", receipt_payload),
+            "verification_runs": ("canonical_json", _restore_verification),
+            "challenges": ("canonical_json", _restore_challenge),
+            "record_receipts": ("canonical_json", _restore_receipt),
         },
         frozenset(),
     )
@@ -385,7 +508,7 @@ def verify_installation_schema1_staging(paths: TransitionPaths) -> None:
         {
             "functional_pyramid_receipts": (
                 "dependent_effect_refs_json",
-                installation_dependency_payload,
+                _restore_installation_dependencies,
             )
         },
         frozenset({"delivery_selections", "delivery_cursors", "addressed_requests"}),

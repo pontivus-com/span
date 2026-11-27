@@ -1939,6 +1939,104 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     receipt["context"]["context_id"]["value"], "ctx-schema14"
                 )
 
+    def test_fact_migration_reconstructs_verification_and_challenge_history(self):
+        from span.shell import store_transition_schema15 as migration
+
+        ref = m.ConclusionRevisionRef(
+            m.UnderstandingId("u"),
+            m.ConclusionId("c"),
+            m.ConclusionRevisionNumber(1),
+        )
+        evidence = m.EvidenceRef(
+            evidence_id=m.EvidenceId("ev"),
+            repository_id="demo",
+            source_kind=m.EvidenceSourceKind.SOURCE_CODE,
+            locator="src/a.py",
+            revision_or_fingerprint="original",
+        )
+        run = m.VerificationRun(
+            run_id=m.VerificationRunId("run"),
+            repository_id="demo",
+            scope=m.VerificationScope("exact run", m.EvidenceScope(paths=("src/a.py",))),
+            observations=(m.SourceObservationId("obs-2"), m.SourceObservationId("obs-1")),
+            command="pytest -q",
+            scenario="regression",
+            outcome=m.VerificationOutcome.FAIL,
+            observed_at=NOW,
+            observer="reviewer",
+            environment_limitations=("first limit", "second limit"),
+            provenance="run provenance",
+        )
+        resolution = m.ChallengeResolution(
+            reasoning="exact resolution",
+            resulting_understanding_id=ref.understanding_id,
+            resulting_version=m.UnderstandingVersionNumber(2),
+            conclusions=(ref,),
+            evidence=(evidence,),
+        )
+        challenge = m.Challenge(
+            challenge_id=m.ChallengeId("challenge"),
+            understanding_id=ref.understanding_id,
+            target_version=m.UnderstandingVersionNumber(1),
+            target_conclusions=(ref,),
+            reason="disputed statement",
+            evidence=(evidence,),
+            provenance="challenge provenance",
+            challenge_revision=m.ChallengeRevision(3),
+            state=m.ChallengeState.RESOLVED,
+            created_at=NOW,
+            resolution=resolution,
+            dispositions=(
+                m.UnresolvedChallengeRecord(
+                    challenge_revision=m.ChallengeRevision(2),
+                    remaining_question="unresolved question",
+                    basis="recorded basis",
+                    recorded_at=NOW,
+                ),
+                m.ResolvedChallengeRecord(
+                    challenge_revision=m.ChallengeRevision(3),
+                    resolution=resolution,
+                    recorded_at=NOW,
+                ),
+            ),
+        )
+        for value, convert, restore in (
+            (run, migration.verification_payload, migration._restore_verification),
+            (challenge, migration.challenge_payload, migration._restore_challenge),
+        ):
+            with self.subTest(carrier=type(value).__name__):
+                source = m.to_canonical(value)
+                self.assertEqual(restore(convert(source)), source)
+
+    def test_staging_rejects_repeatable_conversion_loss(self):
+        from span.shell import store_transition_schema15 as migration
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            paths = st.TransitionPaths(base / "data", "demo")
+            paths.transition_dir.mkdir(parents=True)
+            _schema14_store(paths.archive, base / "demo")
+            with sqlite3.connect(paths.archive) as connection:
+                connection.execute(
+                    "UPDATE meta SET value='15' WHERE key='schema_version'"
+                )
+            original = migration.receipt_payload
+
+            def lossy(value: object) -> dict[str, object]:
+                converted = original(value)
+                converted["content_digest"] = m.to_canonical(m.ContentDigest("lost"))
+                return converted
+
+            before = hashlib.sha256(paths.archive.read_bytes()).hexdigest()
+            with (
+                mock.patch.object(migration, "receipt_payload", side_effect=lossy),
+                self.assertRaisesRegex(st.TransitionError, "changed retained cells"),
+            ):
+                migration.stage_schema15(paths)
+            self.assertEqual(
+                hashlib.sha256(paths.archive.read_bytes()).hexdigest(), before
+            )
+
     def test_installation1_stage_keeps_original_refs_without_inventing_causes(self):
         from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
         from span.shell.sqlite_store.functional_pyramid import (
