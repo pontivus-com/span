@@ -97,7 +97,8 @@ class ReconsiderService:
             decision = receipt_decision(existing, key, record_content_digest(command))
             if decision.kind is m.ReceiptDecisionKind.CONFLICT:
                 raise RecordingConflict(
-                    decision.reason or "the request already committed different content",
+                    decision.reason
+                    or "the request already committed different content",
                     cause_kind=m.RejectionCauseKind.REPLAY_CONFLICT,
                 )
             return self._understand.challenge_opening(existing)
