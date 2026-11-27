@@ -150,7 +150,9 @@ def _verified_manifest(
         _conflict(f"manifest digest differs: {backup}")
     report = verify_backup(backup)
     if not report.ok:
-        _conflict(f"the selected backup could not be verified: {backup}", report.failures)
+        _conflict(
+            f"the selected backup could not be verified: {backup}", report.failures
+        )
     manifest = _load_manifest(backup)
     entries = _manifest_entries(manifest)
     if (
@@ -297,7 +299,9 @@ def prepare_store(
         started = governed._array(pending["staging_started"])
         if name not in started:
             if stage.exists():
-                _conflict("installation state created during setup cannot be verified", stage)
+                _conflict(
+                    "installation state created during setup cannot be verified", stage
+                )
             pending["staging_started"] = [*started, name]
             _save_pending(data_dir, pending)
         stage.parent.mkdir(parents=True, exist_ok=True)
@@ -459,7 +463,9 @@ def _database_preconditions(
                     and _database_digest(stage) != _empty_database_digest(name)
                 )
             ):
-                _conflict("installation state created during setup cannot be verified", stage)
+                _conflict(
+                    "installation state created during setup cannot be verified", stage
+                )
             created[name] = _identity(stage)
             pending["created_stores"] = created
         if before is None and connection is not None:
@@ -483,7 +489,10 @@ def _file_preconditions(
         before = None if old is None else old.sha256
         current = _file_digest(path)
         if current not in (before, planned[name]):
-            _conflict("protected governance or installation content has changed independently", path)
+            _conflict(
+                "protected governance or installation content has changed independently",
+                path,
+            )
         result[name] = current
     return result
 
@@ -536,7 +545,9 @@ def _restore_snapshot(
         observed = _snapshot_states(snapshot, entries, names, files)
         for name, state in current.items():
             if state not in (observed[name], baseline[name]):
-                _conflict("installation state changed during the interrupted recovery", name)
+                _conflict(
+                    "installation state changed during the interrupted recovery", name
+                )
         return snapshot
 
     snapshot_name = create_backup(
@@ -595,7 +606,9 @@ def _restore_database(
         ) as src:
             src.backup(connection)
     if logical_database_digest(connection) != expected:
-        _conflict("restored repository or installation state could not be verified", path)
+        _conflict(
+            "restored repository or installation state could not be verified", path
+        )
 
 
 def _restore_effects(
@@ -612,7 +625,9 @@ def _restore_effects(
     restored = []
     for name, path in sorted(files.items()):
         if _file_digest(path) != current[name]:
-            _conflict("protected installation content changed during verification", path)
+            _conflict(
+                "protected installation content changed during verification", path
+            )
         _restore_file(path, backup, entries[name])
         restored.append(str(path))
     for name in names:

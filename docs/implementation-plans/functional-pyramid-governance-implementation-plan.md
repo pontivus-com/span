@@ -1,6 +1,6 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 and operator-output boundary review are OPEN.
+**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 implemented in candidate; full CI, native host delivery and operator-output boundary acceptance remain open.
 **Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
@@ -390,7 +390,7 @@ administrative outputs; no false initialization requirement or false readiness.
 
 ### S-FIELD-05 — Verifiable installed runtime identity
 
-**Status:** OPEN. Authority FD-88A, acceptance 73; mechanism TD §20.
+**Status:** IMPLEMENTED IN CANDIDATE; VERIFICATION OPEN. Authority FD-88A, acceptance 73; mechanism TD §20.
 
 - Reuse the existing build generation and package-data owner in checkout and
   distribution paths; prove actual installed identity, not requested checkout
@@ -407,7 +407,7 @@ administrative outputs; no false initialization requirement or false readiness.
 
 ### S-FIELD-06 — Correct host reachability observation and reconnection guidance
 
-**Status:** OPEN. Authority FD-49/52/53/58, acceptance 74; TD §§15, 22.3.
+**Status:** IMPLEMENTED IN CANDIDATE; NATIVE DELIVERY EVIDENCE OPEN. Authority FD-49/52/53/58, acceptance 74; TD §§15, 22.3.
 
 - Correct the existing adapter observation of the intended installation's
   complete native L8 tool set. A partial or foreign catalogue, lost connection,
@@ -424,7 +424,7 @@ administrative outputs; no false initialization requirement or false readiness.
 
 ### S-FIELD-07 — Deterministic invocation validation and public administrative guidance
 
-**Status:** OPEN. Authority FD-27/88A/88B, acceptance 75; TD §20.
+**Status:** CANDIDATE IMPLEMENTED; OUTPUT AUDIT AND VERIFICATION OPEN. Authority FD-27/88A/88B, acceptance 75; TD §20.
 
 - Move compatibility validation into the existing argument-validation owner
   before state-dependent checks or effects. Cover every incompatible operation
@@ -444,6 +444,15 @@ administrative outputs; no false initialization requirement or false readiness.
   distinctive internal test values. Preserve existing FD-27/88B MCP schema
   and installed negative leak tests. No new carrier/DTO, aliases, semantic
   state, writer or public API. Run the complete existing CI unchanged.
+
+Follow-up diagnostic [45935760895](https://github.com/pontivus-com/span/actions/runs/45935760895)
+passed 157 focused tests, 14 subtests, 15 plugin tests and zero-error typing
+on the formatted candidate. Measured test lines increase from 35,091 to
+35,140 (+49 lines), recording the added and consolidated identity, invocation,
+verification and recovery regressions; no architectural limit is raised.
+The longest function is 131 lines, below the existing 141-line ceiling.
+The temporary diagnostic workflow is removed before final full CI. Simulated
+host catalogue observations do not establish live authenticated delivery.
 
 ### S-FIELD-04 — Exact-candidate regression and acceptance closeout
 

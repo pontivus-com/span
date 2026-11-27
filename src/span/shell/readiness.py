@@ -975,7 +975,10 @@ def _recorded_input_provenance(
         expected = item.get("digest")
         if not isinstance(locator, str) or not isinstance(expected, str):
             mismatches.append(
-                {"locator": repository_id, "reason": "governance input could not be verified"}
+                {
+                    "locator": repository_id,
+                    "reason": "governance input could not be verified",
+                }
             )
             continue
         public_locator = locator if role == "authority_binding" else repository_id
