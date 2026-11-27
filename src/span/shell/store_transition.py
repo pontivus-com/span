@@ -131,6 +131,7 @@ class TransitionState(_enum.Enum):
     ACTIVATED = "ACTIVATED"
     VERIFIED = "VERIFIED"
     ALREADY_CURRENT = "ALREADY_CURRENT"
+    ROLLING_BACK = "ROLLING_BACK"
     ROLLED_BACK = "ROLLED_BACK"
 
 
@@ -270,6 +271,8 @@ class TransitionManifest:
     updated_at: str
     build: str
     staged_sha256: str = ""
+    previous_sha256: str = ""
+    rollback_sha256: str = ""
     steps: tuple[TransitionStep, ...] = ()
     limitations: tuple[str, ...] = ()
 
@@ -577,6 +580,8 @@ def _manifest_payload(manifest: TransitionManifest) -> dict[str, object]:
         "archive_sha256": manifest.archive_sha256,
         "export_sha256": manifest.export_sha256,
         "staged_sha256": manifest.staged_sha256,
+        "previous_sha256": manifest.previous_sha256,
+        "rollback_sha256": manifest.rollback_sha256,
         "tables": [_table_payload(item) for item in manifest.tables],
         "created_at": manifest.created_at,
         "updated_at": manifest.updated_at,
@@ -613,6 +618,8 @@ def _manifest_from_payload(payload: dict[str, object]) -> TransitionManifest:
             archive_sha256=str(payload["archive_sha256"]),
             export_sha256=str(payload["export_sha256"]),
             staged_sha256=str(payload.get("staged_sha256", "")),
+            previous_sha256=str(payload.get("previous_sha256", "")),
+            rollback_sha256=str(payload.get("rollback_sha256", "")),
             tables=tuple(
                 TableInventory(
                     name=str(item["name"]),
@@ -751,16 +758,21 @@ def _archive(
     source: _sqlite3.Connection,
 ) -> str:
     paths.transition_dir.mkdir(parents=True, exist_ok=True)
-    partial = paths.archive.with_suffix(".db.partial")
+    return _backup_database(source, paths.archive)
+
+
+def _backup_database(source: _sqlite3.Connection, path: _pathlib.Path) -> str:
+    partial = path.with_suffix(".db.partial")
+    partial.unlink(missing_ok=True)
     destination = _sqlite3.connect(str(partial))
     try:
         source.backup(destination)
     finally:
         destination.close()
     _fsync_file(partial)
-    _os.replace(partial, paths.archive)
-    _fsync_dir(paths.transition_dir)
-    return _sha256_file(paths.archive)
+    _os.replace(partial, path)
+    _fsync_dir(path.parent)
+    return _sha256_file(path)
 
 
 def _verify_archive(paths: TransitionPaths, manifest: TransitionManifest) -> None:
@@ -1419,9 +1431,13 @@ def _activate(
         or _sha256_file(paths.staging) != manifest.staged_sha256
     ):
         raise TransitionError("verified staging store is missing or changed")
+    if not manifest.previous_sha256 or (
+        _sha256_file(paths.active) != manifest.previous_sha256
+    ):
+        raise TransitionError("quiescent source bytes changed before activation")
     effects: list[str] = []
     if paths.previous.exists() and (
-        _sha256_file(paths.previous) != manifest.archive_sha256
+        _sha256_file(paths.previous) != manifest.previous_sha256
     ):
         preserved = paths.transition_dir / (
             "previous-" + _utc(clock()).replace(":", "").replace("+", "_") + ".db"
@@ -1430,8 +1446,10 @@ def _activate(
         effects.append(f"preserved older previous store at {preserved}")
     if not paths.previous.exists():
         partial = paths.previous.with_suffix(".db.partial")
-        _shutil.copy2(paths.archive, partial)
+        _shutil.copy2(paths.active, partial)
         _fsync_file(partial)
+        if _sha256_file(partial) != manifest.previous_sha256:
+            raise TransitionError("quiescent source copy changed")
         _os.replace(partial, paths.previous)
     _fsync_dir(paths.transition_dir)
     effects.append(f"preserved verified old store at {paths.previous}")
@@ -1476,6 +1494,11 @@ def inspect_store_report(
     manifest = _read_manifest(paths)
     if not inspection.exists:
         state = TransitionState.MISSING
+    elif manifest is not None and manifest.state in {
+        TransitionState.ACTIVATED,
+        TransitionState.ROLLING_BACK,
+    }:
+        state = manifest.state
     elif inspection.schema_version == TARGET_SCHEMA:
         state = TransitionState.ALREADY_CURRENT
     elif manifest is not None:
@@ -1602,7 +1625,7 @@ def _resume_published(
             not manifest.staged_sha256
             or _sha256_file(paths.active) != manifest.staged_sha256
             or not paths.previous.is_file()
-            or _sha256_file(paths.previous) != manifest.archive_sha256
+            or _sha256_file(paths.previous) != manifest.previous_sha256
         ):
             raise TransitionError("published activation cannot be proven from manifest")
         _fsync_file(paths.active)
@@ -1662,6 +1685,8 @@ def _open_manifest(
             "an unfinished transition for this repository has different "
             "binding facts; inspect it before reusing or removing it"
         )
+    if existing.state in {TransitionState.ROLLING_BACK, TransitionState.ROLLED_BACK}:
+        raise TransitionError("transition is in rollback; preserve its artifacts")
     if existing.state is TransitionState.VERIFIED:
         raise TransitionError(
             "store transition is already activated; use verify or rollback"
@@ -1773,6 +1798,10 @@ def _activate_step(
             manifest, staged_sha256=_sha256_file(paths.staging)
         )
         _write_manifest(paths, manifest)
+    digest = _sha256_file(paths.active)
+    if manifest.previous_sha256 != digest:
+        manifest = _dataclasses.replace(manifest, previous_sha256=digest)
+        _write_manifest(paths, manifest)
     effects = _activate(paths, manifest, clock=config.clock)
     manifest = _advance(
         manifest,
@@ -1810,10 +1839,13 @@ def verify(config: TransitionConfig) -> TransitionReport:
         )
     if manifest.repository_id != config.repository_id:
         raise TransitionError("transition manifest belongs to another repository")
+    if manifest.state is TransitionState.ROLLING_BACK:
+        raise TransitionError("rollback is incomplete; resume rollback")
     if inspection.schema_version != TARGET_SCHEMA:
         raise TransitionError(
             f"active store is not schema {TARGET_SCHEMA}; the transition is not activated"
         )
+    _verify_archive(paths, manifest)
     effects = [
         f"active store opens as schema {TARGET_SCHEMA}",
         f"archive integrity: {inspection.integrity}",
@@ -1884,10 +1916,17 @@ def _rollback(config: TransitionConfig) -> TransitionReport:
         TransitionState.STAGED,
         TransitionState.ACTIVATED,
         TransitionState.VERIFIED,
+        TransitionState.ROLLING_BACK,
     }:
         raise TransitionError(
             f"transition state {manifest.state.value} cannot be rolled back"
         )
+    if (
+        manifest.repository_id != config.repository_id
+        or manifest.source_path != str(paths.active)
+        or manifest.expected_active_schema != TARGET_SCHEMA
+    ):
+        raise TransitionError("rollback manifest has different binding facts")
     effects: list[str] = []
     if manifest.state in {
         TransitionState.INSPECTED,
@@ -1918,31 +1957,9 @@ def _rollback(config: TransitionConfig) -> TransitionReport:
             manifest=manifest,
             limitations=manifest.limitations,
         )
-    if paths.active.exists():
-        with _exclusive_source(paths.active) as source:
-            if _read_schema_version(source) != TARGET_SCHEMA:
-                raise TransitionError(
-                    f"active store is not the schema-{TARGET_SCHEMA} store "
-                    "this manifest owns; refusing to move it"
-                )
-            preserved = paths.transition_dir / (
-                "new-format-"
-                + _utc(config.clock()).replace(":", "").replace("+", "_")
-                + ".db"
-            )
-            _os.replace(paths.active, preserved)
-            effects.append(f"preserved new-format writes at {preserved}")
-    if paths.previous.is_file():
-        if _read_schema_version_ro(paths.previous) not in (SUPPORTED_SOURCE_SCHEMAS):
-            raise TransitionError(
-                "preserved previous store is not a supported legacy schema; "
-                "leaving both stores in place"
-            )
-        _os.replace(paths.previous, paths.active)
-        _fsync_dir(paths.data_dir)
-        effects.append(f"restored verified legacy store at {paths.active}")
-    else:
-        effects.append("no previous store existed; active store left absent")
+    manifest, preserved = _restore_archived_store(config, paths, manifest)
+    effects.append(f"preserved new-format writes at {preserved}")
+    effects.append(f"restored verified legacy store at {paths.active}")
     manifest = _advance(
         manifest,
         TransitionState.ROLLED_BACK,
@@ -1960,6 +1977,102 @@ def _rollback(config: TransitionConfig) -> TransitionReport:
         manifest=manifest,
         limitations=manifest.limitations,
     )
+
+
+def _verify_previous(
+    paths: TransitionPaths, manifest: TransitionManifest
+) -> TransitionManifest:
+    if not paths.previous.is_file():
+        raise TransitionError("verified previous store is missing")
+    digest = _sha256_file(paths.previous)
+    if manifest.previous_sha256:
+        if digest != manifest.previous_sha256:
+            raise TransitionError("verified previous store changed")
+        return manifest
+    # Older administrative manifests retained the original file without a
+    # byte digest. Verify its complete logical contents against the archive.
+    previous = _connect_read_only(paths.previous)
+    archive = _connect_read_only(paths.archive)
+    try:
+        if _database_facts(previous) != _database_facts(archive):
+            raise TransitionError("previous store disagrees with verified archive")
+    finally:
+        previous.close()
+        archive.close()
+    return _dataclasses.replace(manifest, previous_sha256=digest)
+
+
+def _rollback_snapshot(
+    paths: TransitionPaths, manifest: TransitionManifest
+) -> _pathlib.Path:
+    digest = manifest.rollback_sha256
+    if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+        raise TransitionError("rollback snapshot digest is invalid")
+    return paths.transition_dir / f"new-format-{digest}.db"
+
+
+def _restore_archived_store(
+    config: TransitionConfig, paths: TransitionPaths, manifest: TransitionManifest
+) -> tuple[TransitionManifest, _pathlib.Path]:
+    _verify_archive(paths, manifest)
+    manifest = _verify_previous(paths, manifest)
+    if not paths.active.is_file():
+        raise TransitionError("active store is missing; refusing destructive rollback")
+    with _exclusive_source(paths.active) as source:
+        version = _read_schema_version(source)
+        if (
+            manifest.state is TransitionState.ROLLING_BACK
+            and version == manifest.source_schema_version
+        ):
+            preserved = _rollback_snapshot(paths, manifest)
+            if (
+                not preserved.is_file()
+                or _sha256_file(preserved) != manifest.rollback_sha256
+                or _sha256_file(paths.active) != manifest.previous_sha256
+            ):
+                raise TransitionError(
+                    "published rollback cannot be proven from manifest"
+                )
+            _fsync_file(paths.active)
+            _fsync_dir(paths.data_dir)
+            return manifest, preserved
+        if version != TARGET_SCHEMA:
+            raise TransitionError(
+                f"active store is not the schema-{TARGET_SCHEMA} store "
+                "this manifest owns; refusing to replace it"
+            )
+        # Always capture the present target, including writes since a failed
+        # rollback. Earlier immutable snapshots remain untouched.
+        temporary = paths.transition_dir / "rollback-target.db"
+        digest = _backup_database(source, temporary)
+        manifest = _dataclasses.replace(manifest, rollback_sha256=digest)
+        preserved = _rollback_snapshot(paths, manifest)
+        if preserved.exists():
+            if _sha256_file(preserved) != digest:
+                raise TransitionError("existing rollback snapshot is corrupt")
+            temporary.unlink()
+        else:
+            _os.replace(temporary, preserved)
+        _fsync_dir(paths.transition_dir)
+        manifest = _advance(
+            manifest,
+            TransitionState.ROLLING_BACK,
+            "preserve-target",
+            clock=config.clock,
+            detail=f"sha256 {digest}",
+        )
+        _write_manifest(paths, manifest)
+        _prepare_replacement(source, paths.active)
+        restore = paths.transition_dir / "rollback-source.db.partial"
+        _shutil.copy2(paths.previous, restore)
+        _fsync_file(restore)
+        if _sha256_file(restore) != manifest.previous_sha256:
+            raise TransitionError("rollback restoration copy changed")
+        _os.replace(restore, paths.active)
+        _fsync_file(paths.active)
+        _fsync_dir(paths.data_dir)
+        _fsync_dir(paths.transition_dir)
+        return manifest, preserved
 
 
 def _read_schema_version_ro(path: _pathlib.Path) -> int | None:

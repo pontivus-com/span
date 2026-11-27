@@ -1774,6 +1774,45 @@ class RecoveryTest(unittest.TestCase):
             finally:
                 connection.close()
 
+    def test_corrupt_archive_refuses_rollback_before_replacing_active(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data = self._fixture(tmp)
+            config = _config(root, data)
+            st.apply(config)
+            paths = st.TransitionPaths(data, "demo")
+            before = paths.active.read_bytes()
+            paths.archive.write_bytes(b"corrupt")
+            with self.assertRaisesRegex(st.TransitionError, "archive"):
+                st.rollback(config)
+            self.assertEqual(paths.active.read_bytes(), before)
+
+    def test_interrupted_published_rollback_finishes_without_replacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data = self._fixture(tmp)
+            config = _config(root, data)
+            st.apply(config)
+            paths = st.TransitionPaths(data, "demo")
+            write = st._write_manifest
+
+            def interrupt(paths, manifest):
+                if manifest.state is st.TransitionState.ROLLED_BACK:
+                    raise st.TransitionError("interrupted after restore")
+                write(paths, manifest)
+
+            with mock.patch.object(st, "_write_manifest", side_effect=interrupt):
+                with self.assertRaisesRegex(st.TransitionError, "interrupted"):
+                    st.rollback(config)
+            pending = st._read_manifest(paths)
+            self.assertEqual(pending.state, st.TransitionState.ROLLING_BACK)
+            self.assertEqual(st._read_schema_version_ro(paths.active), 9)
+            before = paths.active.read_bytes()
+            report = st.rollback(config)
+            self.assertEqual(report.state, st.TransitionState.ROLLED_BACK)
+            self.assertEqual(paths.active.read_bytes(), before)
+            self.assertEqual(
+                len(list(paths.transition_dir.glob("new-format-*.db"))), 1
+            )
+
     def test_corrupt_archive_fails_verify(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = self._fixture(tmp)
