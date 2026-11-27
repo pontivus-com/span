@@ -957,7 +957,7 @@ class SupportServiceTest(unittest.TestCase):
         )
         with self.assertRaises(RuntimeError):
             failing.evaluate_version("u-a")
-        self.assertEqual(self.store.get_receipt(receipt.identity), receipt)
+        self.assertEqual(self.store.get_receipt(receipt.key), receipt)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ from span.shell.sqlite_store.functional_pyramid import (
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 from span.service.evidence import EvidenceService
 from span.service.lifecycle import LifecycleService
+from span.service.effects import DependencyEffectService
 from span.service.support import SupportService
 
 REPO = "hooks-repo"
@@ -66,6 +67,12 @@ def _recorded(tmp: str) -> tuple[pathlib.Path, pathlib.Path]:
         authority=store,
         support=support,
         evidence=evidence_service,
+        effects=DependencyEffectService(
+            store_for_repository=lambda _repository: store,
+            support_for_repository=lambda _repository: support,
+            registered_repository_ids=lambda: (REPO,),
+            functional_route_impacts=lambda *_args: (),
+        ),
     )
     admitted = evidence_service.start(
         m.EvidenceStartRequest(

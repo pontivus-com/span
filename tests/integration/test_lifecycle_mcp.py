@@ -1265,10 +1265,10 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(store.close)
         challenge = store.get_challenge(outcome["challenge_id"])
         self.assertEqual(
-            challenge.challenge_revision.value,
+            challenge.facts.challenge_revision.value,
             outcome["challenge_revision"] + 1,
         )
-        self.assertEqual(challenge.state, m.ChallengeState.UNRESOLVED)
+        self.assertEqual(challenge.facts.state, m.ChallengeState.UNRESOLVED)
 
     async def test_resolved_challenge_reestablishes_with_new_external_support(
         self,
@@ -1367,9 +1367,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         )
         self.addCleanup(store.close)
         challenge = store.get_challenge(outcome["challenge_id"])
-        self.assertEqual(challenge.state, m.ChallengeState.RESOLVED)
+        self.assertEqual(challenge.facts.state, m.ChallengeState.RESOLVED)
         assert challenge.resolution is not None
-        self.assertEqual(challenge.resolution.resulting_version.value, 2)
+        self.assertEqual(challenge.resolution.facts.resulting_version.value, 2)
         self.assertEqual(len(challenge.resolution.conclusions), 1)
         self.assertEqual(
             challenge.resolution.conclusions[0].conclusion_id.value,
@@ -1451,7 +1451,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(verification_rejected["$type"], "Rejected")
-            self.assertIn("run.repository_id", verification_rejected["cause"])
+            self.assertIn("run.facts.repository_id", verification_rejected["cause"])
 
             created = await self._record_create(session, "structural-challenge-create")
             understanding_id = created["understanding_id"]["value"]
@@ -1563,7 +1563,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             1,
         )
         self.assertEqual(
-            store.get_challenge(outcome["challenge_id"]).state,
+            store.get_challenge(outcome["challenge_id"]).facts.state,
             m.ChallengeState.OPEN,
         )
 

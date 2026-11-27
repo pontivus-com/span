@@ -267,24 +267,26 @@ class CanonicalRoundTripTest(unittest.TestCase):
 class RecordedAuditProjectionTest(unittest.TestCase):
     def test_verification_keeps_all_recorded_facts_without_live_support(self):
         run = m.VerificationRun(
-            run_id=m.VerificationRunId("run-1"),
-            repository_id="repo-1",
-            scope=m.VerificationScope("exact execution", _scope()),
+            facts=m.VerificationRunFacts(
+                run_id=m.VerificationRunId("run-1"),
+                repository_id="repo-1",
+                scope=m.VerificationScope("exact execution", _scope()),
+                command="pytest -q",
+                scenario=None,
+                outcome=m.VerificationOutcome.FAIL,
+                observed_at=NOW,
+                observer="test operator",
+                provenance="recorded failure",
+            ),
             observations=(m.SourceObservationId("obs-1"),),
-            command="pytest -q",
-            scenario=None,
-            outcome=m.VerificationOutcome.FAIL,
-            observed_at=NOW,
-            observer="test operator",
             environment_limitations=("offline", "one host"),
-            provenance="recorded failure",
         )
         view = m.verification_view(run, None)
-        self.assertEqual(view.facts.run_id, run.run_id)
-        self.assertEqual(view.facts.scope, run.scope)
-        self.assertEqual(view.facts.outcome, run.outcome)
+        self.assertEqual(view.facts.run_id, run.facts.run_id)
+        self.assertEqual(view.facts.scope, run.facts.scope)
+        self.assertEqual(view.facts.outcome, run.facts.outcome)
         self.assertEqual(view.facts.observed_at, NOW)
-        self.assertEqual(view.facts.provenance, run.provenance)
+        self.assertEqual(view.facts.provenance, run.facts.provenance)
         self.assertEqual(view.observations, run.observations)
         self.assertEqual(view.environment_limitations, run.environment_limitations)
         self.assertIsNone(view.qualification)
@@ -309,26 +311,30 @@ class RecordedAuditProjectionTest(unittest.TestCase):
             now=NOW,
         )
         resolution = m.ChallengeResolution(
-            reasoning="resolved from exact evidence",
-            resulting_understanding_id=understanding.understanding_id,
-            resulting_version=m.UnderstandingVersionNumber(2),
+            facts=m.ChallengeResolutionFacts(
+                reasoning="resolved from exact evidence",
+                resulting_understanding_id=understanding.understanding_id,
+                resulting_version=m.UnderstandingVersionNumber(2),
+            ),
             conclusions=version.conclusions,
             evidence=(_evidence("docs/adr.md"),),
         )
         history = m.ResolvedChallengeRecord(
-            challenge_revision=m.ChallengeRevision(2),
+            decision=m.ChallengeDispositionDecision(m.ChallengeRevision(2), LATER),
             resolution=resolution,
-            recorded_at=LATER,
         )
         settled = dataclasses.replace(
             challenge,
-            challenge_revision=m.ChallengeRevision(2),
-            state=m.ChallengeState.RESOLVED,
+            facts=dataclasses.replace(
+                challenge.facts,
+                challenge_revision=m.ChallengeRevision(2),
+                state=m.ChallengeState.RESOLVED,
+            ),
             resolution=resolution,
             dispositions=(history,),
         )
         view = m.challenge_view(settled)
-        self.assertEqual(view.facts.challenge_revision, settled.challenge_revision)
+        self.assertEqual(view.facts.challenge_revision, settled.facts.challenge_revision)
         self.assertEqual(view.target_conclusions, challenge.target_conclusions)
         self.assertEqual(view.evidence, challenge.evidence)
         self.assertIsNone(view.resolution)
@@ -337,7 +343,9 @@ class RecordedAuditProjectionTest(unittest.TestCase):
         self.assertEqual(disposition.resolution.evidence, resolution.evidence)
         self.assertEqual(disposition.decision.recorded_at, LATER)
         inconsistent = dataclasses.replace(
-            settled, resolution=dataclasses.replace(resolution, reasoning="different")
+            settled, resolution=dataclasses.replace(
+                resolution, facts=dataclasses.replace(resolution.facts, reasoning="different")
+            )
         )
         separate = m.challenge_view(inconsistent)
         self.assertIsNotNone(separate.resolution)
@@ -379,22 +387,28 @@ class ReceiptDecisionTest(unittest.TestCase):
         command = _create_command()
         digest = record_content_digest(command)
         self.assertEqual(
-            receipt_decision(None, command.identity, digest).kind,
+            receipt_decision(None, recording_key(command.identity), digest).kind,
             m.ReceiptDecisionKind.NEW,
         )
         receipt = build_receipt(
             command.identity,
             digest,
             NOW,
-            understanding=(m.UnderstandingId("u-1"), m.UnderstandingVersionNumber(1)),
+            effect=m.AcceptedUnderstandingEffect(
+                m.UnderstandingId("u-1"),
+                m.UnderstandingVersionNumber(1),
+                create_understanding(m.UnderstandingId("u-1"), command, _context(), NOW).revision_effects,
+                (),
+                m.AcceptedDependencyEffects(()),
+            ),
         )
         self.assertEqual(
-            receipt_decision(receipt, command.identity, digest).kind,
+            receipt_decision(receipt, recording_key(command.identity), digest).kind,
             m.ReceiptDecisionKind.REPLAY,
         )
         self.assertEqual(
             receipt_decision(
-                receipt, command.identity, m.ContentDigest("sha256:other")
+                receipt, recording_key(command.identity), m.ContentDigest("sha256:other")
             ).kind,
             m.ReceiptDecisionKind.CONFLICT,
         )
@@ -405,10 +419,16 @@ class ReceiptDecisionTest(unittest.TestCase):
             command.identity,
             record_content_digest(command),
             NOW,
-            understanding=(m.UnderstandingId("u-1"), m.UnderstandingVersionNumber(1)),
+            effect=m.AcceptedUnderstandingEffect(
+                m.UnderstandingId("u-1"),
+                m.UnderstandingVersionNumber(1),
+                create_understanding(m.UnderstandingId("u-1"), command, _context(), NOW).revision_effects,
+                (),
+                m.AcceptedDependencyEffects(()),
+            ),
         )
         with self.assertRaises(RecordingConflict):
-            receipt_decision(receipt, _identity("sub-other"), receipt.content_digest)
+            receipt_decision(receipt, recording_key(_identity("sub-other")), receipt.content_digest)
 
 
 class AcceptedRevisionEffectTest(unittest.TestCase):
