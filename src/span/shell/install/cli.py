@@ -1033,7 +1033,10 @@ def main(argv=None):
 
     try:
         with administrative_ownership(env.data_dir):
-            if env.args.restore_backup is not None:
+            if env.args.restore_backup is not None or env.args.transition_phase in (
+                "apply",
+                "rollback",
+            ):
                 _execute(env)
             else:
                 with store_use_ownership(env.data_dir):

@@ -42,6 +42,7 @@ import typing as _typing
 from span.shell.sqlite_ownership import (
     StoreHeldError as _StoreHeldError,
     exclusive_ownership as _exclusive_ownership,
+    store_use_ownership as _store_use_ownership,
 )
 
 from span.core import model as m
@@ -268,6 +269,7 @@ class TransitionManifest:
     created_at: str
     updated_at: str
     build: str
+    staged_sha256: str = ""
     steps: tuple[TransitionStep, ...] = ()
     limitations: tuple[str, ...] = ()
 
@@ -326,6 +328,17 @@ def _canonical_row(values: _typing.Iterable[object]) -> str:
 def _connect_read_only(path: _pathlib.Path) -> _sqlite3.Connection:
     uri = f"file:{_pathlib.Path(path).as_posix()}?mode=ro"
     return _sqlite3.connect(uri, uri=True)
+
+
+def _catalog(
+    connection: _sqlite3.Connection,
+) -> frozenset[tuple[str, str, str, str | None]]:
+    return frozenset(
+        (str(kind), str(name), str(table), sql if sql is None else str(sql))
+        for kind, name, table, sql in connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master"
+        )
+    )
 
 
 def _table_names(connection: _sqlite3.Connection) -> tuple[str, ...]:
@@ -563,6 +576,7 @@ def _manifest_payload(manifest: TransitionManifest) -> dict[str, object]:
         "expected_active_schema": manifest.expected_active_schema,
         "archive_sha256": manifest.archive_sha256,
         "export_sha256": manifest.export_sha256,
+        "staged_sha256": manifest.staged_sha256,
         "tables": [_table_payload(item) for item in manifest.tables],
         "created_at": manifest.created_at,
         "updated_at": manifest.updated_at,
@@ -598,6 +612,7 @@ def _manifest_from_payload(payload: dict[str, object]) -> TransitionManifest:
             expected_active_schema=_as_int(payload["expected_active_schema"]),
             archive_sha256=str(payload["archive_sha256"]),
             export_sha256=str(payload["export_sha256"]),
+            staged_sha256=str(payload.get("staged_sha256", "")),
             tables=tuple(
                 TableInventory(
                     name=str(item["name"]),
@@ -678,6 +693,7 @@ def _advance(
     detail: str = "",
     archive_sha256: str | None = None,
     export_sha256: str | None = None,
+    staged_sha256: str | None = None,
     tables: tuple[TableInventory, ...] | None = None,
     limitations: tuple[str, ...] | None = None,
 ) -> TransitionManifest:
@@ -692,6 +708,9 @@ def _advance(
         ),
         export_sha256=(
             manifest.export_sha256 if export_sha256 is None else export_sha256
+        ),
+        staged_sha256=(
+            manifest.staged_sha256 if staged_sha256 is None else staged_sha256
         ),
         tables=manifest.tables if tables is None else tables,
         limitations=manifest.limitations if limitations is None else limitations,
@@ -742,6 +761,40 @@ def _archive(
     _os.replace(partial, paths.archive)
     _fsync_dir(paths.transition_dir)
     return _sha256_file(paths.archive)
+
+
+def _verify_archive(paths: TransitionPaths, manifest: TransitionManifest) -> None:
+    if (
+        not paths.archive.is_file()
+        or _sha256_file(paths.archive) != manifest.archive_sha256
+    ):
+        raise TransitionError("verified source archive is missing or changed")
+
+
+def _database_facts(connection: _sqlite3.Connection) -> tuple[
+    frozenset[tuple[str, str, str, str | None]], tuple[TableInventory, ...]
+]:
+    return (
+        _catalog(connection),
+        tuple(_scan_table(connection, table)[0] for table in _table_names(connection)),
+    )
+
+
+def _require_archived_source(
+    paths: TransitionPaths,
+    manifest: TransitionManifest,
+    source: _sqlite3.Connection,
+) -> None:
+    _verify_archive(paths, manifest)
+    archive = _connect_read_only(paths.archive)
+    try:
+        if _database_facts(source) != _database_facts(archive):
+            raise TransitionError(
+                "active source changed since archive; roll back the unfinished "
+                "transition before starting a new one"
+            )
+    finally:
+        archive.close()
 
 
 def _sha256_file(path: _pathlib.Path) -> str:
@@ -1356,25 +1409,62 @@ def _smoke(paths: TransitionPaths, config: TransitionConfig) -> None:
 
 def _activate(
     paths: TransitionPaths,
+    manifest: TransitionManifest,
     *,
     clock: _typing.Callable[[], _datetime.datetime],
 ) -> tuple[str, ...]:
+    _verify_archive(paths, manifest)
+    if not manifest.staged_sha256 or (
+        not paths.staging.is_file()
+        or _sha256_file(paths.staging) != manifest.staged_sha256
+    ):
+        raise TransitionError("verified staging store is missing or changed")
     effects: list[str] = []
-    if paths.active.exists():
-        if paths.previous.exists():
-            preserved = paths.transition_dir / (
-                "previous-" + _utc(clock()).replace(":", "").replace("+", "_") + ".db"
-            )
-            _os.replace(paths.previous, preserved)
-            effects.append(f"preserved older previous store at {preserved}")
-        _os.replace(paths.active, paths.previous)
-        _fsync_dir(paths.data_dir)
-        effects.append(f"preserved old active store at {paths.previous}")
+    if paths.previous.exists() and (
+        _sha256_file(paths.previous) != manifest.archive_sha256
+    ):
+        preserved = paths.transition_dir / (
+            "previous-" + _utc(clock()).replace(":", "").replace("+", "_") + ".db"
+        )
+        _os.replace(paths.previous, preserved)
+        effects.append(f"preserved older previous store at {preserved}")
+    if not paths.previous.exists():
+        partial = paths.previous.with_suffix(".db.partial")
+        _shutil.copy2(paths.archive, partial)
+        _fsync_file(partial)
+        _os.replace(partial, paths.previous)
+    _fsync_dir(paths.transition_dir)
+    effects.append(f"preserved verified old store at {paths.previous}")
+    # Publishing is one atomic replacement. An interrupted invocation never
+    # leaves the active database absent between two renames.
     _os.replace(paths.staging, paths.active)
     _fsync_file(paths.active)
     _fsync_dir(paths.data_dir)
+    _fsync_dir(paths.transition_dir)
     effects.append(f"activated schema-{TARGET_SCHEMA} store at {paths.active}")
     return tuple(effects)
+
+
+def _prepare_replacement(
+    source: _sqlite3.Connection, path: _pathlib.Path
+) -> None:
+    # No journal from the former inode may accompany the published database.
+    mode = str(source.execute("PRAGMA journal_mode=DELETE").fetchone()[0])
+    if mode.lower() != "delete" or any(
+        path.with_name(path.name + suffix).exists() for suffix in ("-wal", "-shm")
+    ):
+        raise TransitionError("source journal could not be closed for replacement")
+
+
+@_contextlib.contextmanager
+def _transition_ownership(data_dir: _pathlib.Path) -> _typing.Iterator[None]:
+    try:
+        with _store_use_ownership(data_dir, exclusive=True):
+            yield
+    except _StoreHeldError as exc:
+        raise TransitionError(
+            "installation is held by a live runtime; stop it before transitioning"
+        ) from exc
 
 
 # -- public phases --------------------------------------------------------
@@ -1441,7 +1531,12 @@ def _check_space(config: TransitionConfig, inspection: LegacyInspection) -> None
 
 
 def apply(config: TransitionConfig) -> TransitionReport:
-    """Archive, stage, verify and activate one store (the only mutating phase)."""
+    """Archive, stage, verify and activate under installation-wide ownership."""
+    with _transition_ownership(config.data_dir):
+        return _apply(config)
+
+
+def _apply(config: TransitionConfig) -> TransitionReport:
     if config.root is None:
         raise TransitionError(
             "apply requires an explicit --transition-root repository path"
@@ -1449,6 +1544,13 @@ def apply(config: TransitionConfig) -> TransitionReport:
     root = str(_pathlib.Path(config.root).resolve())
     paths = TransitionPaths(config.data_dir, config.repository_id)
     inspection = inspect_store(config)
+    pending = _read_manifest(paths)
+    if (
+        inspection.schema_version == TARGET_SCHEMA
+        and pending is not None
+        and pending.state is TransitionState.ACTIVATED
+    ):
+        return _resume_published(config, paths, pending, inspection, root)
     _require_transitionable(config, inspection, root)
     _check_space(config, inspection)
     effects: list[str] = []
@@ -1460,10 +1562,17 @@ def apply(config: TransitionConfig) -> TransitionReport:
         )
         effects.extend(step_effects)
         limitations.extend(step_limits)
-        for step in (_export_step, _stage_step, _activate_step):
+        _require_archived_source(paths, manifest, source)
+        for step in (_export_step, _stage_step):
             manifest, step_effects, step_limits = step(config, paths, manifest, root)
             effects.extend(step_effects)
             limitations.extend(step_limits)
+        _prepare_replacement(source, paths.active)
+        manifest, step_effects, step_limits = _activate_step(
+            config, paths, manifest, root
+        )
+        effects.extend(step_effects)
+        limitations.extend(step_limits)
     return TransitionReport(
         phase=TransitionPhase.APPLY,
         state=manifest.state,
@@ -1473,6 +1582,50 @@ def apply(config: TransitionConfig) -> TransitionReport:
         inspection=inspection,
         manifest=manifest,
         limitations=tuple(limitations),
+    )
+
+
+def _resume_published(
+    config: TransitionConfig,
+    paths: TransitionPaths,
+    manifest: TransitionManifest,
+    inspection: LegacyInspection,
+    root: str,
+) -> TransitionReport:
+    if (
+        manifest.repository_id != config.repository_id
+        or manifest.root != root
+        or manifest.expected_active_schema != TARGET_SCHEMA
+    ):
+        raise TransitionError("pending activation has different binding facts")
+    with _exclusive_source(paths.active):
+        _verify_archive(paths, manifest)
+        if (
+            not manifest.staged_sha256
+            or _sha256_file(paths.active) != manifest.staged_sha256
+            or not paths.previous.is_file()
+            or _sha256_file(paths.previous) != manifest.archive_sha256
+        ):
+            raise TransitionError("published activation cannot be proven from manifest")
+        _fsync_file(paths.active)
+        _fsync_dir(paths.data_dir)
+        manifest = _advance(
+            manifest,
+            TransitionState.VERIFIED,
+            "activate",
+            clock=config.clock,
+            detail="verified already published staging bytes",
+        )
+        _write_manifest(paths, manifest)
+    return TransitionReport(
+        phase=TransitionPhase.APPLY,
+        state=manifest.state,
+        repository_id=config.repository_id,
+        changed=True,
+        effects=("completed interrupted activation without publishing again",),
+        inspection=inspection,
+        manifest=manifest,
+        limitations=manifest.limitations,
     )
 
 
@@ -1511,10 +1664,7 @@ def _open_manifest(
             "an unfinished transition for this repository has different "
             "binding facts; inspect it before reusing or removing it"
         )
-    if existing.state in {
-        TransitionState.ACTIVATED,
-        TransitionState.VERIFIED,
-    }:
+    if existing.state is TransitionState.VERIFIED:
         raise TransitionError(
             "store transition is already activated; use verify or rollback"
         )
@@ -1601,6 +1751,7 @@ def _stage_step(
         "stage-and-verify",
         clock=config.clock,
         detail="staging verified before activation",
+        staged_sha256=_sha256_file(paths.staging),
         limitations=tuple(dict.fromkeys((*manifest.limitations, *binding_limitations))),
     )
     _write_manifest(paths, manifest)
@@ -1611,12 +1762,20 @@ def _activate_step(
     config: TransitionConfig,
     paths: TransitionPaths,
     manifest: TransitionManifest,
-    _root: str,
+    root: str,
 ) -> tuple[TransitionManifest, tuple[str, ...], tuple[str, ...]]:
     if manifest.state is not TransitionState.ACTIVATED:
         return manifest, (), ()
     _require_schema12_context_drain(paths.archive, config)
-    effects = _activate(paths, clock=config.clock)
+    if not manifest.staged_sha256:
+        _verify_staged(
+            paths, config, root, manifest.tables, manifest.source_schema_version
+        )
+        manifest = _dataclasses.replace(
+            manifest, staged_sha256=_sha256_file(paths.staging)
+        )
+        _write_manifest(paths, manifest)
+    effects = _activate(paths, manifest, clock=config.clock)
     manifest = _advance(
         manifest,
         TransitionState.VERIFIED,
@@ -1710,7 +1869,12 @@ def _verify_active_binding(paths: TransitionPaths, config: TransitionConfig) -> 
 
 
 def rollback(config: TransitionConfig) -> TransitionReport:
-    """Discard owned staging, or restore the old store after activation."""
+    """Discard staging or restore old state under installation ownership."""
+    with _transition_ownership(config.data_dir):
+        return _rollback(config)
+
+
+def _rollback(config: TransitionConfig) -> TransitionReport:
     paths = TransitionPaths(config.data_dir, config.repository_id)
     inspection = inspect_store(config)
     manifest = _read_manifest(paths)
@@ -1731,7 +1895,10 @@ def rollback(config: TransitionConfig) -> TransitionReport:
         TransitionState.INSPECTED,
         TransitionState.ARCHIVED,
         TransitionState.STAGED,
-    }:
+    } or (
+        manifest.state is TransitionState.ACTIVATED
+        and inspection.schema_version == manifest.source_schema_version
+    ):
         for owned in (paths.staging, paths.smoke):
             if owned.exists():
                 owned.unlink()

@@ -1662,6 +1662,70 @@ class RecoveryTest(unittest.TestCase):
                 archive_hash, hashlib.sha256(paths.archive.read_bytes()).hexdigest()
             )
 
+    def test_verified_staging_resumes_without_rebuilding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data = self._fixture(tmp)
+            paths = st.TransitionPaths(data, "demo")
+            config = _config(root, data)
+            with mock.patch.object(st, "_activate", side_effect=st.TransitionError):
+                with self.assertRaises(st.TransitionError):
+                    st.apply(config)
+            manifest = st._read_manifest(paths)
+            self.assertEqual(manifest.state, st.TransitionState.ACTIVATED)
+            digest = hashlib.sha256(paths.staging.read_bytes()).hexdigest()
+            self.assertEqual(manifest.staged_sha256, digest)
+            with mock.patch.object(st, "_stage", side_effect=AssertionError):
+                report = st.apply(config)
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            self.assertEqual(
+                hashlib.sha256(paths.active.read_bytes()).hexdigest(), digest
+            )
+
+    def test_interrupted_published_activation_finishes_without_replacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data = self._fixture(tmp)
+            paths = st.TransitionPaths(data, "demo")
+            config = _config(root, data)
+            write = st._write_manifest
+
+            def interrupt(paths, manifest):
+                if manifest.state is st.TransitionState.VERIFIED:
+                    raise st.TransitionError("interrupted after publication")
+                write(paths, manifest)
+
+            with mock.patch.object(st, "_write_manifest", side_effect=interrupt):
+                with self.assertRaisesRegex(st.TransitionError, "interrupted"):
+                    st.apply(config)
+            digest = hashlib.sha256(paths.active.read_bytes()).hexdigest()
+            with mock.patch.object(st, "_activate", side_effect=AssertionError):
+                report = st.apply(config)
+            self.assertEqual(report.state, st.TransitionState.VERIFIED)
+            self.assertEqual(
+                hashlib.sha256(paths.active.read_bytes()).hexdigest(), digest
+            )
+
+    def test_changed_source_after_archive_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, data = self._fixture(tmp)
+            paths = st.TransitionPaths(data, "demo")
+            config = _config(root, data)
+            with mock.patch.object(st, "_export", side_effect=st.TransitionError):
+                with self.assertRaises(st.TransitionError):
+                    st.apply(config)
+            with sqlite3.connect(paths.active) as connection:
+                connection.execute("INSERT INTO meta VALUES('later-write', 'kept')")
+            with self.assertRaisesRegex(st.TransitionError, "source changed"):
+                st.apply(config)
+            report = st.rollback(config)
+            self.assertEqual(report.state, st.TransitionState.ROLLED_BACK)
+            with sqlite3.connect(paths.active) as connection:
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT value FROM meta WHERE key='later-write'"
+                    ).fetchone()[0],
+                    "kept",
+                )
+
     def test_rollback_before_activation_discards_owned_staging_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             root, data = self._fixture(tmp)

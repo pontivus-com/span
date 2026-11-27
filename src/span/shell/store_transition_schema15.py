@@ -17,6 +17,7 @@ from span.shell.sqlite_store.functional_pyramid import SCHEMA2_DDL
 from span.shell.store_transition import (
     TransitionError,
     TransitionPaths,
+    _catalog,
     _columns,
     _connect_read_only,
     _integrity,
@@ -460,17 +461,6 @@ def _verify_table(
             actual = list(new)
         if expected != actual:
             raise TransitionError(f"migration changed retained cells in {table}")
-
-
-def _catalog(
-    connection: _sqlite3.Connection,
-) -> frozenset[tuple[str, str, str, str | None]]:
-    return frozenset(
-        (str(kind), str(name), str(table), sql if sql is None else str(sql))
-        for kind, name, table, sql in connection.execute(
-            "SELECT type, name, tbl_name, sql FROM sqlite_master"
-        )
-    )
 
 
 def _verify_copy(
