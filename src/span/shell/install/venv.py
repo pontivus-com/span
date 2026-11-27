@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from span.shell.build_identity import (
+from span.shell.install.build_identity import (
     decode_build_identity,
     installed_build_identity,
     read_build_identity,
@@ -128,7 +129,7 @@ def distribution_venv_in_sync(
         return False, 0, ()
     probe = (
         "import json; from importlib.metadata import version; "
-        "from span.shell.build_identity import installed_build_identity; "
+        "from span.shell.install.build_identity import installed_build_identity; "
         "print(json.dumps([version('span-mcp'), installed_build_identity()]))"
     )
     try:
@@ -200,10 +201,16 @@ def verify_installed(
         in_sync, _, _ = distribution_venv_in_sync(venv_python)
         if in_sync:
             return True, f"span-mcp {distribution_version()} build verified"
-        return False, "installed build differs or cannot be verified; reinstall the requested Span build"
+        return (
+            False,
+            "installed build differs or cannot be verified; reinstall the requested Span build",
+        )
     in_sync, checked, extra = source_venv_in_sync(span_repo, venv_python)
     if not in_sync:
-        return False, "installed build differs or cannot be verified; reinstall the requested Span build"
+        return (
+            False,
+            "installed build differs or cannot be verified; reinstall the requested Span build",
+        )
     if extra:
         return False, "obsolete runtime files remain; recreate the runtime environment"
     return True, f"{checked} files match source and build identity"

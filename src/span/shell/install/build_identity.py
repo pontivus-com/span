@@ -36,4 +36,4 @@ def read_build_identity(package_root: Path) -> dict[str, str] | None:
 
 
 def installed_build_identity() -> dict[str, str] | None:
-    return read_build_identity(Path(__file__).resolve().parents[1])
+    return read_build_identity(Path(__file__).resolve().parents[2])

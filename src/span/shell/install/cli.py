@@ -448,7 +448,7 @@ def _provision_runtime(
         env.targets,
         binding_files=args.authority_bindings_file,
     )
-    print(f"preflight facts: {json.dumps(preflight, sort_keys=True)}")
+    print("Repository configuration preflight complete.")
 
     venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
     indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)

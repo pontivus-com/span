@@ -582,7 +582,7 @@ class FunctionalPyramidProvenanceTest(unittest.TestCase):
             result = probe_governed_provenance(data, "repo", root)
             self.assertEqual(result["state"], "PROVENANCE_MISMATCH")
             self.assertIn(
-                "digest_mismatch",
+                "configured governance input has changed",
                 {item["reason"] for item in result["mismatches"]},
             )
 
@@ -603,7 +603,7 @@ class FunctionalPyramidProvenanceTest(unittest.TestCase):
             result = probe_governed_provenance(data, "repo", root)
             self.assertEqual(result["state"], "PROVENANCE_MISMATCH")
             self.assertIn(
-                "installed_binding_set_differs",
+                "installed authority differs from the supplied configuration",
                 {item["reason"] for item in result["mismatches"]},
             )
 

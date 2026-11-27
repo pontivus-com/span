@@ -113,7 +113,6 @@ _GOVERNED_B_FILES = {
 }
 
 
-
 _EXPECTED_TOOLS = {"ask", "record", "reconsider"}
 
 _NON_CURRENT_TOOLS = {
@@ -495,7 +494,9 @@ dispose();
         self.assertEqual(len(entries["repo-a"]["artifacts"]), 3)
         self.assertTrue(receipt["verify"]["acceptance_ok"])
         self.assertEqual(
-            receipt["verify"]["build_identity"]["source_revision"].removesuffix("-dirty"),
+            receipt["verify"]["build_identity"]["source_revision"].removesuffix(
+                "-dirty"
+            ),
             receipt["span_rev"],
         )
         self.assertEqual(

@@ -42,7 +42,7 @@ def _build_identity() -> dict[str, object]:
     import sys
 
     from span import __version__
-    from span.shell.build_identity import installed_build_identity
+    from span.shell.install.build_identity import installed_build_identity
     from span.shell.mcp import TOOL_SCHEMAS
 
     identity = installed_build_identity()
@@ -56,6 +56,27 @@ def _build_identity() -> dict[str, object]:
         ).hexdigest()[:16],
         "executable": sys.executable,
     }
+
+
+def _verified_identity(
+    identity: dict[str, object],
+    receipt: dict[str, object],
+    *,
+    pending_setup: bool = False,
+) -> bool:
+    if identity.get("revision_origin") != "packaged":
+        identity["action"] = "reinstall the requested Span build and verify again"
+        return False
+    prior = receipt.get("verify")
+    recorded = prior.get("build_identity") if isinstance(prior, dict) else None
+    if not pending_setup and isinstance(recorded, dict) and any(
+        recorded.get(key) != identity.get(key)
+        for key in ("package_version", "source_revision", "source_digest")
+    ):
+        identity["action"] = "reinstall the previously verified Span build or explicitly install the intended revision"
+        return False
+    identity["action"] = None
+    return True
 
 
 def _acceptance(
@@ -134,7 +155,8 @@ def project_final_receipt(
             receipt_context=receipt,
         )
     project_repository_guidance(repos, active, receipt)
-    report["acceptance_ok"] = _acceptance(
+    identity = typing.cast(dict[str, object], report["build_identity"])
+    report["acceptance_ok"] = _verified_identity(identity, receipt) and _acceptance(
         installation, active, repos, receipt, set(roots)
     )
     if strict and not report["acceptance_ok"]:
@@ -165,7 +187,8 @@ def main(argv=None):
         set(roots_by_repository),
         pending_setup=args.pending_setup,
     )
-    acceptance_ok = acceptance_ok and identity["revision_origin"] == "packaged"
+    identity_ok = _verified_identity(identity, receipt, pending_setup=args.pending_setup)
+    acceptance_ok = acceptance_ok and identity_ok
     print(
         json.dumps(
             {

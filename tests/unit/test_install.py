@@ -1397,6 +1397,28 @@ class ReceiptScopeTest(unittest.TestCase):
 
 
 class PlanningTest(unittest.TestCase):
+    def test_verifier_does_not_expose_failed_process_diagnostics(self):
+        import contextlib
+        import io
+        import subprocess
+        from unittest.mock import patch
+
+        from span.shell.install.verify import verify_installation
+
+        output = io.StringIO()
+        result = subprocess.CompletedProcess(
+            args=[], returncode=2, stdout="", stderr="PRIVATE_DIAGNOSTIC_SENTINEL"
+        )
+        with (
+            contextlib.redirect_stdout(output),
+            patch("span.shell.install.verify.subprocess.run", return_value=result),
+            self.assertRaises(SystemExit) as error,
+        ):
+            verify_installation("/venv/bin/python", "/data", (), strict=True)
+        self.assertNotIn("PRIVATE_DIAGNOSTIC_SENTINEL", str(error.exception))
+        self.assertNotIn("PRIVATE_DIAGNOSTIC_SENTINEL", output.getvalue())
+        self.assertIn("verify again", str(error.exception))
+
     def test_classification_conflicts_before_installation_state_access(self):
         import contextlib
         import io
@@ -1422,11 +1444,12 @@ class PlanningTest(unittest.TestCase):
                         ["--functional-pyramid-classification-file", "repo", "input"]
                         + flags
                     )
-                self.assertIn("--functional-pyramid-classification-file", error.getvalue())
+                self.assertIn(
+                    "--functional-pyramid-classification-file", error.getvalue()
+                )
                 self.assertIn(flags[0], error.getvalue())
                 receipt.assert_not_called()
                 ownership.assert_not_called()
-
 
     def test_pip_install_reinstalls_same_version_checkout(self):
         import tempfile

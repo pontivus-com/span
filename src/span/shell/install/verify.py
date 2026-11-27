@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 from span.shell.install.host_inspect import (
@@ -26,9 +27,6 @@ from span.shell.install.receipt import (
 )
 from span.shell.install.skills import (
     check_skills,
-)
-from span.shell.install.venv import (
-    _run,
 )
 
 
@@ -56,13 +54,35 @@ def verify_installation(
         cmd.append("--pending-setup")
     for repo in repos:
         cmd += ["--repo", str(repo)]
-    out = _run(cmd, dry_run=dry_run)
+    import logging
+
+    print("+ verify installed Span")
     if dry_run:
         return {"dry_run": True}
+    log = logging.getLogger(__name__)
     try:
-        return json.loads(out)
-    except (TypeError, ValueError) as exc:
-        raise SystemExit(f"verify step returned non-JSON output: {exc}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError:
+        log.debug("Runtime verification could not start", exc_info=True)
+        raise SystemExit(
+            "Span verification could not start; reinstall the requested build and verify again."
+        ) from None
+    try:
+        report = json.loads(result.stdout)
+    except ValueError:
+        log.debug("Invalid verification response: %s", result.stderr, exc_info=True)
+        raise SystemExit(
+            "Span verification could not complete; reinstall the requested build and verify again."
+        ) from None
+    if not isinstance(report, dict):
+        raise SystemExit("Span verification could not complete; verify the installation again.")
+    if result.returncode:
+        log.debug("Runtime verification failed: %s", result.stderr)
+        if strict and result.returncode == 1 and report.get("acceptance_ok") is False:
+            print(json.dumps(report, sort_keys=True))
+            raise SystemExit("Span verification found an unresolved installation problem. Follow the reported action.")
+        raise SystemExit("Span verification could not complete; verify the installation again.")
+    return report
 
 
 def _opencode_plugin_report(scope, state, canonical_dir) -> dict[str, object]:
@@ -217,7 +237,10 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     report = verify_installation(
         venv_python, data_dir, effective_repos, dry_run, strict=True
     )
-    print(f"runtime verification: span-mcp={resolved}")
+    print("runtime verification complete")
+    identity = report.get("build_identity")
+    if isinstance(identity, dict):
+        print(f"installed Span revision: {identity.get('source_revision', 'unknown')}")
     readiness = report.get("repos", []) if isinstance(report, dict) else []
     print(f"repository store_readiness: {readiness}")
     return {

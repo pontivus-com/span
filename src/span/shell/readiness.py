@@ -53,7 +53,6 @@ class StoreReadiness:
     def payload(self) -> dict[str, object]:
         return {
             "repository_id": self.repository_id,
-            "path": str(self.path),
             "exists": self.exists,
             "schema_version": self.schema_version,
             "expected_version": self.expected_version,
@@ -176,7 +175,6 @@ def probe_functional_pyramid_installation_store(
     if not path.is_file():
         return {
             "status": "absent",
-            "path": str(path),
             "schema_version": None,
             "ready": False,
             "action": "run the installer to initialize Functional Pyramid state",
@@ -186,7 +184,6 @@ def probe_functional_pyramid_installation_store(
     except _sqlite3.Error:
         return {
             "status": "unavailable",
-            "path": str(path),
             "schema_version": None,
             "ready": False,
             "action": "restore installation store access",
@@ -201,7 +198,6 @@ def probe_functional_pyramid_installation_store(
     except (_sqlite3.Error, TypeError, ValueError):
         return {
             "status": "invalid",
-            "path": str(path),
             "schema_version": None,
             "ready": False,
             "action": "restore or recreate the Functional Pyramid installation store",
@@ -215,9 +211,7 @@ def probe_functional_pyramid_installation_store(
     )
     return {
         "status": "ready" if ready else "incompatible",
-        "path": str(path),
         "schema_version": version,
-        "journal_mode": mode,
         "ready": ready,
         "action": (
             None
@@ -329,14 +323,13 @@ def _functional_pyramid_declaration_report(
             "action": None,
         }
 
-    bootstrap_ref, bootstrap = bootstrap_result
+    _, bootstrap = bootstrap_result
     source_reports: list[dict[str, object]] = []
     valid = True
     for request in bootstrap.declaration_sources:
         if request.ranges:
             source_reports.append(
                 {
-                    "locator": request.locator,
                     "status": "invalid",
                     "reason": "declaration source must be a whole document",
                 }
@@ -348,7 +341,6 @@ def _functional_pyramid_declaration_report(
         except FunctionalPyramidRepositoryUnavailable:
             source_reports.append(
                 {
-                    "locator": request.locator,
                     "status": "unavailable",
                     "reason": "repository cannot be read",
                 }
@@ -358,7 +350,6 @@ def _functional_pyramid_declaration_report(
         except FunctionalPyramidDeclarationInvalid:
             source_reports.append(
                 {
-                    "locator": request.locator,
                     "status": "invalid",
                     "reason": "declaration violates the Version-3 contract",
                 }
@@ -368,19 +359,16 @@ def _functional_pyramid_declaration_report(
         if isinstance(result, m.EvidenceSourceFailure):
             source_reports.append(
                 {
-                    "locator": request.locator,
                     "status": result.kind.value.lower(),
                     "reason": "the governing document cannot be read",
                 }
             )
             valid = False
             continue
-        declaration_ref, _, graph_findings = result
+        _, _, graph_findings = result
         source_reports.append(
             {
-                "locator": request.locator,
                 "status": "valid" if not graph_findings else "invalid",
-                "evidence_id": declaration_ref.evidence_id.value,
                 "findings": [
                     m.public_pyramid_finding(finding).reason.value
                     for finding in graph_findings
@@ -394,7 +382,6 @@ def _functional_pyramid_declaration_report(
         "status": "ready" if valid else "invalid",
         "configured": True,
         "valid": valid,
-        "bootstrap_locator": bootstrap_ref.locator,
         "sources": source_reports,
         "action": (
             None
@@ -474,17 +461,16 @@ def _active_declaration_report(
         try:
             result = store.read_declaration(repository_id, request)
         except FunctionalPyramidRepositoryUnavailable:
-            sources.append({"locator": locator, "status": "unavailable"})
+            sources.append({"status": "unavailable"})
             valid = False
             continue
         except FunctionalPyramidDeclarationInvalid:
-            sources.append({"locator": locator, "status": "invalid"})
+            sources.append({"status": "invalid"})
             valid = False
             continue
         if isinstance(result, m.EvidenceSourceFailure):
             sources.append(
                 {
-                    "locator": locator,
                     "status": result.kind.value.lower(),
                     "reason": "the governing document cannot be read",
                 }
@@ -494,7 +480,6 @@ def _active_declaration_report(
         _, _, findings = result
         sources.append(
             {
-                "locator": locator,
                 "status": "valid" if not findings else "invalid",
                 "findings": [
                     m.public_pyramid_finding(finding).reason.value
@@ -511,7 +496,9 @@ def _active_declaration_report(
         "valid": valid,
         "sources": sources,
         "action": (
-            None if valid else "correct the classification and rerun governed installation"
+            None
+            if valid
+            else "correct the classification and rerun governed installation"
         ),
     }
 
@@ -604,7 +591,6 @@ def _active_instance_report(
             {
                 "repository_id": repository_id,
                 "canonical_root": canonical_root,
-                "declaration_refs": [ref.locator for ref in member.declaration_refs],
             }
         )
         store = _declaration_store(repository_id, canonical_root)
@@ -684,9 +670,8 @@ def _active_instance_report(
         "status": status,
         "members": member_reports,
         "findings": [
-                    m.public_pyramid_finding(finding).reason.value
-                    for finding in structural
-                ],
+            m.public_pyramid_finding(finding).reason.value for finding in structural
+        ],
         "action": (
             "restore the registered ACTIVE member repository"
             if unavailable
@@ -827,10 +812,18 @@ def _initialization_provenance(
         try:
             actual = _hashlib.sha256(path.read_bytes()).hexdigest()
         except OSError:
-            mismatches.append({"locator": locator, "reason": "unreadable"})
+            _log.debug("Governed input unavailable: %s", locator, exc_info=True)
+            mismatches.append({
+                "locator": classification if locator == classification else repository_id,
+                "reason": "classification cannot be read" if locator == classification else "installed governance is unavailable",
+            })
             continue
         if actual != expected:
-            mismatches.append({"locator": locator, "reason": "digest_mismatch"})
+            _log.debug("Governed input differs: %s", locator)
+            mismatches.append({
+                "locator": classification if locator == classification else repository_id,
+                "reason": "classification has changed" if locator == classification else "installed governance differs from the accepted classification",
+            })
     refs = _active_member_declaration_refs(data_dir, repository_id)
     expected_refs = {
         key: value
@@ -844,11 +837,11 @@ def _initialization_provenance(
     )
     if actual_refs != expected_refs:
         mismatches.append(
-            {"locator": repository_id, "reason": "accepted_declaration_set_differs"}
+            {"locator": repository_id, "reason": "installed governance differs from the accepted classification"}
         )
     if installed_authority_bindings(data_dir, repository_id) != entry.get("bindings"):
         mismatches.append(
-            {"locator": repository_id, "reason": "installed_binding_set_differs"}
+            {"locator": repository_id, "reason": "installed authority differs from the supplied configuration"}
         )
     participation = _functional_pyramid_participation(data_dir, repository_id)
     if (
@@ -857,11 +850,11 @@ def _initialization_provenance(
         or participation.get("version") != version
     ):
         mismatches.append(
-            {"locator": repository_id, "reason": "accepted_participation_differs"}
+            {"locator": repository_id, "reason": "participation differs from the accepted installation"}
         )
     if str(_pathlib.Path(root).resolve()) != entry.get("root"):
         mismatches.append(
-            {"locator": repository_id, "reason": "repository_root_differs"}
+            {"locator": repository_id, "reason": "registered repository location differs"}
         )
     return {
         "state": "PROVENANCE_MISMATCH" if mismatches else "PROVENANCE_MATCH",
@@ -943,7 +936,7 @@ def probe_governed_provenance(
         role = item.get("role")
         expected = item.get("digest")
         if not isinstance(locator, str) or not isinstance(expected, str):
-            mismatches.append({"locator": locator, "reason": "unrecorded"})
+            mismatches.append({"locator": locator, "reason": "governance input could not be verified"})
             continue
         path = _pathlib.Path(locator)
         if not path.is_absolute():
@@ -955,10 +948,10 @@ def probe_governed_provenance(
         try:
             actual = _hashlib.sha256(path.read_bytes()).hexdigest()
         except OSError:
-            mismatches.append({"locator": locator, "reason": "unreadable"})
+            mismatches.append({"locator": locator, "reason": "configured governance input cannot be read"})
             continue
         if actual != expected:
-            mismatches.append({"locator": locator, "reason": "digest_mismatch"})
+            mismatches.append({"locator": locator, "reason": "configured governance input has changed"})
 
     active_refs = _active_member_declaration_refs(data_dir, repository_id)
     if active_refs is not None and recorded_declarations:
@@ -967,9 +960,7 @@ def probe_governed_provenance(
             mismatches.append(
                 {
                     "locator": repository_id,
-                    "reason": "accepted_declaration_set_differs",
-                    "accepted": sorted(active_locators),
-                    "reviewed": sorted(recorded_declarations),
+                    "reason": "installed governance differs from the accepted classification",
                 }
             )
 
@@ -977,7 +968,7 @@ def probe_governed_provenance(
         installed = installed_authority_bindings(data_dir, repository_id)
         if installed is None:
             mismatches.append(
-                {"locator": repository_id, "reason": "installed_bindings_unreadable"}
+                {"locator": repository_id, "reason": "installed authority is unavailable"}
             )
         else:
             installed_json = _json.dumps(
@@ -990,7 +981,7 @@ def probe_governed_provenance(
                     mismatches.append(
                         {
                             "locator": str(path),
-                            "reason": "reviewed_bindings_unreadable",
+                            "reason": "supplied authority configuration cannot be read",
                         }
                     )
                     continue
@@ -1001,7 +992,7 @@ def probe_governed_provenance(
                     mismatches.append(
                         {
                             "locator": str(path),
-                            "reason": "installed_binding_set_differs",
+                            "reason": "installed authority differs from the supplied configuration",
                         }
                     )
     return {
@@ -1238,9 +1229,8 @@ def probe_structural(
     """Report whether the provider cache directory exists (not its freshness)."""
     artifact = _pathlib.Path(data_dir) / "structural" / repository_id
     if artifact.is_dir():
-        return {"status": "present", "path": str(artifact)}
+        return {"status": "present"}
     return {
         "status": "absent",
-        "path": str(artifact),
         "action": "rerun installation to provision the structural indexer",
     }
