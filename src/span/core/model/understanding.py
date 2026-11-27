@@ -767,25 +767,6 @@ class AcceptedVerificationReceipt:
 
 
 @_dataclass(frozen=True)
-class RetrievedReceipt:
-    """Public immutable acceptance audit; replay internals stay private."""
-
-    receipt_selector: ReceiptRetrievalSelector
-    committed_at: _datetime.datetime
-    accepted_effect: AcceptedVerificationReceipt | HistoricalAcceptanceDetailUnavailable
-
-    def __post_init__(self) -> None:
-        _require_aware("RetrievedReceipt.committed_at", self.committed_at)
-
-
-RetrieveResult = _typing.Union[
-    RetrievedUnderstanding,
-    RetrievedContext,
-    RetrievedReceipt,
-]
-
-
-@_dataclass(frozen=True)
 class ReassessRequest:
     """Qualify one understanding version against present support."""
 

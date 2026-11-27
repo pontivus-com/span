@@ -28,7 +28,11 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidVersion,
     FunctionalPyramidView,
 )
-from span.core.model.recording import ChangeReason, RetrievedFunctionalPyramidReceipt
+from span.core.model.recording import (
+    ChangeReason,
+    RetrievedFunctionalPyramidReceipt,
+    RetrievedReceipt,
+)
 from span.core.model.investigation import (
     EvidenceAdmissionView,
     EvidenceDelivery,
@@ -49,7 +53,7 @@ from span.core.model.support import (
     VerificationView,
 )
 from span.core.model.surfaces import (
-    Surface,
+    SurfaceAction,
     SurfaceKey,
     SurfaceReference,
     SurfaceStatus,
@@ -61,7 +65,6 @@ from span.core.model.understanding import (
     PendingCuration,
     ReceiptRetrievalSelector,
     RecordedQuestionGap,
-    RetrievedReceipt,
     RetrievedUnderstanding,
 )
 from span.core.rejection import RejectionCauseKind
@@ -207,12 +210,11 @@ class EvidencePage:
 class SurfaceDeclared:
     """The accepted surface declaration or boundary update."""
 
-    action: str
-    surface: Surface
-
-    def __post_init__(self) -> None:
-        if self.action not in ("create", "update"):
-            raise ValueError("SurfaceDeclared.action must be create or update")
+    receipt_selector: ReceiptRetrievalSelector
+    committed_at: _datetime.datetime
+    action: SurfaceAction
+    surface: SurfaceKey
+    boundary_version: int
 
 
 @_dataclass(frozen=True)

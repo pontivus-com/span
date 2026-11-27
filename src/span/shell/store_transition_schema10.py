@@ -17,7 +17,11 @@ import sqlite3 as _sqlite3
 import typing as _typing
 
 from span.core import model as m
-from span.shell.store_transition_schema15 import challenge_payload, verification_payload
+from span.shell.store_transition_schema15 import (
+    challenge_payload,
+    receipt_payload,
+    verification_payload,
+)
 from span.shell.store_transition import (
     TARGET_SCHEMA,
     TransitionConfig,
@@ -750,8 +754,8 @@ def _import_receipts(
             "(repository_id, request_id, content_digest, canonical_json,"
             " replay_expires_at) VALUES(?,?,?,?,?)",
             (
-                receipt.identity.repository_id,
-                receipt.identity.request_id.value,
+                receipt.key.repository_id,
+                receipt.key.request_id.value,
                 receipt.content_digest.value,
                 receipt_canonical,
                 (
@@ -780,7 +784,9 @@ def _missing_receipt_effects(
     connection: _sqlite3.Connection, receipt: m.RecordReceipt
 ) -> tuple[str, ...]:
     missing: list[str] = []
-    for understanding_id in receipt.accepted_understanding_ids:
+    coordinates = m.historical_acceptance(receipt)
+    for version in coordinates.understanding_versions:
+        understanding_id = version.understanding_id
         if (
             connection.execute(
                 "SELECT 1 FROM understandings WHERE understanding_id=?",
@@ -789,7 +795,7 @@ def _missing_receipt_effects(
             is None
         ):
             missing.append(f"understanding {understanding_id.value}")
-    for run_id in receipt.accepted_verification_run_ids:
+    for run_id in coordinates.verification_run_ids:
         if (
             connection.execute(
                 "SELECT 1 FROM verification_runs WHERE run_id=?", (run_id.value,)
@@ -797,7 +803,7 @@ def _missing_receipt_effects(
             is None
         ):
             missing.append(f"verification run {run_id.value}")
-    for challenge_id in receipt.accepted_challenge_ids:
+    for challenge_id in coordinates.challenge_ids:
         if (
             connection.execute(
                 "SELECT 1 FROM challenges WHERE challenge_id=?",
@@ -837,37 +843,18 @@ def _receipt_from_schema10(
     request_id: str,
     context_id: str,
 ) -> m.RecordReceipt:
-    identity = m.RecordingIdentity(
-        repository_id=repository_id,
-        request_id=m.RequestId(request_id),
-        context_id=m.InvestigationContextId(context_id),
+    legacy = dict(payload)
+    legacy["$type"] = "RecordReceipt"
+    legacy["identity"] = m.to_canonical(
+        m.RecordingIdentity(
+            repository_id=repository_id,
+            request_id=m.RequestId(request_id),
+            context_id=m.InvestigationContextId(context_id),
+        )
     )
-    return m.RecordReceipt(
-        identity=identity,
-        content_digest=m.from_canonical(m.ContentDigest, payload["content_digest"]),
-        committed_at=_datetime.datetime.fromisoformat(str(payload["committed_at"])),
-        accepted_understanding_ids=tuple(
-            m.from_canonical(m.UnderstandingId, item)
-            for item in _items(payload, "accepted_understanding_ids")
-        ),
-        accepted_understanding_versions=tuple(
-            m.from_canonical(m.UnderstandingVersionNumber, item)
-            for item in _items(payload, "accepted_understanding_versions")
-        ),
-        accepted_verification_run_ids=tuple(
-            m.from_canonical(m.VerificationRunId, item)
-            for item in _items(payload, "accepted_verification_run_ids")
-        ),
-        accepted_challenge_ids=tuple(
-            m.from_canonical(m.ChallengeId, item)
-            for item in _items(payload, "accepted_challenge_ids")
-        ),
-        replay_expires_at=(
-            _datetime.datetime.fromisoformat(str(payload["replay_expires_at"]))
-            if payload.get("replay_expires_at")
-            else None
-        ),
-    )
+    legacy.setdefault("dependent_effects", [])
+    legacy.setdefault("replay_expires_at", None)
+    return m.from_canonical(m.RecordReceipt, receipt_payload(legacy))
 
 
 def verify_schema10_staging(paths: TransitionPaths, config: TransitionConfig) -> None:

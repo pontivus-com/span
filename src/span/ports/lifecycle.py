@@ -307,6 +307,18 @@ class LifecycleStorePort(_typing.Protocol):
         """Return every immutable boundary version of one surface."""
         ...
 
+    def record_surface(
+        self,
+        key: m.RecordingKey,
+        digest: m.ContentDigest,
+        action: m.SurfaceAction,
+        surface: m.Surface,
+        *,
+        expected_boundary_version: int | None = None,
+    ) -> m.RecordReceipt:
+        """Atomically accept a declared boundary and its receipt."""
+        ...
+
     def get_receipt(self, key: m.RecordingKey) -> m.RecordReceipt | None:
         """Return the retained receipt for one request key."""
         ...
@@ -317,6 +329,7 @@ class LifecycleStorePort(_typing.Protocol):
         content_digest: m.ContentDigest,
         understanding_id: m.UnderstandingId,
         expected_version: m.UnderstandingVersionNumber,
+        confirmed: tuple[m.ConclusionId, ...],
     ) -> m.RecordReceipt:
         """Persist acceptance for an unchanged, already-current version."""
         ...

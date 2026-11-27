@@ -28,6 +28,11 @@ from span.core.model.investigation import InvestigationContextRef
 from span.core.model.surfaces import SurfaceAction, SurfaceKey
 from span.core.model.understanding import (
     AcceptedRevisionEffect,
+    AcceptedChallengeDisposition,
+    AcceptedVerificationReceipt,
+    ReceiptRetrievalSelector,
+    RetrievedContext,
+    RetrievedUnderstanding,
     HistoricalAcceptanceDetailUnavailable,
     UnderstandingVersionRef,
 )
@@ -314,6 +319,42 @@ class RetrievedFunctionalPyramidReceipt:
             participation_effects=receipt.participation_effects,
             dependency_effects=receipt.dependency_effects,
         )
+
+
+@_dataclass(frozen=True)
+class AcceptedUnderstandingReceipt:
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+    revision_effects: tuple[AcceptedRevisionEffect, ...]
+    challenge_dispositions: tuple[AcceptedChallengeDisposition, ...]
+    dependency_effects: AcceptedDependencyEffects
+
+
+ReceiptAuditEffect = _typing.Union[
+    AcceptedUnderstandingReceipt,
+    AcceptedVerificationReceipt,
+    AcceptedSurfaceEffect,
+    AcceptedChallengeOpeningEffect,
+    HistoricalAcceptanceDetailUnavailable,
+]
+
+
+@_dataclass(frozen=True)
+class RetrievedReceipt:
+    receipt_selector: ReceiptRetrievalSelector
+    committed_at: _datetime.datetime
+    accepted_effect: ReceiptAuditEffect
+
+    def __post_init__(self) -> None:
+        if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
+            raise ValueError("receipt audit timestamp must be aware")
+
+
+RetrieveResult = _typing.Union[
+    RetrievedUnderstanding,
+    RetrievedContext,
+    RetrievedReceipt,
+]
 
 
 class ReceiptDecisionKind(_enum.Enum):
