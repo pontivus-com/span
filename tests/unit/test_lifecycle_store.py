@@ -700,9 +700,7 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.put_context(_context())
         receipt = self.store.record_verification(_verification_command())
         self.assertIsInstance(receipt.accepted_effect, m.AcceptedVerificationEffect)
-        run = self.store.get_verification_run(
-            receipt.accepted_effect.run_id.value
-        )
+        run = self.store.get_verification_run(receipt.accepted_effect.run_id.value)
         self.assertEqual(run.facts.outcome, m.VerificationOutcome.PASS)
 
     def _seed_understanding(self) -> None:
@@ -815,7 +813,9 @@ class LifecycleStoreTest(unittest.TestCase):
         for thread in threads:
             thread.join()
         self.assertEqual(sorted(outcomes), ["committed", "conflict"])
-        self.assertEqual(self.store.get_challenge("ch-1").facts.challenge_revision.value, 2)
+        self.assertEqual(
+            self.store.get_challenge("ch-1").facts.challenge_revision.value, 2
+        )
         self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
 
     def test_challenge_create_replay_and_conflict(self) -> None:
@@ -853,7 +853,9 @@ class LifecycleStoreTest(unittest.TestCase):
             _disposition_command(1, "sub-ch-1", (_unresolved("ch-1", 1),))
         )
         self.assertEqual(replay.committed_at, receipt.committed_at)
-        self.assertEqual(self.store.get_challenge("ch-1").facts.challenge_revision.value, 2)
+        self.assertEqual(
+            self.store.get_challenge("ch-1").facts.challenge_revision.value, 2
+        )
 
     def test_challenge_resolved_disposition(self) -> None:
         self._seed_understanding()
@@ -887,8 +889,12 @@ class LifecycleStoreTest(unittest.TestCase):
             self.store.get_challenge("ch-2").facts.state,
             m.ChallengeState.UNRESOLVED,
         )
-        self.assertEqual(self.store.get_challenge("ch-1").facts.challenge_revision.value, 2)
-        self.assertEqual(self.store.get_challenge("ch-2").facts.challenge_revision.value, 2)
+        self.assertEqual(
+            self.store.get_challenge("ch-1").facts.challenge_revision.value, 2
+        )
+        self.assertEqual(
+            self.store.get_challenge("ch-2").facts.challenge_revision.value, 2
+        )
 
     def test_multi_challenge_mismatch_rejects_all(self) -> None:
         self._seed_understanding()
@@ -902,8 +908,12 @@ class LifecycleStoreTest(unittest.TestCase):
                     (_unresolved("ch-1", 1), _unresolved("ch-2", 9)),
                 )
             )
-        self.assertEqual(self.store.get_challenge("ch-1").facts.challenge_revision.value, 1)
-        self.assertEqual(self.store.get_challenge("ch-2").facts.challenge_revision.value, 1)
+        self.assertEqual(
+            self.store.get_challenge("ch-1").facts.challenge_revision.value, 1
+        )
+        self.assertEqual(
+            self.store.get_challenge("ch-2").facts.challenge_revision.value, 1
+        )
         self.assertEqual(self.store.get_understanding("u-1").current_version.value, 1)
 
     def test_multiple_challenge_settlement_advances_each_once(self) -> None:
@@ -917,12 +927,20 @@ class LifecycleStoreTest(unittest.TestCase):
         )
         receipt = self.store.record_understanding(command)
         self.assertEqual(receipt.accepted_effect.version.value, 2)
-        self.assertEqual(self.store.get_challenge("ch-1").facts.challenge_revision.value, 2)
-        self.assertEqual(self.store.get_challenge("ch-2").facts.challenge_revision.value, 2)
+        self.assertEqual(
+            self.store.get_challenge("ch-1").facts.challenge_revision.value, 2
+        )
+        self.assertEqual(
+            self.store.get_challenge("ch-2").facts.challenge_revision.value, 2
+        )
         replay = self.store.record_understanding(command)
         self.assertEqual(replay.committed_at, receipt.committed_at)
-        self.assertEqual(self.store.get_challenge("ch-1").facts.challenge_revision.value, 2)
-        self.assertEqual(self.store.get_challenge("ch-2").facts.challenge_revision.value, 2)
+        self.assertEqual(
+            self.store.get_challenge("ch-1").facts.challenge_revision.value, 2
+        )
+        self.assertEqual(
+            self.store.get_challenge("ch-2").facts.challenge_revision.value, 2
+        )
 
     def test_duplicate_challenge_ids_reject(self) -> None:
         with self.assertRaises(ValueError):
@@ -984,7 +1002,9 @@ class LifecycleStoreTest(unittest.TestCase):
             self.store.get_context("ctx-1")
         self.assertEqual(self.store.get_understanding("u-1").current_version.value, 1)
         self.assertEqual(len(self.store.get_challenges("u-1")), 1)
-        self.assertEqual(self.store.get_verification_run(run_id.value).facts.run_id, run_id)
+        self.assertEqual(
+            self.store.get_verification_run(run_id.value).facts.run_id, run_id
+        )
 
     def test_restart_recovers_context_and_receipt_by_identity(self) -> None:
         path = pathlib.Path(self._tmp.name) / "restart.db"
@@ -1186,15 +1206,19 @@ class LifecycleStoreTest(unittest.TestCase):
         )
         self.assertEqual(
             receipt.accepted_effect.dependent_effects,
-            m.AcceptedDependencyEffects((m.AcceptedDependencyEffect(
-                m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/a.py"),
-                m.ConclusionRevisionRef(
-                    root.understanding_id,
-                    m.ConclusionId("c-3"),
-                    m.ConclusionRevisionNumber(1),
-                ),
-                (m.ChangeReason.INDIRECT,),
-            ),)),
+            m.AcceptedDependencyEffects(
+                (
+                    m.AcceptedDependencyEffect(
+                        m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/a.py"),
+                        m.ConclusionRevisionRef(
+                            root.understanding_id,
+                            m.ConclusionId("c-3"),
+                            m.ConclusionRevisionNumber(1),
+                        ),
+                        (m.ChangeReason.INDIRECT,),
+                    ),
+                )
+            ),
         )
 
     def test_support_dependency_index(self) -> None:

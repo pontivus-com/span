@@ -334,7 +334,9 @@ class RecordedAuditProjectionTest(unittest.TestCase):
             dispositions=(history,),
         )
         view = m.challenge_view(settled)
-        self.assertEqual(view.facts.challenge_revision, settled.facts.challenge_revision)
+        self.assertEqual(
+            view.facts.challenge_revision, settled.facts.challenge_revision
+        )
         self.assertEqual(view.target_conclusions, challenge.target_conclusions)
         self.assertEqual(view.evidence, challenge.evidence)
         self.assertIsNone(view.resolution)
@@ -343,9 +345,11 @@ class RecordedAuditProjectionTest(unittest.TestCase):
         self.assertEqual(disposition.resolution.evidence, resolution.evidence)
         self.assertEqual(disposition.decision.recorded_at, LATER)
         inconsistent = dataclasses.replace(
-            settled, resolution=dataclasses.replace(
-                resolution, facts=dataclasses.replace(resolution.facts, reasoning="different")
-            )
+            settled,
+            resolution=dataclasses.replace(
+                resolution,
+                facts=dataclasses.replace(resolution.facts, reasoning="different"),
+            ),
         )
         separate = m.challenge_view(inconsistent)
         self.assertIsNotNone(separate.resolution)
@@ -397,7 +401,9 @@ class ReceiptDecisionTest(unittest.TestCase):
             effect=m.AcceptedUnderstandingEffect(
                 m.UnderstandingId("u-1"),
                 m.UnderstandingVersionNumber(1),
-                create_understanding(m.UnderstandingId("u-1"), command, _context(), NOW).revision_effects,
+                create_understanding(
+                    m.UnderstandingId("u-1"), command, _context(), NOW
+                ).revision_effects,
                 (),
                 m.AcceptedDependencyEffects(()),
             ),
@@ -408,7 +414,9 @@ class ReceiptDecisionTest(unittest.TestCase):
         )
         self.assertEqual(
             receipt_decision(
-                receipt, recording_key(command.identity), m.ContentDigest("sha256:other")
+                receipt,
+                recording_key(command.identity),
+                m.ContentDigest("sha256:other"),
             ).kind,
             m.ReceiptDecisionKind.CONFLICT,
         )
@@ -422,13 +430,17 @@ class ReceiptDecisionTest(unittest.TestCase):
             effect=m.AcceptedUnderstandingEffect(
                 m.UnderstandingId("u-1"),
                 m.UnderstandingVersionNumber(1),
-                create_understanding(m.UnderstandingId("u-1"), command, _context(), NOW).revision_effects,
+                create_understanding(
+                    m.UnderstandingId("u-1"), command, _context(), NOW
+                ).revision_effects,
                 (),
                 m.AcceptedDependencyEffects(()),
             ),
         )
         with self.assertRaises(RecordingConflict):
-            receipt_decision(receipt, recording_key(_identity("sub-other")), receipt.content_digest)
+            receipt_decision(
+                receipt, recording_key(_identity("sub-other")), receipt.content_digest
+            )
 
 
 class AcceptedRevisionEffectTest(unittest.TestCase):

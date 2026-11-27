@@ -147,7 +147,10 @@ def _context_ref(
 
 
 def _receipt(
-    store: LifecycleStore, result: m.UnderstandingRecorded | m.VerificationRecorded | m.AcceptedDetailUnavailable
+    store: LifecycleStore,
+    result: (
+        m.UnderstandingRecorded | m.VerificationRecorded | m.AcceptedDetailUnavailable
+    ),
 ) -> m.RecordReceipt:
     selector = result.receipt_selector
     receipt = store.get_receipt(
@@ -932,21 +935,21 @@ class LifecycleServiceTest(unittest.TestCase):
             if ref.conclusion_id.value != target_id
         )
         self.assertEqual(
-            self._record_confirm(target_id, 2, "sub-confirm")
-            .accepted_effect.version
-            .value,
+            self._record_confirm(
+                target_id, 2, "sub-confirm"
+            ).accepted_effect.version.value,
             2,
         )
         self.assertEqual(
-            self._record_correct(target_id, 2, "sub-correct")
-            .accepted_effect.version
-            .value,
+            self._record_correct(
+                target_id, 2, "sub-correct"
+            ).accepted_effect.version.value,
             3,
         )
         self.assertEqual(
-            self._record_replace(target_id, 3, "sub-replace")
-            .accepted_effect.version
-            .value,
+            self._record_replace(
+                target_id, 3, "sub-replace"
+            ).accepted_effect.version.value,
             4,
         )
         version_four = self.store.get_version("u:sub-create", 4)
@@ -956,9 +959,9 @@ class LifecycleServiceTest(unittest.TestCase):
             if ref.conclusion_id.value not in {target_id, added_id}
         )
         self.assertEqual(
-            self._record_withdraw(replacement_id, 4, "sub-withdraw")
-            .accepted_effect.version
-            .value,
+            self._record_withdraw(
+                replacement_id, 4, "sub-withdraw"
+            ).accepted_effect.version.value,
             5,
         )
         version = self.store.get_version("u:sub-create", 5)
@@ -1625,20 +1628,26 @@ class LifecycleServiceTest(unittest.TestCase):
         receipt = self._record_correct(target_id, 1, "sub-correct-deps")
         self.assertEqual(
             receipt.accepted_effect.dependent_effects,
-            m.AcceptedDependencyEffects((m.AcceptedDependencyEffect(
-                m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/b.py"),
-                m.ConclusionRevisionRef(
-                    understanding_id=m.UnderstandingId("u:dependent"),
-                    conclusion_id=m.ConclusionId("c-1"),
-                    revision=m.ConclusionRevisionNumber(1),
-                ),
-                (m.ChangeReason.INDIRECT,),
-            ),)),
+            m.AcceptedDependencyEffects(
+                (
+                    m.AcceptedDependencyEffect(
+                        m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/b.py"),
+                        m.ConclusionRevisionRef(
+                            understanding_id=m.UnderstandingId("u:dependent"),
+                            conclusion_id=m.ConclusionId("c-1"),
+                            revision=m.ConclusionRevisionNumber(1),
+                        ),
+                        (m.ChangeReason.INDIRECT,),
+                    ),
+                )
+            ),
         )
 
         # A confirming or additive transition invalidates no premise.
         add = self._record_add(2, "sub-add-after-correct")
-        self.assertEqual(add.accepted_effect.dependent_effects, m.AcceptedDependencyEffects(()))
+        self.assertEqual(
+            add.accepted_effect.dependent_effects, m.AcceptedDependencyEffects(())
+        )
 
     # -- retention policy --------------------------------------------------
 
@@ -1738,7 +1747,9 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(result, m.UnderstandingRecorded)
         assert isinstance(result, m.UnderstandingRecorded)
-        self.assertEqual(result.revision_effects[0].qualification.state, m.SupportState.CURRENT)
+        self.assertEqual(
+            result.revision_effects[0].qualification.state, m.SupportState.CURRENT
+        )
 
     def test_record_create_accepts_a_question_context_without_reauthoring(
         self,
@@ -1755,7 +1766,9 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(result, m.UnderstandingRecorded)
         assert isinstance(result, m.UnderstandingRecorded)
-        self.assertEqual(result.revision_effects[0].qualification.state, m.SupportState.CURRENT)
+        self.assertEqual(
+            result.revision_effects[0].qualification.state, m.SupportState.CURRENT
+        )
 
     def test_context_bound_create_rejects_an_explicit_target(self) -> None:
         with self.assertRaises(Rejection) as raised:
@@ -1879,7 +1892,9 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertIsInstance(updated, m.SurfaceDeclared)
         assert isinstance(updated, m.SurfaceDeclared)
         self.assertEqual(updated.boundary_version, 2)
-        self.assertEqual(self.store.get_surface(updated.surface).boundary.paths, ("src", "tests"))
+        self.assertEqual(
+            self.store.get_surface(updated.surface).boundary.paths, ("src", "tests")
+        )
 
     def test_discovery_boundary_is_observed_inside_record(self) -> None:
         result = self.service.record(
@@ -3005,7 +3020,9 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         self.assertIsInstance(result, m.UnderstandingRecorded)
-        self.assertEqual(result.revision_effects[0].qualification.state, m.SupportState.CURRENT)
+        self.assertEqual(
+            result.revision_effects[0].qualification.state, m.SupportState.CURRENT
+        )
         content = self._latest_supported_content()
         self.assertEqual(content.assertion_nature, m.AssertionNature.NORMATIVE)
         self.assertEqual(
@@ -3088,7 +3105,9 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         self.assertIsInstance(result, m.UnderstandingRecorded)
-        self.assertEqual(result.revision_effects[0].qualification.state, m.SupportState.CURRENT)
+        self.assertEqual(
+            result.revision_effects[0].qualification.state, m.SupportState.CURRENT
+        )
         content = self._latest_supported_content("u:sub-governed-root")
         self.assertEqual(
             tuple(
@@ -3131,7 +3150,9 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         self.assertIsInstance(result, m.UnderstandingRecorded)
-        self.assertEqual(result.revision_effects[0].qualification.state, m.SupportState.UNVERIFIABLE)
+        self.assertEqual(
+            result.revision_effects[0].qualification.state, m.SupportState.UNVERIFIABLE
+        )
         self.assertEqual(len(self.store.list_understandings("repo-1")), 1)
         content = self._latest_supported_content("u:sub-unresolved")
         self.assertTrue(
@@ -3309,7 +3330,9 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(confirmed, m.UnderstandingRecorded)
         self.assertEqual(confirmed.version.value, 3)
-        self.assertEqual(confirmed.revision_effects[0].qualification.state, m.SupportState.CURRENT)
+        self.assertEqual(
+            confirmed.revision_effects[0].qualification.state, m.SupportState.CURRENT
+        )
         content = self._latest_supported_content(understanding_id)
         self.assertEqual(
             tuple(
