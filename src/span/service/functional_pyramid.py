@@ -822,7 +822,8 @@ class FunctionalPyramidService:
         self, selector: m.FunctionalPyramidReceiptSelector
     ) -> m.RetrievedFunctionalPyramidReceipt | None:
         """Retrieve one immutable installation-scoped Functional Pyramid receipt."""
-        return self._require_state().receipt(selector.request_id)
+        receipt = self._require_state().receipt(selector.request_id)
+        return None if receipt is None else m.RetrievedFunctionalPyramidReceipt.from_receipt(receipt)
 
     def record(
         self,
@@ -835,7 +836,7 @@ class FunctionalPyramidService:
         repository_id: str | None = None,
         changed_authority_refs: tuple[m.EvidenceRef, ...] = (),
         replay_only: bool = False,
-    ) -> m.FunctionalPyramidRecorded:
+    ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
         """Accept/replay one installation-scoped participation write (FD-85/FD-93).
 
         The administrative caller alone supplies old/new authority identities
@@ -1039,7 +1040,7 @@ class FunctionalPyramidService:
         pyramid_id: m.FunctionalPyramidId | None,
         expected_version: m.FunctionalPyramidVersion | None,
         changed_authority_refs: tuple[m.EvidenceRef, ...] = (),
-    ) -> m.FunctionalPyramidRecorded:
+    ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
         selector = m.FunctionalPyramidCandidateSelector(
             action=action,
             members=members,
@@ -1120,7 +1121,7 @@ class FunctionalPyramidService:
             version=version,
             members=validated_members,
         )
-        receipt = m.RetrievedFunctionalPyramidReceipt(
+        receipt = m.FunctionalPyramidReceipt(
             request_id=request_id,
             content_digest=digest,
             committed_at=now,
@@ -1129,7 +1130,7 @@ class FunctionalPyramidService:
             version=version,
             members=validated_members,
             participation_effects=effects,
-            dependent_effect_refs=refs,
+            dependency_effects=refs,
         )
         transaction.write_receipt(
             receipt,
@@ -1145,7 +1146,7 @@ class FunctionalPyramidService:
         digest: m.ContentDigest,
         pyramid_id: m.FunctionalPyramidId,
         expected_version: m.FunctionalPyramidVersion,
-    ) -> m.FunctionalPyramidRecorded:
+    ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
         current = transaction.pyramid_version(pyramid_id)
         if current != expected_version:
             observed = None if current is None else current.value
@@ -1176,7 +1177,7 @@ class FunctionalPyramidService:
         for member in old_members:
             transaction.set_excluded(member.repository_id, True)
         now = self._clock()
-        receipt = m.RetrievedFunctionalPyramidReceipt(
+        receipt = m.FunctionalPyramidReceipt(
             request_id=request_id,
             content_digest=digest,
             committed_at=now,
@@ -1185,7 +1186,7 @@ class FunctionalPyramidService:
             version=current,
             members=(),
             participation_effects=effects,
-            dependent_effect_refs=refs,
+            dependency_effects=refs,
         )
         transaction.write_receipt(
             receipt,
@@ -1199,7 +1200,7 @@ class FunctionalPyramidService:
         request_id: m.RequestId,
         digest: m.ContentDigest,
         repository_id: str,
-    ) -> m.FunctionalPyramidRecorded:
+    ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
         if repository_id not in self._registered():
             raise ValueError("cannot exclude an unregistered repository")
         state = self._require_state()
@@ -1232,7 +1233,7 @@ class FunctionalPyramidService:
                 else ()
             )
             now = self._clock()
-            receipt = m.RetrievedFunctionalPyramidReceipt(
+            receipt = m.FunctionalPyramidReceipt(
                 request_id=request_id,
                 content_digest=digest,
                 committed_at=now,
@@ -1241,7 +1242,7 @@ class FunctionalPyramidService:
                 version=None,
                 members=(),
                 participation_effects=effects,
-                dependent_effect_refs=(),
+                dependency_effects=m.AcceptedDependencyEffects(()),
             )
             transaction.write_receipt(
                 receipt,
@@ -1251,15 +1252,17 @@ class FunctionalPyramidService:
             return self._recorded(receipt, (), ())
 
     def _replay_record(
-        self, receipt: m.RetrievedFunctionalPyramidReceipt
-    ) -> m.FunctionalPyramidRecorded:
+        self, receipt: m.FunctionalPyramidReceipt
+    ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
+        if isinstance(receipt.dependency_effects, m.HistoricalAcceptanceDetailUnavailable):
+            return self._unavailable_receipt(receipt, receipt.dependency_effects)
         repository_ids = tuple(
             sorted(
                 {member.repository_id for member in receipt.members}
                 | {effect.repository_id for effect in receipt.participation_effects}
             )
         )
-        if receipt.dependent_effect_refs:
+        if receipt.dependency_effects.effects:
             repository_ids = tuple(
                 sorted(set(repository_ids) | set(self._registered()))
             )
@@ -1310,14 +1313,22 @@ class FunctionalPyramidService:
     def _project_receipt(
         self,
         transaction: FunctionalPyramidStateTransaction,
-        receipt: m.RetrievedFunctionalPyramidReceipt,
-    ) -> m.FunctionalPyramidRecorded:
-        if not receipt.dependent_effect_refs:
+        receipt: m.FunctionalPyramidReceipt,
+    ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
+        if isinstance(receipt.dependency_effects, m.HistoricalAcceptanceDetailUnavailable):
+            return self._unavailable_receipt(receipt, receipt.dependency_effects)
+        if not receipt.dependency_effects.effects:
             return self._recorded(receipt, (), ())
         surfaces, contexts = self._effect_service(
             transaction
-        ).retained_functional_pyramid_effects(receipt.dependent_effect_refs)
+        ).retained_functional_pyramid_effects(receipt.dependency_effects)
         return self._recorded(receipt, surfaces, contexts)
+
+    @staticmethod
+    def _unavailable_receipt(receipt: m.FunctionalPyramidReceipt, detail: m.HistoricalAcceptanceDetailUnavailable) -> m.AcceptedDetailUnavailable:
+        return m.AcceptedDetailUnavailable(
+            m.FunctionalPyramidReceiptSelector(receipt.request_id), receipt.committed_at, detail
+        )
 
     def _active_uses_version1(
         self, members: tuple[m.FunctionalPyramidMemberView, ...]
@@ -1415,7 +1426,7 @@ class FunctionalPyramidService:
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
-        tuple[m.ConclusionRevisionRef, ...],
+        m.AcceptedDependencyEffects,
     ]:
         old = {member.repository_id for member in old_members}
         new = {member.repository_id for member in new_members}
@@ -1480,10 +1491,10 @@ class FunctionalPyramidService:
 
     @staticmethod
     def _recorded(
-        receipt: m.RetrievedFunctionalPyramidReceipt,
+        receipt: m.FunctionalPyramidReceipt,
         dependent_effects: tuple[m.ChangedSurface, ...],
         contexts: tuple[m.InvestigationContextRef, ...],
-    ) -> m.FunctionalPyramidRecorded:
+    ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
         return m.FunctionalPyramidRecorded(
             receipt_selector=m.FunctionalPyramidReceiptSelector(receipt.request_id),
             committed_at=receipt.committed_at,

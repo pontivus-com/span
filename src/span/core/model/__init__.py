@@ -363,6 +363,8 @@ from span.core.model.answers import (  # noqa: F401
     AskResult,
     Changed,
     ChangedConclusion,
+    EffectDisposition,
+    EffectDispositionState,
     ChangedSurface,
     Challenged,
     ConclusionView,

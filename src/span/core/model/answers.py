@@ -296,13 +296,30 @@ class ChangedConclusion:
             raise ValueError("ChangedConclusion reasons must be distinct")
 
 
+class EffectDispositionState(_enum.Enum):
+    CURRENT = "CURRENT"
+    SUPERSEDED = "SUPERSEDED"
+    WITHDRAWN = "WITHDRAWN"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+@_dataclass(frozen=True)
+class EffectDisposition:
+    ref: ConclusionRevisionRef
+    reasons: tuple[ChangeReason, ...]
+    state: EffectDispositionState
+    reason: str
+    recovery: str | None = None
+    support: SupportQualification | None = None
+
+
 @_dataclass(frozen=True)
 class ChangedSurface:
     """One surface that must be re-examined, with every reason (FD-20)."""
 
     surface: SurfaceKey
     reasons: tuple[ChangeReason, ...]
-    conclusions: tuple[ChangedConclusion, ...] = ()
+    conclusions: tuple[ChangedConclusion | EffectDisposition, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.reasons:

@@ -154,26 +154,37 @@ class DependencyEffectService:
 
     def retained_functional_pyramid_effects(
         self,
-        refs: tuple[m.ConclusionRevisionRef, ...],
+        effects: m.AcceptedDependencyEffects,
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
     ]:
         """Live-project only immutable accepted effect refs; discover nothing new."""
-        affected: dict[m.SurfaceKey, list[m.ChangedConclusion]] = {}
-        for ref in sorted(set(refs), key=lambda value: value.sort_key):
+        affected: dict[m.SurfaceKey, list[m.ChangedConclusion | m.EffectDisposition]] = {}
+        reasons: dict[m.SurfaceKey, set[m.ChangeReason]] = {}
+        for effect in effects.effects:
+            ref = effect.ref
+            surface = effect.surface
+            reasons.setdefault(surface, set()).update(effect.reasons)
             try:
-                surface = self._surface_of(ref)
-                store = self._store_for_ref(ref)
+                store = self._store_for_repository(surface.repository_id)
                 version = store.get_understanding(
                     ref.understanding_id.value
                 ).current_version
+                current = store.get_version(ref.understanding_id.value, version.value)
+                revision = self._conclusion_revision(ref)
             except (OSError, ValueError):
+                affected.setdefault(surface, []).append(
+                    m.EffectDisposition(ref, effect.reasons, m.EffectDispositionState.UNAVAILABLE,
+                        "accepted revision cannot be retrieved", "restore the owning repository and retry")
+                )
                 continue
-            current = store.get_version(ref.understanding_id.value, version.value)
             if ref not in current.conclusions:
+                affected.setdefault(surface, []).append(
+                    m.EffectDisposition(ref, effect.reasons, m.EffectDispositionState.UNAVAILABLE,
+                        "accepted revision is no longer current", "retrieve its exact revision history to establish disposition")
+                )
                 continue
-            revision = self._conclusion_revision(ref)
             missing_required_route = (
                 isinstance(revision.content, m.SupportedConclusion)
                 and revision.content.assertion_nature is m.AssertionNature.NORMATIVE
@@ -193,12 +204,16 @@ class DependencyEffectService:
                 isinstance(support, m.SupportQualification)
                 and support.state is m.SupportState.CURRENT
             ):
+                affected.setdefault(surface, []).append(
+                    m.EffectDisposition(ref, effect.reasons, m.EffectDispositionState.CURRENT,
+                        "accepted revision has current support", support=support)
+                )
                 continue
             affected.setdefault(surface, []).append(
                 m.ChangedConclusion(
                     ref=ref,
                     expected_version=current.version,
-                    reasons=(m.ChangeReason.DIRECT,),
+                    reasons=effect.reasons,
                     support=support,
                 )
             )
@@ -206,12 +221,10 @@ class DependencyEffectService:
         surfaces = tuple(
             m.ChangedSurface(
                 surface=surface,
-                reasons=(m.ChangeReason.DIRECT,),
+                reasons=tuple(sorted(reasons[surface], key=lambda item: item.value)),
                 conclusions=tuple(affected[surface]),
             )
-            for surface in containment.order_surfaces(
-                {surface: {m.ChangeReason.DIRECT} for surface in affected}
-            )
+            for surface in containment.order_surfaces(reasons)
         )
         return surfaces, self._reestablishment_contexts(surfaces, {})
 
@@ -226,7 +239,7 @@ class DependencyEffectService:
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
-        tuple[m.ConclusionRevisionRef, ...],
+        m.AcceptedDependencyEffects,
     ]:
         """Project an accepted/proposed Functional Pyramid delta.
 
@@ -295,7 +308,7 @@ class DependencyEffectService:
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
-        tuple[m.ConclusionRevisionRef, ...],
+        m.AcceptedDependencyEffects,
     ]:
         roots = set(direct)
         indirect, forced_descendants = self._premise_closure(
@@ -316,7 +329,7 @@ class DependencyEffectService:
         ordered = containment.order_surfaces(reasons)
         current_versions: dict[str, m.UnderstandingVersion] = {}
         changed_surfaces: list[m.ChangedSurface] = []
-        effect_refs: list[m.ConclusionRevisionRef] = []
+        effect_refs: list[m.AcceptedDependencyEffect] = []
         for surface in ordered:
             conclusions: list[m.ChangedConclusion] = []
             for ref in sorted(
@@ -332,7 +345,7 @@ class DependencyEffectService:
                 if conclusion is None:
                     continue
                 conclusions.append(conclusion)
-                effect_refs.append(ref)
+                effect_refs.append(m.AcceptedDependencyEffect(surface, ref, conclusion.reasons))
             changed_surfaces.append(
                 m.ChangedSurface(
                     surface=surface,
@@ -352,7 +365,7 @@ class DependencyEffectService:
         return (
             projection,
             contexts,
-            tuple(dict.fromkeys(effect_refs)),
+            m.AcceptedDependencyEffects(tuple(effect_refs)),
         )
 
     def _changed_conclusion(
@@ -548,7 +561,7 @@ class DependencyEffectService:
         for surface in surfaces:
             repository_id = surface.surface.repository_id
             for conclusion in surface.conclusions:
-                if self._is_actionable(conclusion):
+                if isinstance(conclusion, m.ChangedConclusion) and self._is_actionable(conclusion):
                     actionable.setdefault(repository_id, []).append(conclusion)
 
         pending: list[tuple[str, ContextBinding, tuple[str, ...], tuple[str, ...]]] = []

@@ -23,7 +23,7 @@ from span.shell.sqlite_store.contexts import (
 from span.shell.sqlite_store.schema import SCHEMA_VERSION as REPOSITORY_SCHEMA_VERSION
 from span.shell.sqlite_store.transactions import immediate_transaction
 
-INSTALLATION_SCHEMA_VERSION = 1
+INSTALLATION_SCHEMA_VERSION = 2
 INSTALLATION_STORE_RELATIVE = _pathlib.Path("installation") / "functional-pyramid.db"
 
 _DDL = (
@@ -87,7 +87,7 @@ _DDL = (
 # SQLite owner. The offline transition initializes them before activation.
 SCHEMA2_DDL = (
     """
-    CREATE TABLE delivery_selections(
+    CREATE TABLE IF NOT EXISTS delivery_selections(
         selection_id TEXT PRIMARY KEY,
         kind TEXT NOT NULL,
         owner_repository_id TEXT,
@@ -98,7 +98,7 @@ SCHEMA2_DDL = (
     )
     """,
     """
-    CREATE TABLE delivery_cursors(
+    CREATE TABLE IF NOT EXISTS delivery_cursors(
         cursor_id TEXT PRIMARY KEY,
         selection_id TEXT NOT NULL
             REFERENCES delivery_selections(selection_id) ON DELETE CASCADE,
@@ -107,7 +107,7 @@ SCHEMA2_DDL = (
     )
     """,
     """
-    CREATE TABLE addressed_requests(
+    CREATE TABLE IF NOT EXISTS addressed_requests(
         addressing_repository_id TEXT NOT NULL,
         request_id TEXT NOT NULL,
         owner_repository_id TEXT NOT NULL,
@@ -242,7 +242,7 @@ def _is_excluded(connection: _sqlite3.Connection, repository_id: str) -> bool:
     )
 
 
-def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
+def _decode_receipt(row: _sqlite3.Row) -> m.FunctionalPyramidReceipt:
     members_raw = _json.loads(str(row["members_json"]))
     effects_raw = _json.loads(str(row["participation_effects_json"]))
     refs_raw = _json.loads(str(row["dependent_effect_refs_json"]))
@@ -254,13 +254,17 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
         raise FunctionalPyramidInstallationStoreError(
             "stored receipt participation effects are invalid"
         )
-    if not isinstance(refs_raw, list):
-        raise FunctionalPyramidInstallationStoreError(
-            "stored receipt dependent effects are invalid"
-        )
+    if not isinstance(refs_raw, dict):
+        raise FunctionalPyramidInstallationStoreError("stored receipt dependent effects are invalid")
+    if refs_raw.get("$type") == "AcceptedDependencyEffects":
+        dependencies = m.from_canonical(m.AcceptedDependencyEffects, refs_raw)
+    elif refs_raw.get("$type") == "HistoricalAcceptanceDetailUnavailable":
+        dependencies = m.from_canonical(m.HistoricalAcceptanceDetailUnavailable, refs_raw)
+    else:
+        raise FunctionalPyramidInstallationStoreError("unknown accepted dependency effect type")
     pyramid_value = row["pyramid_id"]
     version_value = row["version"]
-    return m.RetrievedFunctionalPyramidReceipt(
+    return m.FunctionalPyramidReceipt(
         request_id=m.RequestId(str(row["request_id"])),
         content_digest=m.ContentDigest(str(row["content_digest"])),
         committed_at=_datetime.datetime.fromisoformat(str(row["committed_at"])),
@@ -278,16 +282,14 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
             m.from_canonical(m.FunctionalPyramidParticipationEffect, item)
             for item in effects_raw
         ),
-        dependent_effect_refs=tuple(
-            m.from_canonical(m.ConclusionRevisionRef, item) for item in refs_raw
-        ),
+        dependency_effects=dependencies,
     )
 
 
 def _receipt(
     connection: _sqlite3.Connection,
     request_id: m.RequestId,
-) -> m.RetrievedFunctionalPyramidReceipt | None:
+) -> m.FunctionalPyramidReceipt | None:
     row = connection.execute(
         "SELECT request_id, content_digest, committed_at, action, pyramid_id,"
         " version, members_json, participation_effects_json,"
@@ -323,7 +325,7 @@ class _FunctionalPyramidInstallationReader:
 
     def receipt(
         self, request_id: m.RequestId
-    ) -> m.RetrievedFunctionalPyramidReceipt | None:
+    ) -> m.FunctionalPyramidReceipt | None:
         return _receipt(self._connection, request_id)
 
 
@@ -442,7 +444,7 @@ class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationRea
 
     def write_receipt(
         self,
-        receipt: m.RetrievedFunctionalPyramidReceipt,
+        receipt: m.FunctionalPyramidReceipt,
         *,
         replay_expires_at: _datetime.datetime,
     ) -> None:
@@ -471,11 +473,7 @@ class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationRea
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
-                _json.dumps(
-                    [m.to_canonical(ref) for ref in receipt.dependent_effect_refs],
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ),
+                _canonical_json(receipt.dependency_effects),
             ),
         )
 
@@ -557,7 +555,7 @@ class FunctionalPyramidInstallationStore(_FunctionalPyramidInstallationReader):
                 )
             connection.execute("PRAGMA synchronous = FULL")
             connection.execute("BEGIN IMMEDIATE")
-            for statement in _DDL:
+            for statement in (*_DDL, *SCHEMA2_DDL):
                 connection.execute(statement)
             row = connection.execute(
                 "SELECT value FROM meta WHERE key='schema_version'"
@@ -613,6 +611,9 @@ class FunctionalPyramidInstallationStore(_FunctionalPyramidInstallationReader):
             "functional_pyramid_active_members",
             "functional_pyramid_exclusions",
             "functional_pyramid_receipts",
+            "delivery_selections",
+            "delivery_cursors",
+            "addressed_requests",
         }
         missing = required - tables
         if missing:
