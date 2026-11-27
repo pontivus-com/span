@@ -38,56 +38,65 @@ def _sequence(value: object) -> list[object]:
     return value
 
 
+_VERIFICATION_FIELDS = (
+    "run_id",
+    "repository_id",
+    "scope",
+    "command",
+    "scenario",
+    "outcome",
+    "observed_at",
+    "observer",
+    "provenance",
+)
+_RESOLUTION_FIELDS = ("reasoning", "resulting_understanding_id", "resulting_version")
+_DISPOSITION_FIELDS = ("challenge_revision", "recorded_at")
+_CHALLENGE_FIELDS = (
+    "challenge_id",
+    "understanding_id",
+    "target_version",
+    "reason",
+    "provenance",
+    "challenge_revision",
+    "state",
+    "created_at",
+)
+
+
 def _factor(
-    value: object, tag: str, component: str, fields: tuple[str, ...]
+    value: object,
+    tag: str,
+    component: str,
+    component_tag: str,
+    fields: tuple[str, ...],
 ) -> dict[str, object]:
     """Move recorded fields without interpreting their values."""
     payload = _object(value, tag)
     if component in payload:
         raise TransitionError(f"{tag} is not a legacy record")
     try:
-        payload[component] = {key: payload.pop(key) for key in fields}
+        facts = {key: payload.pop(key) for key in fields}
     except KeyError as exc:
         raise TransitionError(f"{tag} lacks recorded field {exc}") from None
+    facts["$type"] = component_tag
+    payload[component] = facts
     return payload
 
 
 def verification_payload(value: object) -> dict[str, object]:
-    payload = _factor(
-        value,
-        "VerificationRun",
-        "facts",
-        (
-            "run_id",
-            "repository_id",
-            "scope",
-            "command",
-            "scenario",
-            "outcome",
-            "observed_at",
-            "observer",
-            "provenance",
-        ),
+    return _factor(
+        value, "VerificationRun", "facts", "VerificationRunFacts", _VERIFICATION_FIELDS
     )
-    facts = payload["facts"]
-    if not isinstance(facts, dict):
-        raise TransitionError("verification facts are not an object")
-    facts["$type"] = "VerificationRunFacts"
-    return payload
 
 
 def _resolution(value: object) -> dict[str, object]:
-    payload = _factor(
+    return _factor(
         value,
         "ChallengeResolution",
         "facts",
-        ("reasoning", "resulting_understanding_id", "resulting_version"),
+        "ChallengeResolutionFacts",
+        _RESOLUTION_FIELDS,
     )
-    facts = payload["facts"]
-    if not isinstance(facts, dict):
-        raise TransitionError("resolution facts are not an object")
-    facts["$type"] = "ChallengeResolutionFacts"
-    return payload
 
 
 def _disposition(value: object) -> dict[str, object]:
@@ -97,36 +106,15 @@ def _disposition(value: object) -> dict[str, object]:
         value,
         "ResolvedChallengeRecord",
         "decision",
-        ("challenge_revision", "recorded_at"),
+        "ChallengeDispositionDecision",
+        _DISPOSITION_FIELDS,
     )
-    decision = payload["decision"]
-    if not isinstance(decision, dict):
-        raise TransitionError("challenge decision is not an object")
-    decision["$type"] = "ChallengeDispositionDecision"
     payload["resolution"] = _resolution(payload["resolution"])
     return payload
 
 
 def challenge_payload(value: object) -> dict[str, object]:
-    payload = _factor(
-        value,
-        "Challenge",
-        "facts",
-        (
-            "challenge_id",
-            "understanding_id",
-            "target_version",
-            "reason",
-            "provenance",
-            "challenge_revision",
-            "state",
-            "created_at",
-        ),
-    )
-    facts = payload["facts"]
-    if not isinstance(facts, dict):
-        raise TransitionError("challenge facts are not an object")
-    facts["$type"] = "ChallengeFacts"
+    payload = _factor(value, "Challenge", "facts", "ChallengeFacts", _CHALLENGE_FIELDS)
     if payload.get("resolution") is not None:
         payload["resolution"] = _resolution(payload["resolution"])
     payload["dispositions"] = [
@@ -136,25 +124,35 @@ def challenge_payload(value: object) -> dict[str, object]:
 
 
 def _unfactor(
-    value: object, tag: str, component: str, component_tag: str
+    value: object,
+    tag: str,
+    component: str,
+    component_tag: str,
+    fields: tuple[str, ...],
 ) -> dict[str, object]:
     """Reconstruct source fields from staged facts, independently of factoring."""
     payload = _object(value, tag)
     facts = _object(payload.pop(component), component_tag)
     del facts["$type"]
-    if set(payload) & set(facts):
-        raise TransitionError(f"{tag} staged facts overlap retained fields")
+    if set(facts) != set(fields) or set(payload) & set(facts):
+        raise TransitionError(f"{tag} staged facts do not have the declared fields")
     payload.update(facts)
     return payload
 
 
 def _restore_verification(value: object) -> dict[str, object]:
-    return _unfactor(value, "VerificationRun", "facts", "VerificationRunFacts")
+    return _unfactor(
+        value, "VerificationRun", "facts", "VerificationRunFacts", _VERIFICATION_FIELDS
+    )
 
 
 def _restore_resolution(value: object) -> dict[str, object]:
     return _unfactor(
-        value, "ChallengeResolution", "facts", "ChallengeResolutionFacts"
+        value,
+        "ChallengeResolution",
+        "facts",
+        "ChallengeResolutionFacts",
+        _RESOLUTION_FIELDS,
     )
 
 
@@ -162,14 +160,18 @@ def _restore_disposition(value: object) -> dict[str, object]:
     if isinstance(value, dict) and value.get("$type") == "UnresolvedChallengeRecord":
         return _object(value, "UnresolvedChallengeRecord")
     payload = _unfactor(
-        value, "ResolvedChallengeRecord", "decision", "ChallengeDispositionDecision"
+        value,
+        "ResolvedChallengeRecord",
+        "decision",
+        "ChallengeDispositionDecision",
+        _DISPOSITION_FIELDS,
     )
     payload["resolution"] = _restore_resolution(payload["resolution"])
     return payload
 
 
 def _restore_challenge(value: object) -> dict[str, object]:
-    payload = _unfactor(value, "Challenge", "facts", "ChallengeFacts")
+    payload = _unfactor(value, "Challenge", "facts", "ChallengeFacts", _CHALLENGE_FIELDS)
     if payload.get("resolution") is not None:
         payload["resolution"] = _restore_resolution(payload["resolution"])
     payload["dispositions"] = [
@@ -277,10 +279,7 @@ def installation_dependency_payload(value: object) -> object:
 
 def _historical_detail(value: object) -> m.HistoricalAcceptanceDetailUnavailable:
     detail = m.from_canonical(m.HistoricalAcceptanceDetailUnavailable, value)
-    if (
-        detail.reason != _HISTORICAL_REASON
-        or detail.recovery != _HISTORICAL_RECOVERY
-    ):
+    if detail.reason != _HISTORICAL_REASON or detail.recovery != _HISTORICAL_RECOVERY:
         raise TransitionError("historical acceptance recovery changed")
     return detail
 
@@ -448,9 +447,7 @@ def _verify_table(
             actual[position] = _canonical_text(
                 restore(_json.loads(str(actual[position])))
             )
-            expected[position] = _canonical_text(
-                _json.loads(str(expected[position]))
-            )
+            expected[position] = _canonical_text(_json.loads(str(expected[position])))
         else:
             actual = list(new)
         if expected != actual:
