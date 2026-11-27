@@ -106,7 +106,9 @@ class UnderstandServiceTest(unittest.TestCase):
         self.assertEqual(retrieved.version.value, 1)
         self.assertEqual(len(retrieved.conclusions), 1)
         self.assertEqual(retrieved.challenges, ())
-        self.assertIsInstance(retrieved.conclusions[0].basis[0], m.UnavailableSupportBasis)
+        self.assertIsInstance(
+            retrieved.conclusions[0].basis[0], m.UnavailableSupportBasis
+        )
 
 
 if __name__ == "__main__":
