@@ -75,7 +75,7 @@ function sessionKeyFromHook(event) {
 function pendingState(pending, sessionID) {
   const current = pending.get(sessionID);
   if (current) return current;
-  const created = { entryText: "", changeText: "", paths: [] };
+  const created = { entryText: "", changeText: "", reachabilityText: "", paths: [] };
   pending.set(sessionID, created);
   return created;
 }
@@ -99,7 +99,7 @@ function rememberChangeNotice(pending, sessionID, notice) {
 }
 
 function removeEmptyPending(pending, sessionID, state) {
-  if (!state.entryText && !state.changeText && state.paths.length === 0) {
+  if (!state.entryText && !state.changeText && !state.reachabilityText && state.paths.length === 0) {
     pending.delete(sessionID);
   }
 }
@@ -266,28 +266,34 @@ export default {
       });
     }
 
-    // OpenCode dispatches the first request before a local MCP server has
-    // finished connecting. Wait (bounded) at prompt admission so the first
-    // tool list already contains the Span tools; otherwise the agent cannot
-    // consult Span before investigation. The lifecycle obligation also appears
-    // in the managed instructions when this readiness notice cannot arrive.
-    let mcpReady = false;
+    // Observe the complete registered Span catalogue at each prompt. A past
+    // observation cannot establish current delivery (FD-49/53).
     if (ctx && ctx.session && typeof ctx.session.hook === "function") {
-      await ctx.session.hook("prompt", async () => {
-        if (mcpReady) return;
+      await ctx.session.hook("prompt", async (event) => {
+        const sessionID = sessionKeyFromHook(event);
         const deadline = Date.now() + 3000;
         while (Date.now() < deadline) {
           try {
             const tools = await ctx.tool.list();
-            if (tools.some((tool) => String(tool.id).endsWith("_ask"))) {
-              mcpReady = true;
+            const ids = new Set(tools.map((tool) => tool.id));
+            if (["span_ask", "span_record", "span_reconsider"].every((id) => ids.has(id))) {
+              const state = pending.get(sessionID);
+              if (state) {
+                state.reachabilityText = "";
+                removeEmptyPending(pending, sessionID, state);
+              }
               return;
             }
           } catch {
-            // keep waiting
+            // Host catalogue unavailable. Do not disclose transport details.
           }
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
+        const notice =
+          "span: the complete Span tool set is unavailable. Reconnect or restart " +
+          "your coding-agent host and start a fresh session if necessary.";
+        if (sessionID === "*") console.warn(notice);
+        else pendingState(pending, sessionID).reachabilityText = notice;
       });
     }
 
@@ -315,6 +321,7 @@ export default {
           const state = pending.get(sessionID);
           if (!state || !event || !Array.isArray(event.system)) return;
           const parts = [];
+          if (state.reachabilityText) parts.push(state.reachabilityText);
           if (state.entryText) parts.push(state.entryText);
           if (state.changeText) parts.push(state.changeText);
           if (parts.length === 0) return;
@@ -324,6 +331,7 @@ export default {
           const handedOffChange = Boolean(state.changeText);
           state.entryText = "";
           state.changeText = "";
+          state.reachabilityText = "";
           if (handedOffChange) state.paths = [];
           removeEmptyPending(pending, sessionID, state);
         } catch {

@@ -185,7 +185,47 @@ def _add_authority_arguments(parser) -> None:
     )
 
 
-def parse_args(argv=None):
+def _validate_classification_options(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    if not args.functional_pyramid_classification_file:
+        return
+    incompatible = (
+        "list_orphans",
+        "backup",
+        "backup_root",
+        "backup_repository",
+        "load_repository_backup",
+        "repository_artifact",
+        "reap_repository_backups",
+        "restore_backup",
+        "restore_confirm",
+        "reap_backups",
+        "verify_backup",
+        "verify_repository_backup",
+        "transition_store",
+        "transition_phase",
+        "transition_root",
+        "uninstall",
+        "purge",
+        "verify_only",
+        "snapshot_census",
+        "compare_census",
+    )
+    conflicts = [
+        "--" + name.replace("_", "-")
+        for name in incompatible
+        if vars(args)[name] is not None and vars(args)[name] is not False
+    ]
+    if conflicts:
+        parser.error(
+            "--functional-pyramid-classification-file cannot be combined with "
+            + ", ".join(conflicts)
+            + ". Run maintenance and governed installation separately."
+        )
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="span-install",
         description=(
@@ -313,4 +353,6 @@ def parse_args(argv=None):
         help="Report IDs present on disk and absent from the receipt. "
         "Deletes nothing; absence from a receipt is evidence, not proof.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    _validate_classification_options(parser, args)
+    return args

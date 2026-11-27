@@ -11,11 +11,14 @@ from __future__ import annotations
 import dataclasses as _dataclasses
 import hashlib as _hashlib
 import json as _json
+import logging as _logging
 import pathlib as _pathlib
 import sqlite3 as _sqlite3
 import typing as _typing
 
 from span.shell.sqlite_store.lifecycle import SCHEMA_VERSION
+
+_log = _logging.getLogger(__name__)
 
 if _typing.TYPE_CHECKING:
     from span.core import model as _m
@@ -315,7 +318,7 @@ def _functional_pyramid_declaration_report(
             "configured": True,
             "valid": False,
             "sources": [],
-            "action": "correct .span/functional-pyramid.json",
+            "action": "correct the classification and rerun governed installation",
         }
     if bootstrap_result is None:
         return {
@@ -367,7 +370,7 @@ def _functional_pyramid_declaration_report(
                 {
                     "locator": request.locator,
                     "status": result.kind.value.lower(),
-                    "reason": result.reason,
+                    "reason": "the governing document cannot be read",
                 }
             )
             valid = False
@@ -378,7 +381,10 @@ def _functional_pyramid_declaration_report(
                 "locator": request.locator,
                 "status": "valid" if not graph_findings else "invalid",
                 "evidence_id": declaration_ref.evidence_id.value,
-                "findings": [finding.reason.value for finding in graph_findings],
+                "findings": [
+                    m.public_pyramid_finding(finding).reason.value
+                    for finding in graph_findings
+                ],
             }
         )
         if graph_findings:
@@ -393,7 +399,7 @@ def _functional_pyramid_declaration_report(
         "action": (
             None
             if valid
-            else "correct the named Functional Pyramid declaration sources"
+            else "correct the classification and rerun governed installation"
         ),
     }
 
@@ -480,7 +486,7 @@ def _active_declaration_report(
                 {
                     "locator": locator,
                     "status": result.kind.value.lower(),
-                    "reason": result.reason,
+                    "reason": "the governing document cannot be read",
                 }
             )
             valid = False
@@ -490,7 +496,10 @@ def _active_declaration_report(
             {
                 "locator": locator,
                 "status": "valid" if not findings else "invalid",
-                "findings": [finding.reason.value for finding in findings],
+                "findings": [
+                    m.public_pyramid_finding(finding).reason.value
+                    for finding in findings
+                ],
             }
         )
         if findings:
@@ -502,7 +511,7 @@ def _active_declaration_report(
         "valid": valid,
         "sources": sources,
         "action": (
-            None if valid else "correct the retained ACTIVE declaration sources"
+            None if valid else "correct the classification and rerun governed installation"
         ),
     }
 
@@ -674,7 +683,10 @@ def _active_instance_report(
     return {
         "status": status,
         "members": member_reports,
-        "findings": [finding.reason.value for finding in structural],
+        "findings": [
+                    m.public_pyramid_finding(finding).reason.value
+                    for finding in structural
+                ],
         "action": (
             "restore the registered ACTIVE member repository"
             if unavailable
@@ -708,25 +720,27 @@ def probe_active_functional_pyramid(
         for identity, version, members in retained:
             try:
                 report = _active_instance_report(data_dir, roots_by_repository, members)
-            except (OSError, ValueError, _sqlite3.Error) as exc:
+            except (OSError, ValueError, _sqlite3.Error):
+                _log.debug("ACTIVE member observation failed", exc_info=True)
                 report = {
                     "status": "unavailable",
                     "members": [],
                     "findings": [],
-                    "action": f"restore registered ACTIVE member access: {exc}",
+                    "action": "restore access to the participating repositories and verify again",
                 }
             instances.append(
                 {**report, "pyramid_id": identity.value, "version": version.value}
             )
         if retained != _retained_instances(data_dir, ids):
             raise ValueError("ACTIVE membership changed during observation")
-    except (OSError, ValueError, _sqlite3.Error) as exc:
+    except (OSError, ValueError, _sqlite3.Error):
+        _log.debug("ACTIVE membership observation failed", exc_info=True)
         return {
             "status": "unavailable",
             "instances": [],
             "members": [],
             "findings": [],
-            "action": f"restore complete registered ACTIVE observation: {exc}",
+            "action": "restore access to the participating repositories and verify again",
         }
     status = next(
         (

@@ -58,7 +58,7 @@ function fakeContext(root) {
         subscribe: async function* () {},
       },
       tool: {
-        list: async () => [{ id: "span_ask" }],
+        list: async () => ["span_ask", "span_record", "span_reconsider"].map((id) => ({ id })),
         hook: async (name, handler) => {
           registered[`tool:${name}`] = handler;
         },
@@ -658,5 +658,37 @@ test("undelivered notices survive malformed context and are reaped on session de
     if(previous===undefined) delete process.env.SPAN_HOOKS_BIN;
     else process.env.SPAN_HOOKS_BIN=previous;
     fs.rmSync(root,{recursive:true,force:true});
+  }
+});
+
+test("prompt re-observes complete Span tool availability after loss and recovery", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "span-catalogue-"));
+  process.env.SPAN_HOOKS_BIN = makeFixture(root);
+  const { ctx, registered } = fakeContext(root);
+  let ids = ["span_ask", "span_record", "span_reconsider"];
+  let observed = 0;
+  ctx.tool.list = async () => {
+    observed += 1;
+    return ids.map((id) => ({ id }));
+  };
+  const dispose = await (await loadPlugin()).default.setup(ctx);
+  const event = { sessionID: "session-catalogue" };
+  try {
+    await registered["session:prompt"](event);
+    assert.equal(observed, 1);
+    ids = ["span_ask", "foreign_record", "foreign_reconsider"];
+    await registered["session:prompt"](event);
+    const unavailable = { ...event, system: [] };
+    registered["session:context"](unavailable);
+    assert.match(unavailable.system[0].text, /complete Span tool set is unavailable/);
+    assert.doesNotMatch(unavailable.system[0].text, /foreign_record/);
+    ids = ["span_ask", "span_record", "span_reconsider"];
+    await registered["session:prompt"](event);
+    const restored = { ...event, system: [] };
+    registered["session:context"](restored);
+    assert.equal(restored.system.length, 0);
+  } finally {
+    dispose();
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

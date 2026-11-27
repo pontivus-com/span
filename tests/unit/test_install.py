@@ -1397,6 +1397,37 @@ class ReceiptScopeTest(unittest.TestCase):
 
 
 class PlanningTest(unittest.TestCase):
+    def test_classification_conflicts_before_installation_state_access(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+
+        from span.shell.install import cli
+
+        for flags in (
+            ["--backup"],
+            ["--reap-backups", "0"],
+            ["--verify-only"],
+            ["--restore-backup", "backup", "--restore-confirm", "backup"],
+        ):
+            with self.subTest(flags=flags):
+                error = io.StringIO()
+                with (
+                    contextlib.redirect_stderr(error),
+                    patch.object(cli, "read_receipt") as receipt,
+                    patch.object(cli, "administrative_ownership") as ownership,
+                    self.assertRaises(SystemExit),
+                ):
+                    cli.main(
+                        ["--functional-pyramid-classification-file", "repo", "input"]
+                        + flags
+                    )
+                self.assertIn("--functional-pyramid-classification-file", error.getvalue())
+                self.assertIn(flags[0], error.getvalue())
+                receipt.assert_not_called()
+                ownership.assert_not_called()
+
+
     def test_pip_install_reinstalls_same_version_checkout(self):
         import tempfile
         from unittest.mock import patch

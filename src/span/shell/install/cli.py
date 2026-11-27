@@ -954,30 +954,6 @@ def _execute(env: _Environment) -> None:
         raise SystemExit(
             "incomplete governed initialization; resume the same classification input or explicitly restore a verified backup"
         )
-    if mappings and any(
-        (
-            args.list_orphans,
-            args.backup,
-            args.backup_repository,
-            args.load_repository_backup,
-            args.reap_repository_backups,
-            args.restore_backup,
-            args.reap_backups,
-            args.verify_backup,
-            args.verify_repository_backup,
-            args.transition_store,
-            args.transition_phase,
-            args.transition_root,
-            args.uninstall,
-            args.purge,
-            args.verify_only,
-            args.snapshot_census,
-            args.compare_census,
-        )
-    ):
-        raise SystemExit(
-            "classification input belongs only to the governed install operation"
-        )
     if _run_one_shot(env):
         return
     pending = None
