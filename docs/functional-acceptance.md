@@ -49,7 +49,7 @@ S-FIELD-01–07 in the single
 Existing test names below are not proof of the new cases; add actual test
 names and results at closeout, not speculative evidence.
 
-**Public lifecycle boundary amendment (API-01–23).** Functional Design §15's
+**Public lifecycle boundary amendment (API-01–23; review F01–F09).** Functional Design §15's
 public-boundary acceptance amendment extends the existing FA cases; the
 implementation plan §3B owns the exact per-finding task and acceptance mapping.
 All added obligations are OPEN; retain existing executable evidence and add

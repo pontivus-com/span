@@ -228,16 +228,16 @@ operations continue using their existing keys through the same issuance owner.
 This implements FD-2/FD-45 without a second context constructor or origin
 heuristic; lifecycle §4.3 owns the public guarantee.
 
-**Admission implementation.** Implement lifecycle §4.1's single public admission
-projection in core/model and construct it through EvidenceService. At admission
-retain ordered request/outcome and exact observation/range delivery selection
-under existing context/request binding. AnswerService._with_admission and
+**Admission implementation.** Implement lifecycle §4.1's public admission
+projection in core/model and construct it through EvidenceService. Retain
+ordered request/outcome and exact observation/range delivery selection in
+§13 delivery manifest in the same atomic admission transaction. AnswerService._with_admission and
 _evidence_page consume that same selection, not context_observations order.
 Extend service/continuation.py's cursor position to metadata and evidence
 fragments; no per-delivery omission labels or mutable context-wide scan. Keep stored
 SourceObservation immutable; associate its ID with existing EvidenceUnit page
-fragments produced by the answer fitter/_slice_unit. Schema generation handles
-that canonical delivery carrier on both initial and continuation results. Do
+fragments produced by the answer fitter/_slice_unit. Schema generation handles that canonical delivery carrier in the initial
+result and ResultPage parts. Do
 not introduce a second source-copy/range parser or reconstruct source identity in
 transport code.
 
@@ -246,8 +246,14 @@ and qualification projections in core/model. Service composition projects the
 existing support evaluator's results once; detailed support stays internal.
 Extend durable receipt effects where required by §12. Project typed dependency
 coordinates in core/model/support.py with service-owned evidence lookup; reuse
-for audit and changed effects. No reason-text parsing. Exact audit retrieval reads verification runs through the
-existing accepted-run IDs in the receipt and their store owner. The wire generator
+for audit and changed effects. No reason-text parsing. Exact audit retrieval reads verification runs through accepted-run IDs and
+store owner. For source/discovery support, look up exact immutable observation
+rows by their existing IDs, copy recorded evidence/range/time/scope facts;
+for authority reuse existing AuthorityApplicability and DeclaredPrecedence
+semantic types, not AuthorityBinding; premise/route project exact public refs
+and scope. AuditConclusion maps SemanticBasis derivation, summary, input_refs
+without dropping any semantic facts. Preserve missing-row reason as typed
+unavailable basis with known coordinate. No second stored support model. The wire generator
 serializes those canonical results; the adapter does not rewrite JSON.
 
 **Context-bound create.** The service chooses `ContextBoundTarget` or
@@ -355,9 +361,9 @@ current transition design, and release workflow.
 FD-95–FD-102.
 
 SQLite and `shell/sqlite_store/lifecycle.py` remain the repository transaction
-owner. The active Beta-3 repository schema is **15**. Schema 15 retains the
-semantic-lifecycle layout established by the earlier schemas and adds the
-curation persistence owned by §23/§25.
+owner. The remediation target is repository schema **16** (§14). It retains
+schema-15 semantic/curation tables, adapting only request/receipt payloads
+and their lookup contracts. §25 is the historical schema-15 transition.
 
 Canonical JSON remains the payload; relational columns/indexes project its
 stable lookup keys. The current ownership model is:
@@ -368,11 +374,11 @@ stable lookup keys. The current ownership model is:
 | `understandings` | add owning surface reference and unique repository/surface/question index | adapt `Understanding`; preserve stable IDs and version pointers |
 | `understanding_versions`, `conclusions`, `understanding_membership` | retain immutable revision and membership keys; bind ownership through the understanding | adapt canonical payload references; no duplicated conclusion bodies |
 | `investigation_contexts` | retain repository/request uniqueness; rename the persisted digest column to `binding_digest` | `InvestigationContext.binding_digest` commits the canonical context binding; scope/question remain canonical context fields |
-| `record_receipts` | replace repository/context/submission key with repository/request key | adapted acceptance identity, digest, effects, and expiry; no cascading dependence on live context |
+| `record_receipts` | retain (repository_id, request_id) PK | schema-16 closed accepted-effect branch, original addressing origin/digest, optional context ref, commit/replay metadata; §12/14 |
 | `support_dependencies` | retain reverse index and exact revision keys | project dependencies from canonical revisions in the acceptance transaction |
 | source/discovery observations, challenges, verification runs | retain canonical records and their reference integrity | required ownership/identity adaptations only; verification ingestion remains owned by §12 |
 | `conclusion_curations` | exact understanding/conclusion/revision key | schema-15 curation disposition owned by §23; no copied semantic content |
-| `meta` | expected schema is 15 | runtime format check only; no migration on ordinary open |
+| `meta` | expected schema is 16 | runtime format check only; no migration on ordinary open |
 
 Resolve path containment from canonical boundaries and existing inventory/locator
 capabilities. Compute surface status on read; do not add a second maintained
@@ -409,9 +415,12 @@ a second stored shape. Verification applicability uses the shared containment
 rule: a run applies when the asked surface is within its declared scope, and a
 single-file run is not widened to a broader service. In AnswerService select
 exact membership and semantic scope before status/verification composition;
-service/surface_status.py computes selected distribution or ordinary immediate
-child summaries, never recursive answer or acceptance inventory. Group
-applicable runs by FD-28, retain latest ties and issue exact history cursor.
+service/surface_status.py constructs StatusSubject from resolved selection
+and exact version, computes its distribution/ordinary immediate children per
+FD-28. Reuse canonical containment index/predicate; no recursive status tree.
+For verification evaluate candidate support once, group and select latest
+recorded and latest CURRENT per outcome according to FD-28, bind remaining
+run IDs in verification_history selection (§13).
 Exact snapshot reads get_version_conclusions, version-scoped curation and
 challenges targeting that version; construct AuditConclusion from retained
 content and typed basis via the same support projection, not store dataclass
@@ -503,11 +512,18 @@ maturity as of accepted version and live qualification via shared evaluator;
 no surface_status traversal. Support/store operational error classification
 remains owned by LifecycleStorePort; catch declared operational errors and
 provider OSError, not arbitrary ValueError. Exact receipt audit uses a closed
-accepted-effect branch in RetrievedReceipt, not raw RecordReceipt. Private
-digests/context internals stay with replay. Extend schema migration explicitly
-(TD §14/25); old receipts whose effects cannot be reconstructed uniquely
-expose unavailable historical detail, never fabricated action refs. Preserve
-old accepted identity/replay. Challenge opening uses ReconsiderService's
+accepted-effect branch in RetrievedReceipt, not raw RecordReceipt. Private digests/context internals stay with replay. Schema-16 RecordReceipt
+uses RecordingKey as canonical owner, original_addressing_repository_id,
+original content_digest, committed_at, replay_expires_at, optional canonical
+InvestigationContextRef (absent for surface), and a closed accepted-effect
+union: understanding (id/version, AcceptedRevisionEffect tuple, accepted
+challenge dispositions, dependent refs); verification (accepted run ID);
+surface (action, SurfaceKey, accepted boundary_version); challenge opening
+(exact accepted challenge identity/revision, target version/refs). Use the
+existing immutable surface_boundary_versions row for audit/replay, never
+current surface pointer. Store these facts in the same BEGIN IMMEDIATE as
+the effect, including no-op decisions. No parallel receipt table or semantic
+writer. §14 owns the offline conversion and legacy historical-detail state. Challenge opening uses ReconsiderService's
 existing atomic receipt and target revision lookup, then same audit projection
 for exact prior content.
 
@@ -534,46 +550,137 @@ Operational reaping removes expired context/replay state only. Accepted
 understanding, challenge, verification, and curation history are not subject to
 that operational TTL.
 
-Response budgeting is server-owned and applied at the result-composition
-boundary. Host/configuration supplies the measured budget; public request
-carriers do not choose it. Every result variant is fitted through its canonical
-projection, omissions remain explicit/recoverable, and a result that cannot
-carry its minimum safe envelope is refused rather than silently truncated.
-Use service/bounds.py encoded size and service/continuation.py as shared
-producer-side delivery owners, invoked by AnswerService, LifecycleService,
-ReconsiderService and FunctionalPyramidService before adapter encoding.
-Reserve minimum accepted envelope before new writes. Retain immutable ordered
-selection coordinates/positions through existing repository or installation
-lifecycle store and retention owner; pure query delivery state is operational,
-not an investigation context or semantic record. Evidence uses existing
-context binding. Reconsider retains complete effect selection and context refs
-for recovery; accepted effects use receipt identities. Tokens are opaque,
-namespace/subject/version/selection/position-bound and replay-stable. Page
-actual result carriers, not second wire grammar; existing directory/pending
-selectors delegate to same delivery rules. Explicit stale-token recovery for
-changed live reads; never rerun writes or silently substitute affected selection.
-Adapter dispatches continuation to its owner and serializes canonical carriers.
+**Bound delivery mechanism (FD-29, FD-43/45, FD-54–57).**
+Use the existing service/bounds.py encoded_size (same canonical schema as
+MCP structured/text serialization) and service/continuation.py as the single
+producer-side fitter and continuation service. Implement P2 §4.1 ResultPage
+and discriminated ResultPart in core/model/answers.py, deriving strict
+collection/item/parent rules in the canonical schema generator. No generic
+JSON/dict payload, continued Answer or extra transport DTO. A parent carrier
+contains its scalar facts and a fitting prefix of allowed nested collections;
+page subsequent typed parts by parent coordinate. The part order is stable:
+initial required envelope, primary result, nested required evidence/causes,
+then auxiliary collections, following FD-29/55. Untyped or unknown collection
+and parent/offset pairs reject. Use exact encoded size including the cursor,
+all part metadata and context handles; test both delivery channels. Strings
+and fields not independently pageable by P2 are indivisible semantic units;
+apply FD-57, never truncate their meaning.
 
-Budgeting never changes semantic support classification, curation state,
-Functional Pyramid resolution, or dependency traversal. It does not limit
-administrative authority validation; the exact-locator mechanism belongs to
-§20, not to agent-facing evidence selection/delivery.
+The existing installation SQLite owner (§19) stores one typed
+DeliverySelection manifest for every paged selection, not a second semantic
+store. Two tables:
+
+- delivery_selections(selection_id TEXT PRIMARY KEY, kind TEXT NOT NULL,
+  owner_repository_id TEXT NULL, created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL, canonical_json TEXT NOT NULL).
+  The canonical manifest holds normalized exact selector or accepted receipt
+  coordinate, initial result kind, ordered collection keys/parent coordinates,
+  selected immutable refs, bound context/source outcome/range IDs if present,
+  evaluated state fingerprint and observed_at, and complete affected refs/
+  reasons and canonical context handles for Changed. Pure installation
+  selectors have no repository owner. No source bytes or copied revision
+  statements; resolve retained semantic units from canonical owners.
+- delivery_cursors(cursor_id TEXT PRIMARY KEY, selection_id TEXT NOT NULL
+  REFERENCES delivery_selections ON DELETE CASCADE, position_json TEXT NOT NULL,
+  UNIQUE(selection_id, position_json)). The typed position is collection
+  identity, parent coordinates, item offset and evidence line offset only
+  for evidence. Use the existing server UUID identity utility for opaque
+  cursor IDs; get-or-create by position within the selection makes identical
+  replay issue the identical next token. Do not expose encoded binding
+  digests, storage keys, roots or path maps. The externally returned token
+  is only the opaque issued cursor ID; unknown or wrong selector/position
+  rejects via the existing continuation rejection taxonomy.
+
+Before returning a first truncated read, commit the manifest and issued
+cursor; without durable binding do not claim recoverability. Bind evidence
+outcomes in the existing context/admission transaction, using installation
+main plus owning repository ATTACH under §19, with context lifetime and
+immutable observation/range selection. For pure read manifests, re-open
+the exact normalized selection on continuation, compare complete ordered
+selection and semantic state signature (canonical public state with
+evaluation timestamps excluded; evidence fingerprints, curation/status,
+root bindings, scope and membership included); if equal, use initial
+observed_at for unchanged evaluations and same page; if different, stale
+rejection names original obtain. Do not serve frozen CURRENT after drift.
+Version-less exact snapshot binds the concrete selected version. Source
+delivery rereads bytes with recorded identity as today; no source copy.
+For completed Changed retain the full selected effect coordinates, per-ref
+reasons and contexts before delivering first page. Re-qualify pinned refs on
+each resume, keep disposed/superseded coordinates with explicit disposition,
+refresh expired contexts only for actionable owners. For accepted writes
+persist complete immutable effect refs in receipt in the commit transaction;
+manifest may be composed after commit, because receipt recovery reconstructs
+that exact selection without a new mutation. Failure to create cursor then
+returns accepted receipt identity and explicit recovery; no rejection.
+
+Use existing LifecycleRetention policy: pure read manifest expires at
+creation + context_lifetime; evidence at original context expiry;
+changed/accepted effect manifests at creation/commit + replay_retention
+and retain beyond expiry while any pinned required obligation is not
+disposed (FD-43). Existing reaper invokes the service-owned obligation
+qualification predicate before deleting manifests or receipts with dependent
+refs; unavailable qualification means retain. Delete cursor rows with
+manifest; remove addressed request binding only when neither bound context
+nor receipt remains. No new clock, independent reaper or arbitrary TTL.
+Repository-portable backups retain receipts, not transient delivery state;
+a restored receipt remains sufficient to reconstruct its exact accepted set.
+No runtime migration or schema fallback.
+
+Budget fitting does not constrain semantic traversal or administrative
+authority validation (§20). Preflight minimum acceptance envelope before
+commit; preserve committed receipt on postcommit detail failure. A single
+oversize indivisible unit yields FD-57 unavailable with exact public
+coordinate; do not fabricate a progress token or raise the ceiling.
 
 ## 14. Offline schema transition
 
-The active transition target is repository schema **15**. Runtime open is
-exact-version only and performs no implicit migration.
+**Active target (PUB remediation): repository schema 16, installation schema 2.**
+The explicit offline owner remains shell/store_transition.py, target
+SCHEMA_VERSION=16, SUPPORTED_SOURCE_SCHEMAS=7–15. Existing mappings for
+7–14 retain their documented preservation/classification and additionally
+produce schema-16 receipts; add store_transition_schema15.py for lossless
+15→16 mapping. No legacy decoder or migration on runtime open. Existing
+schema-15 curation rows and all semantic/support/authority/verification/
+surface boundary history, IDs, contexts and exact canonical evidence are
+copied without changes. Preserve every legacy receipt key, original digest,
+commit/expiry and recorded context/effect identities. Use one current
+closed accepted-effect union; if old action/target details are absent and
+not uniquely evidenced, map to HistoricalAcceptanceDetailUnavailable
+(containing exact recorded accepted IDs/versions/effect refs and fixed
+public reason/recovery). Never infer action from snapshot differences or
+fabricate surface receipts. Replay compares original digest and returns
+accepted identity with unavailable detail, not new mutation, conflict or
+invented empty effects. New schema-16 receipts must contain exact typed
+effects (§12); migrated incomplete details cannot be created by runtime
+write. Preserve curation and receipt references even when contexts expired.
 
-The canonical transition owner remains `src/span/shell/store_transition.py`.
-It accepts source schemas **7–14** and performs the explicit
-inspect/archive/stage/verify/activate/rollback lifecycle. Schema-specific
-mapping modules preserve or explicitly classify source state; they never
-reinterpret missing semantic meaning.
+Extend the same explicit inspect/archive/stage/verify/activate/rollback
+administrative transition to installation schema 1→2 (existing
+shell/sqlite_store/functional_pyramid.py DDL and ports). Installation 2
+preserves every pyramid version/member/exclusion/receipt including raw
+digest and immutable dependent refs, adds §13 delivery tables and §17.1
+addressed-request binding table, initially empty. Do not change declaration
+Version 3 grammar. Stage and verify every affected registered repository
+and the installation DB before publication; acquire existing exclusive
+sqlite ownership for the full installation and affected stores, reject
+live runtime, reuse transition manifest and rollback protocol. Activate as
+one explicit administrative transition with restart-safe manifest and
+compensation from verified archive if interrupted; runtime refuses mixed
+schema sets until completion. No automatic installation migration on
+startup or ordinary read. Existing installer/provisioner creates only 16/2
+for fresh setup and uses explicit transition for old stores. Preserve
+rollback of post-transition writes per existing transition contract.
+The existing schema-14→15 curation derivation (§25) is historical and is
+composed into the current offline target without intermediate runtime.
 
-The Beta-3 schema-14 → 15 curation transition is specified in §25. Older
-schema-specific preservation rules remain implementation/history concerns and
-are retained in the
-[historical technical-design record](history/technical-design-pre-version1.md#historical-part-b-material-removed-from-active-layer-4).
+Verification: all prior supported source versions plus 15/1; preserve row
+counts, identities, curation, support indexes, exact boundary history,
+receipt digest/replay and accepted obligations; prove legacy missing
+detail stays explicitly unavailable, no fabricated historical effects.
+Failure injection at archive, stage, verify, activation and rollback
+boundaries; mixed-version runtime rejects; same original request replays
+after migration. Repository-portable artifacts remain repository state,
+installation configuration/delivery state remains installation-local.
 
 ## 15. Host delivery and managed assets
 
@@ -955,6 +1062,44 @@ answer, and no read result carries another read result's data.
 | `record` (functional_pyramid) | Change participation | receipt selector, action/identity/version, participation and dependent effects |
 | `reconsider` | What must be re-established? | changed surfaces and conclusions |
 
+**Shared registered-root address capability (FD-1/62; lifecycle §4.1).**
+Use the existing registered locator callback from shell/mcp_server.py and
+installation_runtime.py to compose a single filesystem/root port. Shell
+canonicalizes roots/nearest existing ancestors and extracts existing symbol
+file locators; core containment owns deterministic deepest-root selection
+and relative rebasing. Service composition owns operation-specific scope
+validation. Thread the capability through the existing repository routing
+owner in shell/mcp, answer/evidence/lifecycle/reconsider and hooks; no second
+registry, private filesystem path output or adapter semantic inference.
+Address requests before selecting the repository runtime; identities/context
+selectors route directly as today. Normalize every local path in a request,
+validate one semantic owner before evidence/context or write; for reconsider
+union repository-qualified changed roots in one shared effect-engine call.
+Do not reinterpret retained EvidenceRefs or declarations. Native hook paths
+use this same capability. Directory path existence is checked only after
+owner resolution; deleted change paths use the nearest existing ancestor.
+
+For request retry routing, extend installation schema 2 with
+addressed_requests(addressing_repository_id TEXT NOT NULL, request_id TEXT
+NOT NULL, owner_repository_id TEXT NOT NULL, binding_kind TEXT NOT NULL,
+PRIMARY KEY(addressing_repository_id, request_id)). This is a lookup index of
+existing canonical admission or receipt owners, not a second receipt or
+request digest. Resolve it before path translation; verify original content
+against canonical owner's receipt/context binding. For new addressed
+admission/write, reserve the origin key and canonical owner key within the
+existing installation main + attached owning repository BEGIN IMMEDIATE
+transaction; check both origin binding and existing owner receipt/context.
+Conflicting binding rejects; commit the index row and context/receipt effect
+atomically, including no-op and replay. Canonical direct requests retain
+existing owner namespace; origin binding cannot shadow an existing direct
+request of the same origin key. Store original address origin and request
+payload digest in canonical context/receipt, preserving pretranslation
+content identity and allowing index reconciliation after recovery; no
+second writer or copied digest in index. For migrated pre-addressing
+contexts/receipts original origin is the canonical owner; no invented
+aliases. Do not open unrelated stores for path resolution; transaction owner
+opens only selected origin/owner stores needed for request arbitration.
+
 Directory address resolution precedes `_active_participation` in
 `FunctionalPyramidService.directory`. Reuse the registered repository ID/root
 mapping supplied by the installation/runtime composition and the existing
@@ -1064,15 +1209,11 @@ acceptance; FD-88 defines its non-predictive semantics. Preserve the compact
 projection and internal reverse traversal established by the completed
 read-API over-fetch remediation. Do not reintroduce its retired public fields.
 
-The ordered placement list is paged, not merely omitted. When it exceeds the
-response budget, the answer returns the largest fitting prefix,
-`truncated=true`, one constant omission statement and `next_after`.
-`FunctionalPyramidDirectorySelector` accepts `after` and returns the next
-deterministic page for the same original address, resolved repository/directory,
-root basis and projected path bindings, selection and declaration version. The token is opaque, versioned and uses the existing paging contract; a
-stale token returns the paging stale-continuation failure rather than silently
-restarting. `unresolved` remains explicitly unresolved; the complete finding collection
-is recoverable under FD-55–57, not silently dropped.
+Directory selection uses the §13 fitter and manifest. Bind original address,
+resolved owner/directory, projected root/path bindings and declaration version;
+`after` resolves the issued cursor for this exact selection and returns
+ResultPage. Embedded governing selections use the enclosing result cursor.
+Refer to FD-88C and P2 §4.1 for guarantees, not a separate paging grammar.
 
 ### 17.2 Functional Pyramid initialization import
 
@@ -1675,16 +1816,18 @@ installation-scoped receipts. It stores no ordinary understanding, source
 observation, verification or repository-owned governing prose.
 
 The repository-local `functional_route_dependency_index` introduced with the
-Version-1 Functional Pyramid remains part of the current repository schema
-**15**:
+Version-1 Functional Pyramid remains part of repository schema
+**16**:
 
 | repository-store table | key / purpose |
 | --- | --- |
 | `functional_route_dependency_index` | conclusion revision key + `pyramid_id` + owning `repository_id` + route identity; derived lookup projection over canonical FunctionalRouteSupport |
 
-Schema 15 also contains the Beta-3 curation persistence defined by §23/§25.
+Schema 16 preserves the schema-15 curation persistence defined by §23/§25.
 
-The installation store has its own schema identity, version 1, and owns exactly:
+The installation store target is schema 2 (§14), and owns the following
+semantic participation tables plus operational delivery and request routing
+indexes defined in §§13,17.1:
 
 | installation-store table | key / purpose |
 | --- | --- |
@@ -1701,7 +1844,7 @@ service composition revalidates member registration before committing an
 installation record.
 
 Canonical `FunctionalRouteSupport` remains inside each conclusion's existing
-canonical support dependency set. The current schema-15
+canonical support dependency set. The schema-16
 `support_dependencies` projection retains dependency kind
 `FUNCTIONAL_ROUTE`; its `dependency_ref` is the canonical route identity.
 `functional_route_dependency_index` is only a rebuildable repository-local
@@ -1828,10 +1971,9 @@ restore a public or implicit provisioning path.
 `provision_repository_runtime(InitializeRepositoryRequest)` owner rather than
 manufacturing repository/binding state through a parallel setup path.
 
-The correction is schema-neutral in its behavior. In the current Beta-3
-composition, that canonical provisioning path creates/opens repository schema
-**15** defined by Part D; installation Functional Pyramid schema **1** remains
-separate and unchanged. Historical defect evidence is retained in the Beta-3
+The historical Beta-3 correction was schema-neutral. The current provisioning
+path creates/opens repository schema 16 and installation schema 2, with
+explicit older-store transition under §14. Historical defect evidence is retained in the Beta-3
 programme record and technical-design history.
 
 The exact mechanism is:
@@ -2034,7 +2176,8 @@ successful CONCLUDE/REESTABLISH completion.
 **Authority:** G3; F4, F11, F12; L10, L15–L16; FD-17–FD-22,
 FD-79, FD-88–FD-89.
 
-Keep the existing repository-scoped changed-path/surface request grammar.
+Keep the existing changed-path/surface request grammar; §17.1 resolves
+path addresses to ordered canonical repository roots before the shared engine.
 Refactor the current reconsider dependency traversal into one service-owned
 effect engine with two internal root types:
 
@@ -2061,9 +2204,15 @@ The engine uses the repository that owns each canonical dependency index to
 discover direct dependents, resolves the semantic owner of each affected
 conclusion, re-evaluates support through the repository-qualified support
 capability, performs premise closure once without delivery max_depth/max_nodes cutting
-the semantic set, tracks reasons per exact revision, groups canonical `ChangedSurface`
+the semantic set, tracks reasons per exact revision (record indirect cause
+before visited-set dedup, so a direct seed reached as a dependent retains
+both), groups canonical `ChangedSurface`
 results by owning repository, and produces exactly one context specification for
-each repository with actionable effects. Ordinary reconsider and Functional
+each repository with actionable effects. Complete the walk before context
+issuance/manifest commit; an interrupted walk returns typed Unavailable and
+original changed-scope retry, not a partial Changed. For participation,
+raise before commit and roll back the existing transaction. §13 owns delivery
+of completed effects. Ordinary reconsider and Functional
 Pyramid writes invoke this same engine. A shell-side loop over per-repository
 semantic effect engines or a second Functional-Pyramid-specific effect
 coordinator is forbidden.
@@ -2131,12 +2280,9 @@ completion merely because a later pyramid write occurs.
 **Authority:** F2–F4, F12; L4, L12–L15; FD-35–FD-48, FD-73, FD-79,
 FD-81, FD-85.
 
-Part C introduced the installation-level Functional Pyramid store at
-installation schema **1**. That installation schema remains current.
-
-The active Beta-3 repository store is schema **15**, owned by Part D §25.
-Repository schemas **7–14** are explicit offline transition sources to schema
-15; runtime open never migrates a repository store in place.
+Part C's historical installation schema 1 and Part D's repository schema 15
+are superseded by the explicit schema-16/2 transition in §14. That section
+owns active target and supported sources.
 
 No transition fabricates Functional Pyramid participation, authority support, or
 curation approval. Repository registration and Functional Pyramid participation
@@ -2359,8 +2505,8 @@ family:
 The exact public carriers are those fixed by lifecycle §4.1. In particular,
 `PendingCurationSelector.after` is an optional exact
 `ConclusionRevisionRef` keyset cursor and `PendingCuration.next_after` is
-the exact last returned ref when truncation requires another page. No opaque
-second continuation grammar is introduced.
+the exact last returned ref when truncation requires another page. No independent delivery implementation: §13 owns ResultPage, while pending
+curation retains its exact domain keyset.
 
 `CurationDisposition` has exactly:
 
@@ -2507,7 +2653,7 @@ health writer. A query may therefore observe any combination allowed by Layer 3,
 including CURATED + non-current governance and CAPTURED + current governance;
 only CURRENT + CURATED is ordinary Answer content.
 
-### 25. Repository schema 15 and explicit transition
+### 25. Historical Beta-3 repository schema 15 transition
 
 **Authority:** A1–A3; F2–F4, F13; L4, L17; FD-42–FD-48,
 FD-95–FD-102.
@@ -2520,8 +2666,8 @@ lifecycle store:
 - installation Functional Pyramid schema remains **1**.
 
 The canonical transition owner remains `src/span/shell/store_transition.py`.
-Set its target to schema 15, add schema 14 to the supported source set, and add
-one mapping module `src/span/shell/store_transition_schema14.py`. Do not create
+The Beta-3 transition set its target to schema 15 and added schema 14 to the
+supported source set with mapping module `src/span/shell/store_transition_schema14.py`. Do not create
 another transition command or runtime migration path.
 
 The schema-14 mapping copies every existing repository table and relationship
