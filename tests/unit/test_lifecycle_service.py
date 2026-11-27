@@ -1624,19 +1624,21 @@ class LifecycleServiceTest(unittest.TestCase):
         )
         receipt = self._record_correct(target_id, 1, "sub-correct-deps")
         self.assertEqual(
-            receipt.dependent_effects,
-            (
+            receipt.accepted_effect.dependent_effects,
+            m.AcceptedDependencyEffects((m.AcceptedDependencyEffect(
+                m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/b.py"),
                 m.ConclusionRevisionRef(
                     understanding_id=m.UnderstandingId("u:dependent"),
                     conclusion_id=m.ConclusionId("c-1"),
                     revision=m.ConclusionRevisionNumber(1),
                 ),
-            ),
+                (m.ChangeReason.INDIRECT,),
+            ),)),
         )
 
         # A confirming or additive transition invalidates no premise.
         add = self._record_add(2, "sub-add-after-correct")
-        self.assertEqual(add.dependent_effects, ())
+        self.assertEqual(add.accepted_effect.dependent_effects, m.AcceptedDependencyEffects(()))
 
     # -- retention policy --------------------------------------------------
 
@@ -2453,8 +2455,7 @@ class LifecycleServiceTest(unittest.TestCase):
         self.assertEqual(version.scope, scope)
         self.assertEqual(conclusion.content.scope, scope)
         self.assertEqual(understanding.surface.locator, locator)
-        self.assertIsInstance(result.status, m.SurfaceStatus)
-        self.assertEqual(result.status.surface, understanding.surface)
+        self.assertEqual(result.surface, understanding.surface)
         return uid
 
     def test_scope_create_forms_preserve_target_version_and_conclusion(self):
@@ -2526,7 +2527,7 @@ class LifecycleServiceTest(unittest.TestCase):
         observation = self.store.list_discovery_observations("repo-1")[0]
         self.assertEqual(observation.scope, m.EvidenceScope())
         identity_context = self.store.get_context(
-            _receipt(self.store, result).identity.context_id.value
+            _receipt(self.store, result).context.context_id.value
         )
         self.assertEqual(identity_context.scope, m.EvidenceScope())
 
@@ -3348,9 +3349,8 @@ class LifecycleServiceTest(unittest.TestCase):
                 self.assertEqual(
                     _receipt(self.store, qualified), _receipt(self.store, result)
                 )
-                self.assertIsInstance(qualified.qualification, m.SupportUnavailable)
-                self.assertIsInstance(qualified.status, m.SurfaceStatusUnavailable)
-                self.assertIsNone(qualified.status.surface)
+                self.assertIsInstance(qualified, m.AcceptedDetailUnavailable)
+                self.assertNotIn(str(error), str(qualified))
 
     def test_postcommit_programming_failures_are_not_operational_unavailability(self):
         result = self.service.record(self._scope_create(locator="src/a.py"))
@@ -3552,7 +3552,7 @@ class LifecycleServiceTest(unittest.TestCase):
             )
         )
         self._assert_scopes(result, m.EvidenceScope(paths=(symbol,)), symbol)
-        self.assertEqual(result.status.surface.kind, m.SurfaceKind.SYMBOL)
+        self.assertEqual(result.surface.kind, m.SurfaceKind.SYMBOL)
 
 
 if __name__ == "__main__":

@@ -1185,14 +1185,16 @@ class LifecycleStoreTest(unittest.TestCase):
             _update_command(expected=4, submission="change-root")
         )
         self.assertEqual(
-            receipt.dependent_effects,
-            (
+            receipt.accepted_effect.dependent_effects,
+            m.AcceptedDependencyEffects((m.AcceptedDependencyEffect(
+                m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/a.py"),
                 m.ConclusionRevisionRef(
                     root.understanding_id,
                     m.ConclusionId("c-3"),
                     m.ConclusionRevisionNumber(1),
                 ),
-            ),
+                (m.ChangeReason.INDIRECT,),
+            ),)),
         )
 
     def test_support_dependency_index(self) -> None:
