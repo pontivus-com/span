@@ -468,7 +468,9 @@ class OpencodeScopeTest(unittest.TestCase):
                         os.environ,
                         {
                             "XDG_CONFIG_HOME": str(config_home),
-                            "PATH": str(foreign.parent) + os.pathsep + os.environ["PATH"],
+                            "PATH": str(foreign.parent)
+                            + os.pathsep
+                            + os.environ["PATH"],
                         },
                     ),
                     mock.patch.object(cli_module, "wire_codex_hooks", return_value={}),
@@ -3150,9 +3152,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             mock.patch("span.shell.install.verify.verify_installation") as verify,
             self.assertRaisesRegex(SystemExit, "configured Span executable"),
         ):
-            install.doctor(
-                str(self.venv_python), "/d", [], None, bin_dir=self.bin_dir
-            )
+            install.doctor(str(self.venv_python), "/d", [], None, bin_dir=self.bin_dir)
         verify.assert_not_called()
 
     def test_verify_only_is_the_only_verification_flag(self):
