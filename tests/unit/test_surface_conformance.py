@@ -46,17 +46,41 @@ def _fd38_section() -> str:
     return doc.split("**FD-38 — Closed unions.**", 1)[1].split("**FD-39", 1)[0]
 
 
-def _lifecycle_ask_union() -> set[str]:
+def _lifecycle_section(start: str, end: str) -> str:
     doc = (DOCS / "lifecycle-contract.md").read_text(encoding="utf-8")
-    section = doc.split("**The agent receives** exactly one of:", 1)[1]
-    names: set[str] = set()
-    for line in section.splitlines():
-        if not line.startswith("| `"):
-            if names:
-                break
-            continue
-        names.add(line.split("|")[1].strip().strip("`"))
-    return names
+    section = doc.partition(start)
+    if not section[1] or end not in section[2]:
+        raise AssertionError(f"missing lifecycle section {start!r} / {end!r}")
+    return section[2].split(end, 1)[0]
+
+
+def _lifecycle_ask_union() -> set[str]:
+    section = _lifecycle_section("### 4.1 `ask`", "### 4.2 `record`")
+    table = re.search(
+        r"^\| Result \| Meaning \|\n\|[^\n]+\|\n"
+        r"((?:\| `[A-Z][A-Za-z0-9]+` \|[^\n]*\n)+)",
+        section,
+        re.M,
+    )
+    if table is None:
+        raise AssertionError("missing lifecycle ask result table")
+    return set(re.findall(r"^\| `([A-Z][A-Za-z0-9]+)` \|", table.group(1), re.M))
+
+
+def _lifecycle_record_union() -> set[str]:
+    section = _lifecycle_section("### 4.2 `record`", "### 4.3 `reconsider`")
+    result = re.search(r"\*\*The agent receives\*\* exactly one of ([^.]+)\.", section)
+    if result is None:
+        raise AssertionError("missing lifecycle record result declaration")
+    return _backticked(result.group(1))
+
+
+def _lifecycle_reconsider_union() -> set[str]:
+    section = _lifecycle_section("### 4.3 `reconsider`", "## 5. The internal boundary")
+    result = re.search(r"Results are a closed union: ([^.]+)\.", section)
+    if result is None:
+        raise AssertionError("missing lifecycle reconsider result declaration")
+    return _backticked(result.group(1))
 
 
 def _mcp_record_union() -> set[str]:
@@ -102,6 +126,76 @@ class SurfaceConformanceTest(unittest.TestCase):
         self.assertFalse({"routes", "provenance", "health"} & properties)
         self.assertNotIn("FunctionalDocumentRoute", schema["$defs"])
         self.assertNotIn("FunctionalRouteProvenance", schema["$defs"])
+
+    def test_public_result_schemas_exclude_private_semantic_carriers(self):
+        """P2 §4.2/§5, API-10/15/18: inspect all reachable definitions."""
+        # The canonical generator already prunes definitions unreachable
+        # from each output root. This includes nested and tagged variants.
+        private = {
+            "AuthorityBinding",
+            "AuthoritySupportDependency",
+            "ConclusionRevision",
+            "DependencyFinding",
+            "DiscoverySupport",
+            "FunctionalRouteIdentity",
+            "FunctionalRouteSupport",
+            "PremiseSupport",
+            "RecordReceipt",
+            "SemanticBasis",
+            "SourceSupport",
+            "SupportEvaluation",
+            "SupportedConclusion",
+            "UnderstandingSupport",
+            "WithdrawnConclusion",
+        }
+        for tool in TOOL_NAMES:
+            with self.subTest(tool=tool):
+                definitions = TOOL_OUTPUT_SCHEMAS[tool]["$defs"]
+                reachable = {name.removesuffix("__tag") for name in definitions}
+                self.assertEqual(private & reachable, set())
+
+    def test_public_result_schema_fields_match_consumer_boundary(self):
+        """API-01/02/03/11/14/19: assert the owning result shapes."""
+        cases = (
+            (
+                "ask",
+                "FunctionalPyramidStatus",
+                {"member_repository_ids", "findings"},
+                {"members"},
+            ),
+            (
+                "ask",
+                "FunctionalPyramidCandidate",
+                {"activation_ready", "validation_findings", "graph_findings"},
+                {"members"},
+            ),
+            (
+                "record",
+                "FunctionalPyramidRecorded",
+                {"receipt_selector", "participation_effects", "dependent_effects"},
+                {"members"},
+            ),
+            (
+                "record",
+                "UnderstandingRecorded",
+                {"receipt_selector", "revision_effects", "surface"},
+                {"affected_revisions", "qualification", "status"},
+            ),
+            (
+                "record",
+                "SurfaceDeclared",
+                {"receipt_selector", "committed_at", "surface", "boundary_version"},
+                set(),
+            ),
+        )
+        for tool, carrier, required, forbidden in cases:
+            with self.subTest(tool=tool, carrier=carrier):
+                fields = set(
+                    TOOL_OUTPUT_SCHEMAS[tool]["$defs"][f"{carrier}__tag"]["properties"]
+                )
+                self.assertEqual(
+                    (required - fields, forbidden & fields), (set(), set())
+                )
 
     def test_ask_has_no_context_input(self):
         text = json.dumps(TOOL_SCHEMAS["ask"])
@@ -654,8 +748,14 @@ class SurfaceConformanceTest(unittest.TestCase):
         ask = _runtime_union(m.AskResult)
         record = _runtime_union(m.RecordResult)
         reconsider = _runtime_union(m.ReconsiderResult)
-        self.assertEqual(_lifecycle_ask_union(), ask)
-        self.assertEqual(_mcp_record_union(), record)
+        for name, declared, actual in (
+            ("ask", _lifecycle_ask_union(), ask),
+            ("record", _lifecycle_record_union(), record),
+            ("reconsider", _lifecycle_reconsider_union(), reconsider),
+            ("record guide", _mcp_record_union(), record),
+        ):
+            with self.subTest(tool=name):
+                self.assertEqual(declared, actual)
         # FD-38 owns the invariant, not a second copy of the unions.
         section = _fd38_section()
         self.assertNotIn("`ask` →", section)

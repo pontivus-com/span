@@ -417,6 +417,11 @@ are also valid only for the bound stale-effect restart):
 | `RetrievedReceipt` | Exact immutable repository-scoped ordinary receipt retrieval |
 | `RetrievedFunctionalPyramidReceipt` | Exact immutable installation-scoped Functional Pyramid receipt retrieval |
 | `ResultPage` | Exact typed collection slices of a bound initial selection; no new semantic decision or write |
+| `Changed` | Refreshed initial result only for bound stale-effect restart |
+| `UnderstandingRecorded` | Refreshed accepted outcome only for bound stale-effect restart |
+| `VerificationRecorded` | Refreshed accepted outcome only for bound stale-effect restart |
+| `FunctionalPyramidRecorded` | Refreshed accepted outcome only for bound stale-effect restart |
+| `Challenged` | Refreshed accepted opening only for bound stale-effect restart |
 | `FunctionalPyramidStatus` | Exact durable participation/instance state and live health for a Functional Pyramid selector |
 | `FunctionalPyramidView` | Applicable document placements and the declared/absent layer summary for a directory or semantic-scope lookup |
 | `FunctionalPyramidParticipation` | UNCONFIGURED or EXCLUDED participation for a directory lookup |

@@ -634,7 +634,7 @@ claims of already passing tests.
 
 ### Ordered implementation tasks (all OPEN)
 
-**PUB-01 — Executable baseline and conformance preflight.** Before production
+**PUB-01 — Executable baseline and conformance preflight (IN PROGRESS).** Before production
 changes, generate the actual three tool request/result schemas at the pinned
 source baseline and recursively enumerate every reachable public carrier,
 including nested unions, optional fields, errors and actual free-text
@@ -655,6 +655,21 @@ paths. Verify the concrete schema-16/2 and ResultPage contracts; no design
 delegation to implementers. Gate: actual baseline and recursive generated
 schema evidence; discrepancies stop at governing owner before code. All
 nine review corrections are assigned below; no silent extra scope.
+
+**PUB-01 baseline execution record.** Documentation candidate `36a3e77b6d8f`
+CI run 45951210720, test job 140347349335: lint, formatting, typing and build
+passed; 1,037 tests passed, one failed and one skipped. Existing
+`SurfaceConformanceTest.test_result_union_declarations_agree` failed on its
+obsolete Markdown delimiter before comparing result families. Correct that
+parser at the existing conformance owner (no weakened equality checks), make
+the conditional restart families explicit in P2's ask table, and add
+failure-before assertions over the actual generated output schema definitions
+and selected public result fields for API-01/02/03/10/11/14/15/18/19. These
+assertions are target regressions, not preservation of the defective shapes;
+they are expected to expose baseline failures until their owning tasks fix
+them. The full recursive field/provider audit, real wire failure-before
+coverage, path consumer tests and independent conformance review remain
+OPEN. No production change is authorized until PUB-01's gate is satisfied.
 
 **Architecture acceptance applies at each PUB task gate.** TD §9.2's
 remediation construction ownership is binding. PUB-01 records actual
