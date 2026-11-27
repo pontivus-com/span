@@ -294,6 +294,38 @@ class ReconsiderServiceTest(unittest.TestCase):
             ),
         )
 
+    def test_reasons_are_specific_to_the_revision_not_its_surface(self) -> None:
+        self._create(
+            "u-b-direct",
+            "src/b.py",
+            "src/b.py",
+            m.SourceSupport(observation_id=m.SourceObservationId("obs-a")),
+        )
+        result = self.service.reconsider(
+            m.ReconsiderRequest(
+                repository_id="repo-1",
+                changed_paths=("src/a.py",),
+            )
+        )
+        assert isinstance(result, m.Changed)
+        affected = next(
+            item for item in result.surfaces if item.surface.locator == "src/b.py"
+        )
+        reasons = {
+            item.ref.understanding_id.value: set(item.reasons)
+            for item in affected.conclusions
+        }
+        self.assertEqual(
+            reasons,
+            {
+                "u-b": {m.ChangeReason.INDIRECT},
+                "u-b-direct": {m.ChangeReason.DIRECT},
+            },
+        )
+        self.assertEqual(
+            set(affected.reasons), {m.ChangeReason.DIRECT, m.ChangeReason.INDIRECT}
+        )
+
     def test_curated_revision_reconsiders_without_mutating_curation(self) -> None:
         self.store.record_understanding(
             m.UpdateUnderstandingCommand(
@@ -433,7 +465,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(result.surfaces[0].surface.locator, "docs/readme.md")
         self.assertEqual(result.surfaces[0].conclusions, ())
 
-    def test_bound_reports_truncation_not_unaffected(self) -> None:
+    def test_result_bound_does_not_cut_dependency_discovery(self) -> None:
         policy = m.ServiceBoundsPolicy(
             default_query_bounds=m.QueryBounds(
                 max_results=1,
@@ -463,19 +495,22 @@ class ReconsiderServiceTest(unittest.TestCase):
                 max_candidate_relationships=1,
             ),
         )
-        service = self._service(policy=policy)
-        result = service.reconsider(
+        effects = self._effects(policy=policy)
+        result = effects.repository_change(
             m.ReconsiderRequest(
                 repository_id="repo-1",
                 changed_paths=("src/a.py",),
-            )
+            ),
+            issue_contexts=False,
         )
-        self.assertTrue(result.truncated)
-        self.assertEqual(len(result.surfaces), 1)
-        self.assertEqual(result.unaffected, ())
-        self.assertTrue(result.omitted)
+        self.assertFalse(result.truncated)
+        self.assertEqual(
+            {item.surface.locator for item in result.surfaces},
+            {"src/a.py", "src/b.py", "svc"},
+        )
+        self.assertEqual(result.reestablishment_contexts, ())
 
-    def test_depth_bound_stops_the_walk_and_reports_the_limit(self) -> None:
+    def test_depth_bound_does_not_cut_dependency_discovery(self) -> None:
         self._create(
             "u-c",
             "src/c.py",
@@ -502,22 +537,18 @@ class ReconsiderServiceTest(unittest.TestCase):
             maximum_query_bounds=bounds,
             hook_fast_bounds=bounds,
         )
-        service = self._service(policy=policy)
-        result = service.reconsider(
+        effects = self._effects(policy=policy)
+        result = effects.repository_change(
             m.ReconsiderRequest(
                 repository_id="repo-1",
                 changed_paths=("src/a.py",),
-            )
+            ),
+            issue_contexts=False,
         )
-        self.assertTrue(result.truncated)
-        self.assertEqual(result.unaffected, ())
-        self.assertTrue(
-            any("traversal bound" in item for item in result.omitted),
-            result.omitted,
-        )
-        locators = [item.surface.locator for item in result.surfaces]
-        self.assertIn("src/b.py", locators)
-        self.assertNotIn("src/c.py", locators)
+        self.assertFalse(result.truncated)
+        locators = {item.surface.locator for item in result.surfaces}
+        self.assertTrue({"src/b.py", "src/c.py"} <= locators)
+        self.assertEqual(result.reestablishment_contexts, ())
 
     def test_installation_effect_engine_uses_repository_runtime(self) -> None:
         self._create(

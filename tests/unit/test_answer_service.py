@@ -1006,6 +1006,24 @@ class AnswerServiceTest(unittest.TestCase):
                 )
             )
 
+    def test_exact_question_status_excludes_unrelated_capture(self) -> None:
+        self._create("u-unrelated", "src/a.py", "Another question?", curate=False)
+        result = self.service.ask(
+            m.AskRequest(
+                selector=m.RecordedQuestionSelector(
+                    repository_id="repo-1",
+                    surface=m.SurfaceReference(
+                        kind=m.SurfaceKind.FILE, locator="src/a.py"
+                    ),
+                    question="What does A do?",
+                )
+            )
+        )
+        assert isinstance(result, m.Answer)
+        self.assertEqual(result.status.current, 1)
+        self.assertEqual(result.status.pending, 0)
+        self.assertEqual(result.status.pending_refs, ())
+
     def test_exact_question_without_membership_is_unassessed(self) -> None:
         result = self.service.ask(
             m.AskRequest(
@@ -1099,7 +1117,12 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(off_scope.verification, ())
 
     def _record_verification_paths(
-        self, request_id: str, paths: tuple[str, ...]
+        self,
+        request_id: str,
+        paths: tuple[str, ...],
+        *,
+        description: str | None = None,
+        observed_at: datetime.datetime = NOW,
     ) -> m.RecordReceipt:
         verification_context = m.InvestigationContextId(f"ctx-{request_id}")
         self.store.put_context(
@@ -1125,14 +1148,14 @@ class AnswerServiceTest(unittest.TestCase):
                 run=m.ProposedVerificationRun(
                     repository_id="repo-1",
                     scope=m.VerificationScope(
-                        description=request_id,
+                        description=description or request_id,
                         scope=m.EvidenceScope(paths=paths),
                     ),
                     observations=(m.SourceObservationId("obs-a"),),
                     command="python3 -m unittest",
                     scenario=None,
                     outcome=m.VerificationOutcome.PASS,
-                    observed_at=NOW,
+                    observed_at=observed_at,
                     observer="test",
                 ),
             )
@@ -1444,6 +1467,18 @@ class AnswerServiceTest(unittest.TestCase):
     def test_directory_scoped_run_covers_files_under_it(self) -> None:
         self._record_verification_paths("req-dir", ("src",))
         result = self._ask("src/a.py", "What does A do?", "req-dir-ask")
+        assert isinstance(result, m.Answer)
+        self.assertEqual(len(result.verification), 1)
+
+    def test_repeated_verification_is_selected_by_relevance(self) -> None:
+        for age, request in enumerate(("repeated-a", "repeated-b")):
+            self._record_verification_paths(
+                request,
+                ("src/a.py",),
+                description="Same verification scope",
+                observed_at=NOW - datetime.timedelta(minutes=age),
+            )
+        result = self._ask("src/a.py", None)
         assert isinstance(result, m.Answer)
         self.assertEqual(len(result.verification), 1)
 

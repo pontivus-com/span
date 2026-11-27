@@ -178,13 +178,25 @@ class SurfaceConformanceTest(unittest.TestCase):
             (
                 "record",
                 "UnderstandingRecorded",
-                {"receipt_selector", "revision_effects", "surface"},
+                {
+                    "receipt_selector",
+                    "revision_effects",
+                    "surface",
+                    "challenge_dispositions",
+                    "reestablishment_contexts",
+                },
                 {"affected_revisions", "qualification", "status"},
             ),
             (
                 "record",
                 "SurfaceDeclared",
                 {"receipt_selector", "committed_at", "surface", "boundary_version"},
+                set(),
+            ),
+            (
+                "reconsider",
+                "Challenged",
+                {"receipt_selector", "committed_at", "prior_conclusions", "context"},
                 set(),
             ),
         )

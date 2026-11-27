@@ -1699,6 +1699,50 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         }
         self.assertIn(unchanged_observation, support_ids)
 
+    async def test_parent_address_admits_evidence_at_registered_child(self) -> None:
+        child_id = "repo-child"
+        child = self.repo / "projects" / child_id
+        _write(child, "src/child.py", "child source\n")
+        store = LifecycleStore(
+            self.data / f"{child_id}.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+        store.register_repository(child_id, str(child.resolve()))
+        store.close()
+
+        async def journey(session: ClientSession) -> dict:
+            member = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": child_id,
+                    "surface": {"kind": "FILE", "locator": "src/child.py"},
+                },
+            )
+            parent_path = f"projects/{child_id}/src/child.py"
+            parent = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "surface": {"kind": "FILE", "locator": parent_path},
+                },
+            )
+            self.assertEqual(parent["surface"], member["surface"])
+            return await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "nested-admission",
+                    "surface": {"kind": "FILE", "locator": parent_path},
+                    "evidence": [{"locator": parent_path}],
+                },
+            )
+
+        result = await self._session(journey, extra_repos=(child,))
+        self.assertEqual(result["admission"]["context"]["repository_id"], child_id)
+
     async def test_live_context_cannot_be_misrouted_to_another_repository(self) -> None:
         other_id = "repo-other"
         other = self.repo.parent / other_id

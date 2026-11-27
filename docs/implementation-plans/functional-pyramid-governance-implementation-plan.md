@@ -671,6 +671,27 @@ them. The full recursive field/provider audit, real wire failure-before
 coverage, path consumer tests and independent conformance review remain
 OPEN. No production change is authorized until PUB-01's gate is satisfied.
 
+**PUB-01 execution update (2026-11-27).** CI 45952859693 at
+`a84ffc5475803` completed: lint/format, typing and build passed;
+1,039 passed, 12 failed, one skipped (226 passing subtests).
+Eleven target conformance subtests established failure-before for the
+result unions, private carrier reachability and five compact result shapes.
+One unintended measured test-lines regression was 35,240 → 35,340.
+Reconcile that measured metric and the exact additional test-line delta
+(+122, target 35462) in tests/code_budget_baseline.json, without changing
+the gate or any production metric. The new tests target exact-question
+population (API-05), repeated verification selection (API-06), complete
+effect discovery independent of query bounds (API-16), per-revision
+attribution (API-20), challenge opening fields (API-17), and installed
+parent-addressed admission (API-23). The two older tests that required
+semantic truncation are corrected against FD-20/54–57: their old expected
+behavior is the defect, not a compatibility requirement. Their replacements
+inspect the shared engine before delivery and require all affected surfaces,
+without issuing contexts. Preserve all real delivery-bound checks in their
+existing owner tests. New probes await execution; do not claim PUB-01 closure.
+Remaining full provider/consumer/schema audit and all dependent gates stay
+OPEN. Existing intentional red assertions are not waived or xfailed.
+
 **Architecture acceptance applies at each PUB task gate.** TD §9.2's
 remediation construction ownership is binding. PUB-01 records actual
 source owner/call-site inventory, planned replacement/deletion of superseded
