@@ -94,14 +94,11 @@ class UnderstandService:
                 self._store.get_verification_run(run_id.value)
                 for run_id in receipt.accepted_verification_run_ids
             )
-        except self._store.operational_errors:
-            return m.Unavailable(
-                operation="ask",
-                failure="accepted receipt references unavailable retained history",
-                recovery=(
-                    "report the unavailable history and preserve the receipt; "
-                    "do not repeat the historical write"
-                ),
+        except (OSError,) + self._store.operational_errors:
+            return m.RetrievedReceipt(
+                receipt_selector=request,
+                committed_at=receipt.committed_at,
+                accepted_effect=self.unavailable_acceptance(receipt),
             )
         accepted_effect: (
             m.AcceptedVerificationReceipt | m.HistoricalAcceptanceDetailUnavailable

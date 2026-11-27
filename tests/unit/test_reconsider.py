@@ -1156,6 +1156,37 @@ class ReconsiderServiceTest(unittest.TestCase):
                 )
             )
 
+    def test_challenge_rejects_mismatched_admitted_evidence(self) -> None:
+        import dataclasses
+
+        self.store.add_context_evidence(CONTEXT_ID.value, "obs-a")
+        admitted = self.store.get_source_observation("obs-a").evidence
+        forged = dataclasses.replace(admitted, revision_or_fingerprint="other")
+        challenge = m.ChallengeRaise(
+            request_id="req-challenge-exact-evidence",
+            context=m.InvestigationContextRef("repo-1", CONTEXT_ID),
+            understanding_id="u-a",
+            target_version=1,
+            target_conclusions=(m.ChallengeConclusionRef("u-a", "c-1", 1),),
+            reason="Check this.",
+            evidence=(forged,),
+        )
+        with self.assertRaisesRegex(RecordingValidationError, "not admitted"):
+            self.service.reconsider(m.ReconsiderRequest(challenge=challenge))
+        accepted = self.service.reconsider(
+            m.ReconsiderRequest(
+                challenge=dataclasses.replace(challenge, evidence=(admitted,))
+            )
+        )
+        assert isinstance(accepted, m.Challenged)
+        self.assertEqual(accepted.challenge.evidence, (admitted,))
+        replay = self.service.reconsider(
+            m.ReconsiderRequest(
+                challenge=dataclasses.replace(challenge, evidence=(admitted,))
+            )
+        )
+        self.assertEqual(accepted, replay)
+
     def test_discovery_membership_change_is_direct(self) -> None:
         evidence = FilesystemEvidenceSource("repo-1", self.root)
         pairs, _ = evidence.list_inventory_entries(

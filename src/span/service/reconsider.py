@@ -140,15 +140,17 @@ class ReconsiderService:
                 version=version,
             )
         )
-        for reference in challenge.evidence:
-            admitted = self._store.find_admitted_evidence(
-                context_id.value, reference.evidence_id.value
-            )
-            if admitted is None:
-                raise RecordingValidationError(
-                    f"challenge evidence {reference.evidence_id.value!r} is not "
-                    f"admitted in context {context_id.value}"
-                )
+        if challenge.evidence:
+            admitted = {
+                observation.evidence
+                for observation in self._store.list_context_evidence(context_id.value)
+            }
+            for reference in challenge.evidence:
+                if reference not in admitted:
+                    raise RecordingValidationError(
+                        f"exact challenge evidence {reference.evidence_id.value!r} "
+                        f"is not admitted in context {context_id.value}"
+                    )
         command = self._challenge_command(repository_id, challenge, context_id)
         receipt = self._store.record_challenge(
             command, content_digest=record_content_digest(command)
