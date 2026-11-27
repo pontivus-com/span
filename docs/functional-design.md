@@ -994,7 +994,7 @@ The combined evaluation lists every non-current dependency with its state and
 reason, so a definite finding is not lost inside an `UNVERIFIABLE` summary.
 Project each finding from its typed dependency, not its diagnostic string:
 source → admitted evidence identity/ranges; discovery → declared scope;
-authority → canonical evidence; premise → exact revision; route → pyramid and
+authority → canonical evidence and recorded classification; premise → exact revision; route → pyramid and
 semantic scope. Audit projects all retained dependencies by the same rule.
 If required historical coordinates cannot be recovered, retain the typed
 unavailable basis and reason; do not infer authority or invent evidence.
@@ -1910,7 +1910,8 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 71. **Public findings.** FD-88B applies across all public governance results;
     internal reasons/locators never leak.
 72. **Complete bounded retrieval.** FD-88C directory continuation returns all
-    applicable placements in deterministic pages with complete unresolved state.
+    applicable placements and findings in deterministic pages, never a false
+    resolved state or unrecoverable omission.
 73. **Installed runtime identity.** FD-88A verifies the actual requested build
     across checkout and distribution installation, including same-version
     differing builds and absent/stale identity; verification is observational.

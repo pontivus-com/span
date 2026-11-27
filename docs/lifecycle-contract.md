@@ -47,7 +47,7 @@ derivation; this layer references rather than restates Layers 0–1.
 | **Functional Pyramid participation state** | Durable repository participation is exactly `UNCONFIGURED`, `EXCLUDED`, or `ACTIVE`. Only an accepted Functional Pyramid `record` changes it. |
 | **Functional Pyramid health** | Live qualification of an ACTIVE pyramid: `VALID` or `DEGRADED`, computed from present declarations/member availability and never persisted by a hidden read-time transition. |
 | **Functional Pyramid totality** | An ACTIVE member governs every directory in its repository. A mandatory repository-root-scoped P0 placement guarantees that every directory resolves to at least the foundational documents. Span reports declared and absent layers; it never returns an uncovered-path outcome and never invents documentation. |
-| **Functional Pyramid view** | The governing projection for one directory or semantic scope: the applicable whole-document placements, the declared/absent layer summary and unresolved public findings. A truncated placement list is continued through the directory selector's `after` token. Governing edges, reverse dependencies, per-path provenance, internal findings and authority-binding payloads are internal resolution state, not part of this projection. |
+| **Functional Pyramid view** | The governing projection for one directory or semantic scope: the applicable whole-document placements, the declared/absent layer summary and unresolved public findings. A truncated directory selection is continued through its `after` token; embedded orientation uses the enclosing result continuation. Governing edges, reverse dependencies, per-path provenance, internal findings and authority-binding payloads are internal resolution state, not part of this projection. |
 | **Route support** | Server-derived support binding a normative conclusion to the exact Functional Pyramid route that applied when the conclusion was established. |
 
 An understanding may be unsupported or captured-but-uncurated. An **Answer is
@@ -265,6 +265,14 @@ superseded/disposed refs, or recover the exact changed-scope/receipt selection.
 Identical replay against unchanged binding returns the same page across restart.
 Invalid/expired/unavailable tokens have typed public recovery, not raw diagnostics.
 
+Directory view paging uses `next_after`; embedded view paging is owned by the
+enclosing Answer/Gap continuation, not a second directory selector or duplicate
+omission inventory. Status/activation_ready/route state is derived from the
+full selection; incomplete findings are explicitly marked and recoverable.
+No empty page overrides a non-empty complete finding set. A post-commit
+detail failure may have `truncated=true`, no live continuation and explicit
+receipt recovery; the accepted receipt is the recovery address.
+
 Every result fits its minimum safe envelope. An accepted write always returns
 its receipt selector and committed identity even if further delivery or live
 qualification is unavailable; recover via exact receipt. If the acceptance
@@ -284,6 +292,8 @@ and VerificationHistory are additionally valid only for bound continuation):
 | `RetrievedReceipt` | Exact immutable repository-scoped ordinary receipt retrieval |
 | `RetrievedFunctionalPyramidReceipt` | Exact immutable installation-scoped Functional Pyramid receipt retrieval |
 | `EvidencePage` | A continuation page for previously selected evidence outcomes and deliveries |
+| `VerificationHistory` | Older applicable verification, accessible only by bound history continuation |
+| Continued record/reconsider result | Next page of exact accepted or affected selection, never a new write |
 | `FunctionalPyramidStatus` | Exact durable participation/instance state and live health for a Functional Pyramid selector |
 | `FunctionalPyramidView` | Applicable document placements and the declared/absent layer summary for a directory or semantic-scope lookup |
 | `FunctionalPyramidParticipation` | UNCONFIGURED or EXCLUDED participation for a directory lookup |
@@ -419,10 +429,11 @@ parallel setup DTOs.
   `member_repository_ids: tuple[str, ...]`, and
   `findings: tuple[FunctionalPyramidPublicFinding, ...]`, plus result-page fields.
   Declaration source inventory is not status content.
-  Pyramid identity/version and members are absent/empty and health is `None`
+  Pyramid identity/version and member_repository_ids are absent/empty and health is `None`
   for UNCONFIGURED and EXCLUDED. ACTIVE always reports present live health.
-  `health=VALID` requires `findings=()`; `health=DEGRADED` requires the
-  non-empty current structural finding set that caused degradation.
+  `health=VALID` requires an empty complete finding set; `health=DEGRADED`
+  requires a non-empty complete structural finding set across pages. Health
+  is independent of page length.
 - `FunctionalPyramidCandidate` carries
   the requested `action: ACTIVATE | REVISE`,
   target `pyramid_id/version` when revising,
@@ -509,8 +520,8 @@ Malformed selector structure is `Rejected`, not a validation finding.
 `MEMBER_ALREADY_ACTIVE` means ACTIVE in a different pyramid; a retained member
 of the target REVISE pyramid is valid. Operational inability to evaluate an
 otherwise valid candidate is `Unavailable`.
-`activation_ready=true` requires empty validation findings and no structurally
-unresolved graph finding in the candidate declarations. An ancestor-scoped
+`activation_ready=true` requires empty complete validation and structural
+finding sets; an empty page alone proves nothing. An ancestor-scoped
 placement covering a directory without a narrower placement is normal
 declaration practice, not a candidate graph finding or activation blocker.
 Authority status/content currency is not a candidate-graph condition
@@ -558,8 +569,16 @@ Ordinary surface obtain reports its own distribution and immediate child
 summaries separately. Exact question/current-understanding obtain reports only
 the selected membership's distribution and pending/stale refs, not unrelated
 surface/descendant status. For exact membership `unexamined` and descendants
-are absent: boundary coverage is not a question property. Each child summary
-carries its exact surface key and distribution, obtainable through ordinary ask.
+are absent: boundary coverage is not a question property. Each child summary carries its exact surface key and distribution, obtainable
+through ordinary ask. `SurfaceStatus` carries `surface: SurfaceKey`,
+`current`, `pending`, `stale`, `unassessed` (non-negative counts),
+`pending_refs: tuple[PendingConclusionRef, ...]`,
+`stale_refs: tuple[StaleConclusionRef, ...]`, and, on ordinary surface obtain,
+`unexamined: int`, `unexamined_limited: bool`, and
+`descendants: tuple[SurfaceStatusSummary, ...]`. `SurfaceStatusSummary` carries
+`surface`, `current`, `pending`, `stale`, `unassessed`, `unexamined`,
+`unexamined_limited` and no nested refs or descendants. The enclosing result
+page owns omission and continuation. A count is never the length of a page.
 
 `pending_refs` names each CURRENT-support, current-membership CAPTURED
 conclusion by exact revision identity and owning understanding version.
@@ -686,7 +705,7 @@ boundary and optional parent. `action="update"` requires
 `expected_boundary_version` and advances exactly one boundary version. A
 declared surface must exist before an understanding is recorded against it;
 the service never auto-declares a surface from an understanding. The result is
-`SurfaceDeclared` with accepted surface/boundary version, action, receipt
+`SurfaceDeclared` with accepted surface identity/boundary version, action, receipt
 selector and committed time. Surface writes use ordinary repository-scoped
 request receipt/CAS without investigation context. An identical retry returns
 the originally accepted boundary even after later updates.
@@ -900,8 +919,8 @@ call.
 scope. Routine Answer returns the most recent observation(s) for each distinct
 applicable declared scope, description, command, scenario and environment-
 limitation group, with outcome, time, provenance and live qualification. Tied
-conflicting latest outcomes remain explicit. Older applicable runs are
-recoverable by an opaque `verification_history: str | None` continuation;
+conflicting latest outcomes remain explicit. Older applicable runs are recoverable by `Answer.verification_history:
+str | None` (opaque continuation; absent when there are none);
 its history-only result is `VerificationHistory` with `verification: tuple[VerificationView, ...]`
 and result-page fields, bound to the original exact selection. Historical runs
 never masquerade as the latest outcome. A narrow run does not verify a broader
@@ -928,24 +947,28 @@ fields, plus result-page fields for variable collections:
 | --- | --- |
 | `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `surface: SurfaceKey`, `revision_effects: tuple[RecordedRevisionEffect, ...]`, `challenge_dispositions: tuple[AcceptedChallengeDisposition, ...]`, `dependent_effects: tuple[ConclusionRevisionRef, ...]` |
 | `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `run_id: VerificationRunId`, `command: str \| None`, `scenario: str \| None`, `outcome: VerificationOutcome`, `qualification: VerificationQualification \| SupportUnavailable` |
-| `SurfaceDeclared` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `action: create \| update`, `surface: Surface` |
+| `SurfaceDeclared` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `action: create \| update`, `surface: SurfaceKey`, `boundary_version: int` |
 | `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `action: ACTIVATE \| REVISE \| DEACTIVATE \| EXCLUDE`, `pyramid_id: FunctionalPyramidId \| None`, `version: FunctionalPyramidVersion \| None`, `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`, `dependent_effects: tuple[ChangedSurface, ...]`, `reestablishment_contexts: tuple[InvestigationContextRef, ...]` |
 
-`RecordedRevisionEffect` carries `ref: ConclusionRevisionRef`,
+`AcceptedRevisionEffect` is the immutable fact: `ref: ConclusionRevisionRef`,
 `action: CREATE | ADD | CONFIRM | CORRECT | REPLACE | WITHDRAW | CURATE`,
 `changed: bool` (false only for accepted no-op confirmation),
-`maturity: CurationState | None` (absent for withdrawal),
+`maturity: CurationState | None` (absent for withdrawal), and
+`replaced_ref: ConclusionRevisionRef | None` (required only for REPLACE).
+`RecordedRevisionEffect` carries `effect: AcceptedRevisionEffect` and
 `qualification: SupportQualification | SupportUnavailable | None` (absent
-for withdrawal). REPLACE additionally carries `replaced_ref: ConclusionRevisionRef`.
+for withdrawal).
 Maturity is at the accepted understanding version, independent of live support.
 The receipt retains exact accepted action/ref facts including no-op confirmation;
 gap-only/disposition-only updates have no revision effect. Unchanged membership
 is not an effect. The dependent set names other affected revisions.
 Owner-wide status and full membership are not acceptance content.
 
-`AcceptedChallengeDisposition` carries `challenge_id: ChallengeId`,
-`challenge_revision: ChallengeRevision`, `state: ChallengeState` and the
-accepted `disposition: ChallengeDispositionRecord` (resolved or unresolved).
+`AcceptedChallengeDisposition` carries `challenge_id: ChallengeId` and the
+accepted `disposition: ChallengeDispositionRecord` (closed resolved/unresolved
+alternatives containing exact challenge_revision and disposition details).
+The discriminator states the accepted disposition; no duplicate revision/state
+fields.
 The resulting version, exact resulting/withdrawn refs, or remaining question
 and basis are the accepted disposition, not later live challenge state.
 
@@ -963,8 +986,12 @@ AUTHORITY with `evidence: EvidenceRef`; PREMISE with
 public reason and recovery if recorded coordinates cannot be recovered.
 Never serialize AuthorityBinding, private dependency union, route identity,
 discovery fingerprint or evaluator diagnostics. All non-current findings are
-recoverable. The same projection describes all retained dependencies in exact
-audit, without another evaluator or stored support representation.
+recoverable. The same projection describes all retained dependencies in exact audit,
+without another evaluator or stored support representation. SOURCE empty
+ranges mean whole file. AUTHORITY also carries recorded authority_kind and
+status as semantic audit facts, not the AuthorityBinding carrier; declared
+applicability and precedence remain internal unless an exact cited semantic
+conclusion states them.
 
 `ObservationQualification` carries `observation_id` and `evaluation: SupportQualification`.
 `VerificationQualification` carries `state`, `observed_at`, `limitations`,
@@ -995,8 +1022,8 @@ attached retroactively. Live qualification does not rewrite the snapshot.
 
 **Receipt audit.** `RetrievedReceipt` carries receipt_selector, committed_at,
 a closed accepted-effect branch and result-page fields: understanding
-ID/version and accepted revision action/ref/maturity facts (no live
-qualification), challenge dispositions and dependent refs; verification runs
+ID/version, `revision_effects: tuple[AcceptedRevisionEffect, ...]` (no live
+qualification), accepted challenge dispositions and dependent refs; verification runs
 exactly named by the receipt; surface action and accepted boundary; or accepted
 challenge opening identity and target refs. Use the existing canonical accepted
 facts, not raw RecordReceipt. A usable context reference may accompany challenge
@@ -1099,7 +1126,13 @@ actionable, while historical revisions remain traversable as dependencies.
 `reasons: tuple[ChangeReason, ...]` and `support: SupportQualification |
 SupportUnavailable`. Surface reasons are the separate aggregate. `Changed`
 carries result-page fields with the complete affected set recoverable.
-`Challenged` carries the challenge, derived context, and
+A context is issued once per actionable repository for the bound evaluation;
+any page with actionable refs for that owner carries the same usable handle.
+Do not repeat the whole installation's context list on each page. If context
+expires, recover the pinned affected selection with a fresh usable context
+for still-actionable refs, not a newly guessed effect set.
+`Challenged` carries `receipt_selector: ReceiptRetrievalSelector`,
+`committed_at: datetime`, the challenge, derived context, and
 `prior_conclusions: tuple[AuditConclusion, ...]` for exactly the disputed refs,
 plus result-page fields. Prior content and basis are retained facts; live
 qualification is labeled as such. Opening identity/context remain recoverable
@@ -1362,8 +1395,8 @@ public result, not merely from whether a call was accepted.
 | --- | --- | --- | --- |
 | ORIENT / REUSE | pure `ask(surface|reference|exact selector)` | semantic membership/support/status and, for ACTIVE participation, governing projection for the same effective scope | current `Answer` sufficient for task → REUSE/EDIT/DISPUTE; `Gap` or required non-current state → INVESTIGATE; a descriptive Answer may coexist with unresolved/unavailable governing orientation, but normative interpretation cannot treat that governance as current |
 | INVESTIGATE | explicit-evidence `ask` plus source reads, including canonical owner refs when governing meaning is needed | source observations/evidence context; no semantic or conformance verdict | sufficient evidence → CONCLUDE or REESTABLISH; more evidence → remain INVESTIGATE; `Rejected` corrects request; `Unavailable` is a blocker |
-| CONCLUDE | `record(kind="understanding", ...)` with `assertion_nature=DESCRIPTIVE|NORMATIVE`; conformance uses NORMATIVE | semantic scope/owner, caller support and, for ACTIVE NORMATIVE content, server-derived route/authority support; new/changed meaning is CAPTURED | `UnderstandingRecorded` with required support qualification CURRENT → working-task COMPLETE with pending curation; accepted but REASSESSMENT_REQUIRED/UNVERIFIABLE → INVESTIGATE/REESTABLISH; post-commit `SupportUnavailable` requires recovery and is not COMPLETE; `Rejected` fixes request/CAS |
-| EDIT / REALIGN | external edit then repository-scoped `reconsider(changed_scope)` for each directly edited repository | containment, direct source/discovery/authority/route effects, cross-member dependents, premise closure and per-repository contexts | `Changed` with no actionable non-current conclusions → COMPLETE; actionable effects → REESTABLISH or INVESTIGATE; `Rejected` fixes request; `Unavailable` blocks |
+| CONCLUDE | `record(kind="understanding", ...)` with `assertion_nature=DESCRIPTIVE|NORMATIVE`; conformance uses NORMATIVE | semantic scope/owner, caller support and, for ACTIVE NORMATIVE content, server-derived route/authority support; new/changed meaning is CAPTURED | `UnderstandingRecorded` after complete delivery with all required revision effects qualified CURRENT and dependent obligations disposed → working-task COMPLETE with pending curation when CAPTURED; accepted but REASSESSMENT_REQUIRED/UNVERIFIABLE → INVESTIGATE/REESTABLISH; post-commit `SupportUnavailable` requires recovery and is not COMPLETE; `Rejected` fixes request/CAS |
+| EDIT / REALIGN | external edit then repository-scoped `reconsider(changed_scope)` for each directly edited repository | containment, direct source/discovery/authority/route effects, cross-member dependents, premise closure and per-repository contexts | `Changed` after complete delivery with no actionable non-current conclusions → COMPLETE; actionable effects → REESTABLISH or INVESTIGATE; `Rejected` fixes request; `Unavailable` blocks |
 | REESTABLISH | returned `expected_version` + owning repository context/direct evidence + `record` confirm/correct/replace/withdraw/add | CAS, updated semantic content/support and freshly derived NORMATIVE governance support | accepted with all required affected dispositions CURRENT → COMPLETE; accepted but still non-current → INVESTIGATE; stale CAS → ORIENT/REALIGN; operational inability blocks |
 | DISPUTE | `reconsider(challenge,...)` then `record` named disposition | challenge context/history plus ordinary support evaluation | `Challenged` → REESTABLISH; disposition acceptance completes only when its required resulting support/dispositions are current; otherwise INVESTIGATE |
 | START / RESUME / COMPACT | pure `ask` | reconstructs retained semantic understanding plus current ACTIVE governance without transcript memory | same ORIENT gates above |
@@ -1381,11 +1414,11 @@ same support-change machinery when they themselves alter governance:
 3. **authority/route and cross-member dependency propagation in
    `reconsider`**.
 
-Everything else in the existing semantic lifecycle—surface identity, Answer/Gap
-threshold, evidence admission, semantic recording actions, verification,
-challenge handling, receipts/replay, compare-and-set, history,
-containment/direct/indirect reasons and three-tool public surface—remains the
-same contract.
+Surface identity, Answer/Gap threshold, semantic action meaning, independent
+verification, challenge lifecycle, CAS, receipt guarantees, history and the
+three-tool public surface remain the same semantic contract. Public delivery
+and accepted-effect corrections are governed by §§4–5, not historical
+result shapes.
 
 When one logical task directly edits more than one repository, the caller keeps
 the existing repository-scoped change grammar and calls

@@ -49,6 +49,13 @@ S-FIELD-01–07 in the single
 Existing test names below are not proof of the new cases; add actual test
 names and results at closeout, not speculative evidence.
 
+**Public lifecycle boundary amendment (API-01–23).** Functional Design §15's
+public-boundary acceptance amendment extends the existing FA cases; the
+implementation plan §3B owns the exact per-finding task and acceptance mapping.
+All added obligations are OPEN; retain existing executable evidence and add
+actual test names at PUB-09/10. No new ordinal, passing-test claim or weakened
+matrix assertion is introduced by this document amendment.
+
 | ID | Functional acceptance case | Live test evidence |
 |---|---|---|
 | FA-01 | Unconfigured versus excluded | `test_status_projects_unconfigured_excluded_and_rejects_unknown`; `test_exclude_is_explicit_nonparticipation`; `test_descriptive_recording_does_not_gain_route_support` |

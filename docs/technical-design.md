@@ -683,9 +683,9 @@ selector, route identity and `FunctionalRouteSupport`. Existing `EvidenceRequest
 their current owners and are reused.
 
 The public read projection uses the exact Layer-2 carriers
-`FunctionalDocumentPlacement`, `FunctionalPyramidFinding`,
-`FunctionalPyramidValidationFinding`, `FunctionalPyramidView` and
-`FunctionalPyramidUnavailable`; their field sets are not re-decided in the
+`FunctionalPyramidPath`, `FunctionalPyramidPlacementView`,
+`FunctionalPyramidPublicFinding`, `FunctionalPyramidValidationFinding`,
+`FunctionalPyramidView` and `FunctionalPyramidUnavailable`; their field sets are not re-decided in the
 wire/shell layer. `FunctionalDocumentRoute` and `FunctionalRouteProvenance` are
 internal resolution carriers used by directory resolution, record-time authority
 support and reconsideration; they are never serialized into an answer.
@@ -948,11 +948,11 @@ answer, and no read result carries another read result's data.
 
 | Operation | Question | Answer |
 | --- | --- | --- |
-| `ask` + `FunctionalPyramidSelector` | Is this repository governed? | participation state, version, live health, members |
+| `ask` + `FunctionalPyramidSelector` | Is this repository governed? | participation state, version, live health, member repository IDs and actionable findings |
 | `ask` + `FunctionalPyramidDirectorySelector` | Which documents govern this directory? | route `status`, ordered `placements`, `declared_layers`, `absent_layers`, `unresolved` |
 | `ask` + `FunctionalPyramidCandidateSelector` | Would this activation or revision be valid? | validation findings, graph findings, activation readiness |
-| `ask` + `FunctionalPyramidReceiptSelector` | What was accepted for this write? | the exact installation receipt |
-| `record` (functional_pyramid) | Change participation | receipt and dependent effects |
+| `ask` + `FunctionalPyramidReceiptSelector` | What was accepted for this write? | exact immutable accepted effects/member evidence, no private replay digest |
+| `record` (functional_pyramid) | Change participation | receipt selector, action/identity/version, participation and dependent effects |
 | `reconsider` | What must be re-established? | changed surfaces and conclusions |
 
 Directory address resolution precedes `_active_participation` in
@@ -983,7 +983,7 @@ maps or private path-resolution state. Ordinary semantic identity/routing is
 not silently rewritten by this directory-only correction; audit other path
 consumers separately under the active remediation plan.
 
-The directory answer is exactly:
+The directory answer is exactly (complete page):
 
 ```json
 {
@@ -1712,7 +1712,9 @@ action, committed time, affected pyramid/version, resulting ACTIVE member set,
 actual durable participation changes, and immutable semantic dependent-effect
 coordinates. It does not store live support qualification, health or
 investigation-context liveness. Public
-`RetrievedFunctionalPyramidReceipt` projects this exact acceptance.
+`RetrievedFunctionalPyramidReceipt` projects this exact acceptance excluding
+private digest and other replay bookkeeping; routine status/record/candidate
+never serialize the accepted member declaration collection.
 
 Functional Pyramid receipt decision uses the same core replay/conflict algorithm
 as ordinary recording but the installation store owns its distinct request-id
@@ -2023,8 +2025,9 @@ If derived governance is non-current, acceptance still follows the existing
 semantic write path; live qualification is non-current and F2 keeps the revision
 out of CURRENT Answer content. The service does not manufacture a second
 "completed" result: agent lifecycle guidance consumes the returned
-`UnderstandingRecorded.qualification`, and only CURRENT required qualification
-permits successful CONCLUDE/REESTABLISH completion.
+`UnderstandingRecorded.revision_effects` qualification and dependent-effect
+completion; only complete delivery and CURRENT required support permit
+successful CONCLUDE/REESTABLISH completion.
 
 #### 20.3 `reconsider` and shared effect engine
 
@@ -2469,8 +2472,8 @@ On acceptance the one existing understanding CAS transaction:
 2. inserts one EXPLICIT `conclusion_curations` row per target, with
    `accepted_in_version` equal to that new version;
 3. writes the ordinary recording receipt; and
-4. composes the ordinary `UnderstandingRecorded` result/status from committed
-   state.
+4. composes `UnderstandingRecorded` from exact accepted effects and live
+   qualification, not a surface status inventory.
 
 The curation action:
 - changes no semantic conclusion content or support;
@@ -2479,7 +2482,8 @@ The curation action:
 - uses the existing repository-scoped request identity, content digest, replay
   and conflict semantics;
 - reports the curated exact refs through the existing
-  `UnderstandingRecorded.affected_revisions`.
+  `UnderstandingRecorded.revision_effects` with CURATE action and accepted
+  CURATED maturity.
 
 Semantic create/add/correct/replace commit without a curation disposition for
 their new revisions. Withdrawal remains non-reusable.

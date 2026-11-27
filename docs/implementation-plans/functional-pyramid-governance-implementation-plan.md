@@ -1,6 +1,6 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Public lifecycle boundary remediation PUB-01–10 OPEN (§3B), including API-23. Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 implemented in candidate; full CI, native host delivery and operator-output boundary acceptance remain open.
+**Status:** Public lifecycle boundary remediation API-01–23 design amended; PUB-01 generated-schema/provider audit and PUB-02–10 implementation/verification OPEN (§3B). Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 implemented in candidate; full CI, native host delivery and operator-output boundary acceptance remain open.
 **Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
@@ -34,7 +34,7 @@ field-remediation delta and execution gates are in §3A.
 
 This is static inspection, not test execution. Historical green CI on V2 or partial V3 is not evidence of the required end-to-end outcome. Retain unrelated passing test obligations.
 
-**Non-regression boundary.** The closed Beta-5 read-API over-fetch remediation R-1–R-6, strict Version-3 source contract and existing route/authority/support separation are established design decisions, not legacy mechanisms to recreate or reverse. When a stale example, acceptance statement or derived guide contradicts those decisions, correct that document at its owning layer; do not change working code to reproduce stale wording. Preserve the compact public projection, no-public-impact-selector scope, internal bidirectional graph and cross-repository effects, root totality, exact directory/semantic scope, canonical binding support qualification, ACTIVE/VALID versus semantic currency, single writer and existing atomic replay/CAS. Keep the V2 navigation bootstrap distinct from the retired V2 declaration grammar. Test these invariants without weakening existing assertions. The original production work is the initialization integration, public finding projection, continuation and their evidence. At the field-remediation baseline the only new authorized production changes are S-FIELD-01–03; S-FIELD-04 verifies them. No implementation of a deferred capability or replacement of an established owner is authorized. Trace any genuinely necessary change to current governing intent, not a historical example.
+**Non-regression boundary.** The closed Beta-5 read-API over-fetch remediation R-1–R-6, strict Version-3 source contract and existing route/authority/support separation are established design decisions, not legacy mechanisms to recreate or reverse. When a stale example, acceptance statement or derived guide contradicts those decisions, correct that document at its owning layer; do not change working code to reproduce stale wording. Preserve the compact public projection, no-public-impact-selector scope, internal bidirectional graph and cross-repository effects, root totality, exact directory/semantic scope, canonical binding support qualification, ACTIVE/VALID versus semantic currency, single writer and existing atomic replay/CAS. Keep the V2 navigation bootstrap distinct from the retired V2 declaration grammar. Test these invariants without weakening existing assertions. The original production work is the initialization integration, public finding projection, continuation and their evidence. At the historical field-remediation baseline S-FIELD-01–03 owned the authorized production changes; the current programme adds §3B PUB-01–10, with its own design and acceptance gates. No implementation of a deferred capability or replacement of an established owner is authorized. Trace any genuinely necessary change to current governing intent, not a historical example.
 
 ## 3. Ordered implementation tasks
 
@@ -520,9 +520,10 @@ CI and the adopter's reported version 8 are not closure of FIELD-01–03.
 This is the single task owner for this cross-cutting Beta-5 correction, including
 ordinary lifecycle prerequisites; no implementation or installed acceptance is
 asserted. Authority: lifecycle §5, F2/F4/F6–F9/F11–F13, L1–L17, FD-27/54–57,
-FD-62/88B/88C, TD §§9/17.1/21. Existing exact carrier contracts must be reconciled
-at their owning layer before implementation; this register is not a second
-product authority. Preserve S-FIELD-01–07 obligations and release gates.
+FD-62/88B/88C, TD §§9/17.1/21. The canonical P2/P3/P4 changes now own the public outcome, deterministic
+behavior and mechanism; this register owns execution and evidence, not a
+second product authority. PUB-01 verifies their exact generated-schema and
+runtime conformance before dependent code is accepted. Preserve S-FIELD-01–07 obligations and release gates.
 
 ### Anti-patterns
 
@@ -598,72 +599,213 @@ document exact ownership semantics for each before any broader change. Do not
 silently reroute a retained revision or split a write across owners. Existing
 classification scope and document authority remain independent.
 
-### Ordered tasks and decision gates
+### Canonical traceability and execution gates
 
-- PUB-01 (all): close exhaustive recursive generated output schema and actual
-  wire-field audit for all 21 consumer intents (12 ask, 7 record, 2 reconsider),
-  ambiguity, rejection and unavailable variants. Source audit is not runtime
-  proof. Close INV-01 ordinary/Pyramid receipt digest/context/expiry consumer
-  justification; INV-02 preserve opaque context handle; INV-03/04 public
-  override/provider failure and free-text sentinel audit; INV-05 preserve
-  evidence identity, distinguish duplicate fingerprints; INV-06 historical
-  challenge cutoff versus live qualification; INV-07 verification relevance
-  and complete history; INV-08 exact governance receipt details. Freeze exact
-  P2 public fields/variants, P3 decisions and P4 mechanisms, including all
-  recovery coordinates, before dependent code. Resolve contradictions with
-  existing exact detailed-support/receipt/qualification/status contracts in
-  their own paragraphs, not a competing addendum. Record remaining decisions
-  explicitly; no guessed schemas or implementation authorization before closure.
-- PUB-02 (10/15/18): canonical support and snapshot projection at support and
-  answer owners; preserve private stored carriers; prove transitive exclusion,
-  not downstream field filtering.
-- PUB-03 (16/20): complete effect discovery and exact per-revision attribution
-  at service/effects.py; retain immutable accepted effects and separate bounded
-  delivery. Verify hooks and governance replay use same owner.
-- PUB-04 (04/07–09/21/22): exact selection-bound continuation, safe response
-  priority and bounded output through service/answer.py, continuation.py,
-  evidence.py, bounds.py and installation-scoped producer. No new arbitrary
-  limit, no lost accepted write or context.
-- PUB-05 (05/06): scope status and verification to actual request; define
-  deterministic selection/history recovery before changing service/surface_status.py
-  and service/answer.py.
-- PUB-06 (01–04/23): compact governance outcomes; implement FD-62 directory
-  address resolution in existing registry/filesystem/core/service ownership.
-  First close registry availability and alias/canonical path semantics, including
-  actual registry-root composition and failure mapping. Prove nested --repo
-  fixtures using installed MCP: parent-relative/member-relative equality after
-  all pages including identical root-basis addresses; member-root '.' becomes
-  its parent-root prefix, document/scope paths are directly readable from their
-  named basis, shared parent/sibling documents use the same root, unrelated
-  root trees have explicit own-root coordinates, findings and embedded
-  placements use the same projection, canonical authority and support identity
-  remain unchanged; sibling and prefix-lookalike, three-level nesting,
-  equal-root ambiguity, unknown/missing root, escapes and symlink
-  aliases, excluded/unconfigured/other-instance child, no implicit participation,
-  no union from sibling/parent, stale token after root/participation/selection
-  change (including presentation root/path binding), no internal leakage and
-  no absolute root map or duplicate path inventory. Keep existing graph,
-  member intent, canonical authority and effect semantics.
-- PUB-07 (11–14/19): exact accepted action effects, independent maturity and
-  challenge disposition; surface CAS receipt/replay at existing transaction
-  owner; settle migration and historical boundary semantics first.
-- PUB-08 (17): exact disputed prior content/evidence through existing Challenged
-  result; replay preserves exact target.
-- PUB-09: reconcile lifecycle/functional/technical documents, generated schema,
-  MCP reference, glossary, guides, skills and hooks. No parallel wire shapes,
-  second writer/evaluator, compatibility bridges or new tool. Update acceptance
-  case definitions and map actual executable tests in existing matrix; do not
-  predeclare passing evidence or break its ordinal checks.
-- PUB-10: failure-before/fix-after, unit/strict schema and installed MCP
-  round-trips, large generic fixtures, full existing CI, native host evidence
-  where required; record exact head and sanitized results. No release or
-  adopter live mutation authorization.
+The following cross-reference is exhaustive for the session register. P2 is
+lifecycle-contract.md; P3 is functional-design.md; P4 is technical-design.md.
+Acceptance references are existing FA cases as amended in P3 §15, not
+claims of already passing tests.
 
-PUB-01 is OPEN; API-23's functional direction is selected in lifecycle §4.1,
-FD-62/88C and TD §17.1. The remaining field-level designs and acceptance proof
-are not closed. Execute PUB-02/03 before dependent result-family work;
-PUB-04 before bounded family delivery; PUB-09/10 close the same programme with
-S-FIELD-04. Preserve original passing obligations, no gate weakening.
+| Finding | P2 owner | P3 owner | P4 owner | Task / acceptance |
+| --- | --- | --- | --- | --- |
+| API-01 | §4.1 status | FD-83,88B | §§17.1,20.1 | PUB-06 / FA-01,36,71 |
+| API-02 | §4.1 candidate | FD-84,88B | §§17.1,20.1 | PUB-06 / FA-02,71 |
+| API-03 | §4.2 FP acceptance | FD-85,93 | §§19,20.4 | PUB-06 / FA-03,04,38,41 |
+| API-04 | §4.1 continuation | FD-54–57 | §§13,17.1,20 | PUB-04,06 / FA-71,72 |
+| API-05 | §4.1 status | FD-23,28,101 | §§11,24.1 | PUB-05 / FA-28,48,51 |
+| API-06 | §4.2 verification scope, §4.1 | FD-28,29,55 | §§11,13 | PUB-05 / FA-28,66 |
+| API-07 | §4.1 continuation | FD-29,54–57 | §§11,13 | PUB-04 / FA-28,72 |
+| API-08 | §4.1 embedded orientation | FD-55,62,69,88C,90 | §§13,17.1,20.1 | PUB-04 / FA-10,14,72 |
+| API-09 | §4.2 snapshot/receipt audit | FD-28,55 | §§11–13 | PUB-02,04 / FA-28,66,72 |
+| API-10 | §4.2 audit basis/snapshot | FD-16,28 | §§9.2,11 | PUB-02 / FA-28,71 |
+| API-11 | §4.2 acceptance | FD-37,60 | §§12,20.2 | PUB-07 / FA-45,47,66 |
+| API-12 | §4.2 accepted maturity | FD-60,95–98 | §§12,23–24 | PUB-07 / FA-47,50,53–59 |
+| API-13 | §4.2 accepted disposition | FD-37 | §12 | PUB-07 / FA-62,66 |
+| API-14 | §4.2 surface/receipt | FD-2–4,46–48 | §§12,14,25 | PUB-07 / FA-28,66 |
+| API-15 | §§4.2–4.3 qualification | FD-16,20 | §§9.2,20.3 | PUB-02 / FA-24,38,71 |
+| API-16 | §§4.1,4.3 complete effects | FD-19–22,55,85,89 | §§13,20.3–4 | PUB-03,04 / FA-24,25,38,41 |
+| API-17 | §4.3 challenge | FD-37 | §§11,12 | PUB-08 / FA-62,66 |
+| API-18 | §4.2 public support | FD-16,27 | §§9,9.2,11 | PUB-02 / FA-65,66,71 |
+| API-19 | §4.2 exact effects | FD-37,60 | §§12,24.2 | PUB-07 / FA-47,53–59,66 |
+| API-20 | §4.3 per-ref reasons | FD-20–21 | §§11,20.3 | PUB-03 / FA-24,25,38 |
+| API-21 | §4.1 evidence continuation | FD-2,55,59 | §§9.2,13 | PUB-04 / FA-28,66,72 |
+| API-22 | §4.1 admission pages | FD-29,54–57 | §§9.2,13 | PUB-04 / FA-28,72 |
+| API-23 | §4.1 directory/location | FD-62,74,88B–C | §§17,17.1,20.1 | PUB-06 / FA-09,10,14,16,72 |
+
+### Ordered implementation tasks (all OPEN)
+
+**PUB-01 — Boundary closure and executable baseline.** Before production
+changes, generate the actual three tool request/result schemas at the pinned
+source baseline and recursively enumerate every reachable public carrier,
+including nested unions, optional fields, errors and actual free-text
+producers. Inventory all 21 consumer intents and document field ownership
+against P2 §§4–5. Capture sanitized failure-before evidence for API-01–23;
+use generic fixtures only. INV-01/08: digests, replay keys and expiry are
+private, accepted semantic effect and exact member declaration evidence are
+audit; INV-02: preserve opaque repository-bound context; INV-03/04: audit
+public override/provider errors including sentinel internal values; INV-05:
+evidence IDs/fingerprints and admitted ranges retain citation identity;
+INV-06: version-targeted challenges/current dispositions explicitly separated;
+INV-07: latest applicable verification grouping and history as P3 FD-28.
+Check actual generated schemas against amended exact P2 fields and record
+every remaining discrepancy in the corresponding P2/P3/P4 owner before code.
+Inspect path-bound ordinary ask/evidence/record/reconsider/hooks for API-23's
+namespace assumption; do not silently re-key retained semantic identities or
+split writes. If wider confirmed defects emerge, define their own contract
+amendments before implementation. Gate: independent review of field ownership,
+baseline reproduction and exact migration/paging grammar; no guessed schemas,
+no silent extra scope. This session completed source-level design only.
+
+**PUB-02 — Public support and immutable audit (API-09/10/15/18).** After
+PUB-01, edit core/model/support.py, understanding.py, answers.py, repository
+exports and service/support.py / service/answer.py / service/effects.py
+at their existing projection/evaluation owners. Implement typed SupportBasis,
+SupportFinding and AuditConclusion from P2 §4.2, preserving immutable stored
+support, canonical identity and single evaluator. Resolve source observation
+ranges and exact evidence, premise refs, authority classification and governing
+scope; unavailable recorded basis explicit. Replace SupportEvaluation in
+ChangedConclusion and eliminate transitive DependencyFinding/SupportDependency,
+AuthorityBinding, FunctionalRouteIdentity and stored revision content from
+all result schemas. Snapshot selection pinned to version, version-as-of
+curations and exact targeted challenge history with present state labeled.
+Test all five dependency kinds, mixed loss precedence, unavailable basis,
+historical withdrawn content, later curation/challenge, and negative recursive
+schema plus installed wire assertions. No transport stripping or regenerated
+authority. Gate: exact semantic audit equivalence, no private type leakage.
+
+**PUB-03 — Exact complete effects (API-16/20).** After PUB-02, modify
+service/effects.py at _project/_indirect/_changed_conclusion and shared
+reconsider/Pyramid record callers. Keep full direct roots and premise closure
+independent of delivery bounds; accumulate reasons per ref then aggregate
+surface, preserve containment-only entries. Produce complete immutable effect
+refs before accepted participation commit; context once per actionable owner.
+Operational interruption fails explicitly or preserves a recoverable incomplete
+selection, never success. Tests: direct-only and indirect-only on same
+surface, genuine multi-reason ref, deep chain beyond former max_depth/nodes,
+wide graph, cycles, cross-repo, omitted context/replay, current/superseded refs.
+Gate: full affected identity set and true attribution; shared engine, no new
+registry or second traversal.
+
+**PUB-04 — Bound exact result delivery (API-04/07–09/16/21/22).** After
+PUB-02/03, modify service/continuation.py, bounds.py, answer.py, evidence.py,
+lifecycle.py, reconsider.py, functional_pyramid.py and shell/mcp/{adapter,wire,
+schemas}.py; use existing store/retention owners for immutable ordered
+delivery selection. Extend existing token grammar to typed selection owner,
+namespace, exact request/receipt/version, collection position and binding;
+source outcomes/ranges pinned when admitted. General ask.continuation
+dispatches existing result variants and VerificationHistory; directory
+after/next_after and pending keyset remain their domain-specific entry points.
+No second evidence selection or semantic writer. Fit mandatory subject/state/
+receipt envelope first, primary content then aux, page all variable
+collections (including nested findings, evidence metadata, exact receipts
+and contexts), constant omission description, no lost commit. Preflight
+minimum acceptance envelope before write; postcommit delivery failure returns
+receipt recovery. Invalidate stale reads, exact restart and replay; re-evaluate
+pinned accepted effects without dropping undelivered obligations. Verify
+encoded size in both MCP channels using existing budget, max-size single
+unit/line, empty page/progress, unbounded metadata, large candidate/status/
+receipt/changed writes, cross-repo scope, exact multi-path orientation,
+order drift and later context extension, restart and postcommit failure.
+Gate: all required selections recoverable without new ceiling or gate edits.
+
+**PUB-05 — Select status and relevant verification (API-05/06).** After
+PUB-04, edit service/surface_status.py and service/answer.py (_document,
+_question_result, _verification), core/model/surfaces.py and answers.py.
+Select exact understanding/question membership before status; only ordinary
+surface obtain calculates boundary and immediate child summaries; remove
+recursive descendant inventory; count/ref consistency across pages.
+Match runs to complete selected scope, group by FD-28 keys, select latest
+observed time/ties, provide history cursor. Preserve outcome/time/provenance,
+environment limitations and live qualification. Test sibling/descendant growth,
+empty exact selection, narrower/wider run coverage, repeated run, conflicting
+ties, later fail and older history. Gate: unrelated corpus growth cannot
+displace selected answer; scoped counts truthful and history recoverable.
+
+**PUB-06 — Compact governance and root addressing (API-01–04/23).** After
+PUB-04 and API-23 root-registry verification in PUB-01, change core/model/
+functional_pyramid.py, core/functional_pyramid.py, service/functional_pyramid.py,
+ports/functional_pyramid.py, shell/functional_pyramid.py,
+shell/installation_runtime.py and shell/mcp_server.py as specified in TD §17.1.
+Separate stored member/receipt facts from status member IDs, candidate findings
+and write acceptance; exact receipt retains justified declaration evidence,
+not private digest. Reuse registered_locator callback, not attached-store
+paths; pure unique-deepest-root containment before participation, normalize
+public coordinates from outermost registered ancestor, standalone/other roots
+explicitly qualified, no duplicated owner-relative path, path map, or absolute
+root. One canonical public projection for directory, orientation and findings.
+Bind pages to actual selected owner and path basis; no change to canonical
+placement/support/authority identity. Installed nested --repo fixtures:
+parent-relative/member-relative equality after all pages, member-root '.'
+becomes parent prefix, direct document/scope read locations, shared parent/
+sibling references, unrelated trees, findings, ordinary embedded view, three
+levels, prefix-lookalike, equal-root ambiguity, unknown/unavailable root,
+escape/symlink, other-instance/EXCLUDED/UNCONFIGURED child, no inferred
+participation, stale token after root/selection changes; preserve graph and
+cross-repo effects. Vary member declaration inventory and verify compact
+status/candidate/record independent of unrelated detail. Gate: exact functional
+equivalence and no consumer path translation or internal leakage.
+
+**PUB-07 — Accurate write outcomes and surface receipts (API-11–14/19).**
+After PUB-02/03/04, change core/model/{outcomes,recording,commands,
+understanding,answers}.py, core transition owner, ports/lifecycle.py,
+service/lifecycle.py, shell/sqlite_store/lifecycle.py and existing migration
+owner per TD §§12,14,25. Retain immutable AcceptedRevisionEffect/action/
+ref/maturity, replacement predecessor, accepted challenge disposition and
+dependent refs inside existing atomic receipt; qualify only accepted supported
+refs after commit. No full snapshot or recursive status. Gap-only and
+disposition-only no revision effects; no-op confirm explicitly unchanged.
+Surface action, canonical accepted boundary/version and receipt committed
+atomically under existing repository request key; no artificial context.
+Replay before live parent/version/support checks, original accepted effect
+after later update; conflicting same request rejected; different request
+CAS preserved. Migration preserves every retained receipt/key/digest,
+historical version and revision; unavailable action facts explicit if not
+uniquely reconstructible, never backfill imaginary accepted requests.
+Verification: all semantic actions, no-op, gap-only, challenge resolve/
+unresolved, curation independent of currency, surface create/update/replay/
+conflict/concurrency/interrupted transaction, postcommit unavailable support,
+legacy receipt and history migration. Gate: exact accepted facts and stable
+replay, no fabricated historical acceptance, one transaction owner.
+
+**PUB-08 — Exact challenge opening (API-17).** After PUB-02/04/07, change
+service/reconsider.py and existing challenge receipt/qualification owner;
+return receipt selector/time, exact accepted challenge/target revision and
+context, prior content/evidence through AuditConclusion, not current membership.
+Paginate large target sets. Preserve challenge write atomicity/idempotence and
+named disposition semantics. Test multiple targets, older version, replay
+after subsequent correction/settlement, unavailable historical basis and
+context recovery. Gate: reviewer can investigate dispute without reconstructing
+prior statements or performing unrelated lookup.
+
+**PUB-09 — Public contract integration.** After PUB-02–08, regenerate the
+single schema from canonical model; update docs/mcp.md, glossary, installer/
+operator guidance where affected, AGENTS lifecycle fragment, skills/hooks and
+native host tests. Replace retired references to whole UnderstandingRecorded
+qualification/status/affected_revisions, raw snapshot/receipt, status member
+inventory and member-relative public paths. Agent completion consumes all
+pages and exact revision/obligation states; no false success from partial
+results. Map actual tests to amended existing FA cases in
+docs/functional-acceptance.md (no invented passing evidence or duplicate
+matrix). Reconcile migration/versioned schema and public examples; no
+compatibility aliases or fourth tool. Gate: strict schema/round-trip and
+installed guidance agreement.
+
+**PUB-10 — Full exact-candidate verification.** Run focused failure-before/
+fix-after, complete unit/integration/acceptance, non-editable installed-MCP
+journeys incl nested root and all public branches, native host delivery where
+required, Ruff, Black, zero-error typing, plugin tests, distribution and
+full CI per existing release procedure. Assert schema recursively and actual
+wire/free text with distinctive private sentinels; preserve no-leak,
+containment, curation, atomicity/CAS/replay, graph/support and existing field
+remediation checks. Record sanitized exact-revision results, measured
+ratchets only; no gate weakening. Independent review and release owner
+authorization remain separate. No live adopter mutation/publication.
+
+Sequence: PUB-01 → PUB-02 → PUB-03 → PUB-04 → PUB-05/PUB-06/PUB-07 →
+PUB-08 → PUB-09 → PUB-10; PUB-07 depends on PUB-02/03/04, PUB-08 on PUB-07.
+All PUB tasks remain OPEN pending executable evidence. The documented
+contracts are design targets; the source baseline still contains the defects.
+PUB-10 and S-FIELD-04 close the same release programme.
 
 ## 4. Execution sequence
 
