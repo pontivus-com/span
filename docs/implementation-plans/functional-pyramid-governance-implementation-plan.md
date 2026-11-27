@@ -133,6 +133,20 @@ or classification grammar is justified. A placement may have multiple
 governing references. The reported obsolete Pontivus-local guide and independent
 semantic reconciliation remain adopter work, not Span production tasks.
 
+**Owner-reported field scale (2026-11-27).** The report attributed to
+`card.2026-11-27-span-beta5-local-install.json` describes the approved
+`261d055b4c2b` Legal installation failing with
+`unknown authority binding locator` for a readable existing path, followed
+by pending intent and generated declarations requiring recovery. Legal
+requires well over 1,100 authority bindings according to the owner; the
+card and exact distinct-locator count have not been independently inspected.
+Source inspection confirms that `inventory_evidence` paginates distinct
+locators using `max_evidence_units=96`, not `max_results=250`; the latter
+is another query bound but does not control this inventory path. The defect
+is the administrative first-page consumer, not the query policy. This
+corroborates FIELD-01 and FIELD-02, not a new implementation task. Neither
+a configurable installation cap nor a higher retrieval bound is authorized.
+
 Static inspection of the exact field baseline confirms three distinct defects:
 
 | Finding | Root cause at field baseline | Governing correction | Task |
@@ -164,6 +178,19 @@ installer preflight/provisioning composition, existing EvidenceSource port.
    beyond the old first page, foreign identity, unreadable/provider failure,
    identity retention, and complete rejection before repository-state or
    generated-artifact mutation. Preserve existing bounded retrieval tests.
+
+4. Add a synthetic installed governed initialization fixture with more than
+   1,100 distinct valid authority locators and their canonical bindings,
+   exceeding both numerical query bounds without changing either. This is
+   owner-reported field-scale regression evidence, not a capacity threshold
+   or assertion about the adopter's distinct-locator count. Verify the exact
+   complete persisted binding set by canonical identity and attributes, not
+   by a single bounded evidence response or count alone. Repeat identical
+   input without a duplicate participation write; test a missing/unreadable
+   locator late in the large set and prove rejection before pending intent,
+   generated declarations or repository-state mutation. Use the existing
+   installed acceptance lane; the real adopter corpus retest remains the
+   separate owner-authorized gate in S-FIELD-04.
 
 **Gate:** exact valid set registered and retrieved, no truncation and no
 delivery-budget change; exact invalid input diagnosed before setup mutation.
