@@ -39,9 +39,9 @@ record and do not create current technical requirements.
 
 Continue using the canonical dataclass model and schema generator. Put surface
 carriers in `core/model/`, operation commands/results beside existing lifecycle
-carriers, and persistence interfaces in `ports/lifecycle.py`. Extend the existing
-support carrier with dependency-addressed findings instead of an additional
-transport-only support model. Naming decision: reserve `Gap` for the public
+carriers, and persistence interfaces in `ports/lifecycle.py`. Keep canonical internal support; implement the distinct semantic
+SupportBasis/SupportFinding projection from lifecycle §4.2 in the existing
+core/model support owner, never a transport-only model or second evaluator. Naming decision: reserve `Gap` for the public
 operation result. Rename the existing recorded question/basis carrier to
 `RecordedQuestionGap` in the canonical model, preserving its meaning and fields.
 Update its references and generated schema through the same owner; the persisted
@@ -229,7 +229,12 @@ This implements FD-2/FD-45 without a second context constructor or origin
 heuristic; lifecycle §4.3 owns the public guarantee.
 
 **Admission implementation.** Implement lifecycle §4.1's single public admission
-projection in core/model and construct it through EvidenceService. Keep stored
+projection in core/model and construct it through EvidenceService. At admission
+retain ordered request/outcome and exact observation/range delivery selection
+under existing context/request binding. AnswerService._with_admission and
+_evidence_page consume that same selection, not context_observations order.
+Extend service/continuation.py's cursor position to metadata and evidence
+fragments; no per-delivery omission labels or mutable context-wide scan. Keep stored
 SourceObservation immutable; associate its ID with existing EvidenceUnit page
 fragments produced by the answer fitter/_slice_unit. Schema generation handles
 that canonical delivery carrier on both initial and continuation results. Do
@@ -238,8 +243,10 @@ transport code.
 
 **Compact implementation.** Implement only lifecycle §4.2's public field sets
 and qualification projections in core/model. Service composition projects the
-existing support evaluator's results once; detailed support and durable receipt
-models are unchanged. Exact audit retrieval reads verification runs through the
+existing support evaluator's results once; detailed support stays internal.
+Extend durable receipt effects where required by §12. Project typed dependency
+coordinates in core/model/support.py with service-owned evidence lookup; reuse
+for audit and changed effects. No reason-text parsing. Exact audit retrieval reads verification runs through the
 existing accepted-run IDs in the receipt and their store owner. The wire generator
 serializes those canonical results; the adapter does not rewrite JSON.
 
@@ -400,7 +407,15 @@ The read composer returns historical `Gap` content through
 `StaleConclusionRef`; both are read-time projections over stored revisions, not
 a second stored shape. Verification applicability uses the shared containment
 rule: a run applies when the asked surface is within its declared scope, and a
-single-file run is not widened to a broader service.
+single-file run is not widened to a broader service. In AnswerService select
+exact membership and semantic scope before status/verification composition;
+service/surface_status.py computes selected distribution or ordinary immediate
+child summaries, never recursive answer or acceptance inventory. Group
+applicable runs by FD-28, retain latest ties and issue exact history cursor.
+Exact snapshot reads get_version_conclusions, version-scoped curation and
+challenges targeting that version; construct AuditConclusion from retained
+content and typed basis via the same support projection, not store dataclass
+serialization. Return explicit unavailable historical basis when lookup fails.
 
 Implement one containment resolver shared by query resolution, status, and
 change mapping. Add `service/reconsider.py` for the operation composition. Use
@@ -408,7 +423,8 @@ change mapping. Add `service/reconsider.py` for the operation composition. Use
 blocks; expand premise references through a visited-set worklist to a fixed
 point. Resolve owning surfaces after dependency traversal, not only through the
 changed path's boundaries. Group the result by canonical surface key, collecting
-reason sets and stable recorded sequence information. No swallowed lookup failure
+per-revision reason sets and separate surface aggregates with stable recorded
+sequence information. No swallowed lookup failure
 becomes an empty affected set. The unresolved state selection is O-5.
 
 Represent individual failing dependency evaluations in the canonical support
@@ -445,7 +461,13 @@ existing atomic store transition and compare-and-set remain the only acceptance
 owner; no second command representation, grammar, or writer is introduced.
 
 Compute the original wire digest and call `_replay` before any context or
-evidence work, for both understanding and verification. Reuse `receipt_decision`.
+evidence work, for understanding, verification, surface and challenge writes. Reuse
+`receipt_decision`. Surface `_declare_surface` uses existing repository
+transaction owner, extending RecordReceipt and RecordingIdentity to represent
+surface effects without context; preserve boundary history and CAS.
+Commit exact accepted Surface and receipt together; replay before current
+boundary/parent checks. Migrate old receipts without fabricating historical
+accepted surface requests.
 `CONTEXT_BINDING_CONFLICT` and `CONTEXT_SCOPE_CONFLICT` have canonical actions;
 context binding is not a version conflict.
 
@@ -471,20 +493,23 @@ writing an unnecessary revision/version. Test that path with both identical retr
 identity and a new intentional identity. Preserve challenge dispositions through
 the existing atomic transition owner.
 
-**Live owner status (FD-60).** One functional `service/surface_status.py`
-composer owns the existing AnswerService algorithm. Both ask and understanding
-record qualification use it. `UnderstandingRecorded.status` is `SurfaceStatus`
-or transient `SurfaceStatusUnavailable(reason, surface?)`; neither is persisted.
-Expected operational read failures preserve accepted receipts; programming and
-contract defects are not normal unavailability. `LifecycleStorePort.operational_errors`
-is the store-owned classification of operational exception types; SQLite declares
-`LifecycleStoreError` and `sqlite3.OperationalError`. Post-commit qualification
-catches those types and provider `OSError` independently for support and status,
-without importing the SQLite shell into the service or catching every `ValueError`.
-Status coverage retains complete conclusion scopes and checks members through
-canonical scope containment: exact refs do not imply repository-wide coverage.
-A repository-wide semantic scope cannot agree with a FILE owner. Surface declaration receipt
-semantics are outside this remediation.
+**Exact accepted effects (FD-37/60).** The core transition determines exact
+action/result refs including no-op confirm, replacement predecessor and
+curation, and exact challenge disposition accepted revisions. Extend existing
+receipt in core/model/recording.py and SQLite lifecycle transaction to retain
+those immutable facts. Do not derive affected refs from full snapshot or live
+challenge state. LifecycleService.qualify_understanding projects these refs,
+maturity as of accepted version and live qualification via shared evaluator;
+no surface_status traversal. Support/store operational error classification
+remains owned by LifecycleStorePort; catch declared operational errors and
+provider OSError, not arbitrary ValueError. Exact receipt audit uses a closed
+accepted-effect branch in RetrievedReceipt, not raw RecordReceipt. Private
+digests/context internals stay with replay. Extend schema migration explicitly
+(TD §14/25); old receipts whose effects cannot be reconstructed uniquely
+expose unavailable historical detail, never fabricated action refs. Preserve
+old accepted identity/replay. Challenge opening uses ReconsiderService's
+existing atomic receipt and target revision lookup, then same audit projection
+for exact prior content.
 
 Use the reverse dependency index to compose FD-37 effects against the accepted
 transition. Store immutable acceptance facts in the receipt, and expose the
@@ -514,6 +539,20 @@ boundary. Host/configuration supplies the measured budget; public request
 carriers do not choose it. Every result variant is fitted through its canonical
 projection, omissions remain explicit/recoverable, and a result that cannot
 carry its minimum safe envelope is refused rather than silently truncated.
+Use service/bounds.py encoded size and service/continuation.py as shared
+producer-side delivery owners, invoked by AnswerService, LifecycleService,
+ReconsiderService and FunctionalPyramidService before adapter encoding.
+Reserve minimum accepted envelope before new writes. Retain immutable ordered
+selection coordinates/positions through existing repository or installation
+lifecycle store and retention owner; pure query delivery state is operational,
+not an investigation context or semantic record. Evidence uses existing
+context binding. Reconsider retains complete effect selection and context refs
+for recovery; accepted effects use receipt identities. Tokens are opaque,
+namespace/subject/version/selection/position-bound and replay-stable. Page
+actual result carriers, not second wire grammar; existing directory/pending
+selectors delegate to same delivery rules. Explicit stale-token recovery for
+changed live reads; never rerun writes or silently substitute affected selection.
+Adapter dispatches continuation to its owner and serializes canonical carriers.
 
 Budgeting never changes semantic support classification, curation state,
 Functional Pyramid resolution, or dependency traversal. It does not limit
@@ -1032,7 +1071,8 @@ response budget, the answer returns the largest fitting prefix,
 deterministic page for the same original address, resolved repository/directory,
 root basis and projected path bindings, selection and declaration version. The token is opaque, versioned and uses the existing paging contract; a
 stale token returns the paging stale-continuation failure rather than silently
-restarting. `unresolved` is complete on every page and is never truncated.
+restarting. `unresolved` remains explicitly unresolved; the complete finding collection
+is recoverable under FD-55–57, not silently dropped.
 
 ### 17.2 Functional Pyramid initialization import
 
@@ -2017,7 +2057,8 @@ architecture.
 The engine uses the repository that owns each canonical dependency index to
 discover direct dependents, resolves the semantic owner of each affected
 conclusion, re-evaluates support through the repository-qualified support
-capability, performs premise closure once, groups canonical `ChangedSurface`
+capability, performs premise closure once without delivery max_depth/max_nodes cutting
+the semantic set, tracks reasons per exact revision, groups canonical `ChangedSurface`
 results by owning repository, and produces exactly one context specification for
 each repository with actionable effects. Ordinary reconsider and Functional
 Pyramid writes invoke this same engine. A shell-side loop over per-repository
@@ -2070,8 +2111,8 @@ service dispatcher; do not create a fourth MCP operation. It does not use
 installation-level request namespace from §19, strict action-aware candidate
 revalidation, the shared effect engine above, and one atomic store transaction.
 
-On first acceptance, the result contains the resulting ACTIVE members, only
-actual durable `FunctionalPyramidParticipationEffect` transitions, the
+On first acceptance, the result contains the accepted action/identity/version,
+not member configuration, and only actual durable `FunctionalPyramidParticipationEffect` transitions, the
 canonical dependent `ChangedSurface` projection and one live repository-bound
 context per repository with actionable effects. The receipt stores only the
 immutable dependent `ConclusionRevisionRef` identities. On replay, §19

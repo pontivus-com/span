@@ -42,8 +42,9 @@ different kind. *(F9, L1)*
 Ordinary obtain issues no context. Explicit evidence admission and ordinary
 repository-scoped semantic/verification/challenge writes issue or reuse contexts
 under their caller-owned request identities as required by their evidence path.
-Functional Pyramid participation writes are installation-scoped lifecycle writes
-and issue no investigation context merely because they are writes.
+Functional Pyramid participation writes are installation-scoped lifecycle writes;
+surface declaration writes are repository-scoped. Neither issues an
+investigation context merely because it is a write.
 Change-scope reconsider also issues the bounded re-establishment contexts required
 by F4, but their issuance identities are Span-owned and not caller retry keys. Any identity-bearing context
 is bound to `(repository, request identity, question when applicable, scope,
@@ -62,6 +63,13 @@ Ordinary repository-scoped recording looks up the retained receipt for
 admission, or any other new-write check. Functional Pyramid recording uses the
 distinct installation-level request-identity namespace fixed by lifecycle §4.2
 and FD-85; no member repository is selected as an artificial key owner.
+
+For surface writes, bind exact canonical surface action/expected boundary and
+request content. Resolve receipt before parent/boundary validation; accepted
+boundary version and action are immutable receipt facts. New writes use atomic
+CAS; same-content retry returns original boundary even after another update.
+An identical create under a new request may accept the unchanged boundary and
+records its own decision. No artificial evidence context.
 
 Within either namespace:
 
@@ -796,9 +804,11 @@ Candidate lifecycle findings use the public lifecycle reasons
 sources project to `DECLARATION_INVALID`. The internal
 `MISSING_DECLARATION_SOURCE` and `INVALID_DECLARATION_SOURCE` are never
 serialized. `declaration_locator`, internal reason enums, route and provenance
-state, health internals and authority payloads are never serialized. The member
-view's `declaration_refs` remain the public identity of the repository-owned
-sources; the internal per-finding `declaration_locator` is not serialized.
+state, health internals and authority payloads are never serialized. Retain
+exact declaration refs only in justified accepted receipt audit; status
+projects member IDs, candidate projects validation outcomes. Map nested
+public locations using FD-62. The internal per-finding declaration locator
+is not serialized.
 `detail` and `recovery` are public and must not contain an internal reason code
 or internal locator. The unavailable carrier's `failure` and `recovery` use the
 same public vocabulary.
@@ -814,7 +824,8 @@ When the ordered placement list exceeds the response budget, the view returns th
 fitting prefix, `truncated=true`, one constant omission statement and a public
 continuation token. `FunctionalPyramidDirectorySelector` accepts that token and
 returns the next deterministic page for the same directory and selection.
-`unresolved` is never truncated. The token is opaque, versioned and bound to the
+Unresolved status is never dropped; if findings cannot fit, page the complete
+finding set explicitly under FD-55–57. The token is opaque, versioned and bound to the
 original addressing repository/directory, resolved repository/directory,
 root basis and projected path bindings, selection and declaration version;
 changes to that binding invalidate the token.
@@ -981,7 +992,14 @@ not established (F1, A6). See §14. *(F2, A7)*
 **FD-16 — Reasons are complete.**
 The combined evaluation lists every non-current dependency with its state and
 reason, so a definite finding is not lost inside an `UNVERIFIABLE` summary.
-*(F2, A8)*
+Project each finding from its typed dependency, not its diagnostic string:
+source → admitted evidence identity/ranges; discovery → declared scope;
+authority → canonical evidence; premise → exact revision; route → pyramid and
+semantic scope. Audit projects all retained dependencies by the same rule.
+If required historical coordinates cannot be recovered, retain the typed
+unavailable basis and reason; do not infer authority or invent evidence.
+Qualification and audit preserve dependency multiplicity and order where
+meaningful, without private identity or fingerprint leakage. *(F2, A8)*
 
 **FD-81 — Route dependency.**
 Re-resolve the exact semantic scope through FD-61–FD-73 and the current
@@ -1030,9 +1048,14 @@ premise is withdrawn, absent, or cannot be checked, the conclusion is
 The result includes every surface that must be re-examined or repaired: by
 containment, by direct source/discovery/authority/route support loss, or by
 indirect loss — including a surface whose boundary excludes the changed path and
-a surface owned by another member repository reached through FD-89. Entries are
-deduplicated by repository + surface identity and carry the set of reasons that
-apply. Inclusion is not a verdict:
+a surface owned by another member repository reached through FD-89. Entries are deduplicated by repository + surface identity. Track direct and
+indirect causes by exact revision before grouping; containment-only surfaces
+may have no affected revisions. Aggregate causes plus containment separately
+at surface level. Traverse every reachable current and historical dependency
+to a fixed point with cycle detection before limiting delivery. Retain the full
+affected current-revision set and per-owner context requirements; processing
+interruption is explicit incomplete analysis with recoverable work, never a
+successful truncated closure. Inclusion is not a verdict:
 each affected conclusion carries its own support state, so a considered
 conclusion may remain `CURRENT`. *(F4, L10)*
 
@@ -1042,8 +1065,9 @@ surface are ordered by their recorded sequence. The same change produces the sam
 order. *(A2, L10)*
 
 **FD-22 — Unaffected is bounded and explicit.**
-A surface may be reported unaffected only within the examined boundary. A bounded
-walk that cannot complete reports the limit; it does not report "unaffected".
+A surface may be reported unaffected only within the examined boundary. An interrupted walk that cannot complete reports incomplete analysis and
+recoverable work; it does not report "unaffected" or discharge obligations.
+Delivery paging never sets dependency traversal depth/node limits.
 *(F4, A8)*
 
 ## 7. Response composition
@@ -1065,8 +1089,8 @@ that holds it, the statement, the evidence **references**, and the present
 non-current support state. It is never a stored second copy, never a
 compatibility shape, and never mixed into `conclusions`. The surface status
 names the same set through `stale_refs`: exact revision, understanding version,
-and present state, alongside the count. Descendant statuses keep their own
-references. Neither view auto-withdraws or rewrites history; recovery is an
+and present state, alongside the count. Immediate child summaries are separate from selected membership; retrieve
+their refs by exact surface ask. Neither view auto-withdraws or rewrites history; recovery is an
 explicit `record` action. *(FD-20, FD-21, FD-23, FD-35, FD-36)*
 
 **FD-24 — Partial answers are usable.**
@@ -1135,13 +1159,30 @@ curation.
 `RecordedQuestionSelector` restricts membership to one exact recorded question
 on one exact surface; current identity selectors restrict membership to one
 returned understanding identity. All three reuse forms use the same composition,
-issue no context and require no request identity. Their role as the reuse paths
+issue no context and require no request identity. Calculate status from exactly
+that membership, not unrelated full surface traversal. Only ordinary surface
+obtain computes boundary coverage and immediate child distributions; no
+recursive status trees. Select verification from runs covering the complete
+selected semantic scope. Group by normalized declared scope, scope description,
+command, scenario and environment limitations; select max observed_at per group,
+retain tied distinct outcomes and order by run ID for ties. Older applicable runs
+are recoverable in separate history continuation. A later unrelated or narrower
+run does not supersede an applicable result. For exact audit resolve the pinned
+version's exact revisions and curation as of that version; select only challenges
+targeting that version and label present challenge disposition and live support.
+Retrieve receipt effects by accepted identity, never current snapshot membership.
+Their role as the reuse paths
 is stated in `lifecycle-contract` §4.1. *(G2, F3, A4, L11)*
 
 **FD-29 — Result ordering is stable.**
-The selected surface and Functional Pyramid participation/orientation precede semantic content
-in the canonical projection; current conclusions are grouped by question, then
-status, gaps, verification and references. Functional Pyramid internal ordering
+The selected subject, classification and mandatory qualification or
+participation/unresolved summary precede collections. Deliver the primary
+consumer result first (semantic conclusions, requested evidence, exact audit,
+validation findings or affected obligations), then necessary recovery refs and
+auxiliary status/verification/history. Group current conclusions by question;
+do not evict them to retain unrelated descendant/verification inventory.
+Mandatory governance is complete or explicitly unresolved/incomplete with
+continuation; never imply applicability completion. Functional Pyramid internal ordering
 follows FD-72. The same request against the same state produces the same order.
 *(A2, L12)*
 
@@ -1223,8 +1264,16 @@ newest accepted version is current, and prior versions remain retrievable.
 *(F3)*
 
 **FD-37 — Premise and challenge effects are derived and reported, not applied silently.**
-Any transition that invalidates a premise must name the affected dependents in
-the same result. *(F4, L10)*
+Any transition that invalidates a premise must name affected dependents in
+the same result, recoverably paged under FD-55. Derive exact accepted revision
+effects from applied actions at transition time: create/add/correct/replace/
+withdraw/confirm name resulting refs, replace retains predecessor, curation
+names accepted target, no-op confirmation names unchanged ref with no mutation.
+Gap-only/disposition-only transitions produce no revision effect. Retain those
+facts and accepted challenge disposition revisions in the same receipt
+transaction; replay never substitutes later membership or disposition.
+Challenge opening projects exact disputed retained content and basis from
+the target version, with accepted challenge and context. *(F4, L4, L10)*
 
 For a resolved challenge disposition, Span resolves each semantic target against
 the resulting version after the update actions have been applied. An omitted
@@ -1412,25 +1461,39 @@ F10, F12, L8, L12–L16)*
 
 **FD-54 — Response size is server-owned.**
 The agent does not manage response size; the default is set per host and recorded
-with the delivered result. The bound applies to delivery, not to binding a
-source reference. *(F7)*
+with the delivered result. Apply encoded-size fitting to every result family,
+including installation operations and writes, independently of semantic
+evaluation and commitment. *(F7)*
 
 **FD-55 — Truncation is explicit and recoverable.**
-A truncated result names what was omitted and provides a public way to retrieve
-it. The continuation contract is `lifecycle-contract` §4.1. A response is
-complete or explicitly truncated. *(A8)*
+Use the exact bound continuation in lifecycle §4.1. Build the complete semantic
+selection or retained effect set before fitting, then page ordered collections
+with deterministic progress. Bind original subject/version, selection and
+collection position; do not rebuild from unrelated or mutable membership.
+Evidence uses original ordered request outcomes and admitted ranges, not all
+context observations. Emit outcome metadata and content through the same page
+owner; do not repeat the full batch or list every deferred item. A page advances
+by at least one deliverable semantic unit; split evidence at exact line
+boundaries. All required findings, references and obligations are accessible,
+including embedded multi-path governance and installed-state results. On live
+change refuse stale read pages with exact recovery; accepted effects stay
+pinned to receipt, reconsider effects to affected selection. *(A8)*
 
 **FD-56 — Truncation never substitutes stale content.**
 A budget limit never promotes historical content into answer content and never
-omits the fact that truncation occurred. *(F2, A7)*
+omits the fact of truncation. Preserve support/maturity/route state and
+full-population counts; incomplete unresolved findings or obligations remain
+explicitly incomplete, not empty success. *(F2, A7)*
 
 **FD-57 — A result too small to be safe is refused.**
-If the budget cannot carry the result kind, surface identity, Functional Pyramid
-participation/resolution state when applicable, and the fact of truncation, the
-operation returns an explicit budget refusal rather than a misleading fragment.
-Document lists or provenance may be continued/omitted only when the result still
-states that they are incomplete; unresolved governance is never truncated into
-an apparently complete route. *(A7, A8, G1, L12)*
+Reserve result classification, exact subject, required qualification,
+participation/route state, accepted identity/receipt (if committed), and
+recovery indication before fitting collections. If a pure query cannot carry
+one required unit and safe envelope, refuse with supported narrower selection
+or other real recovery; never suggest raising a hard gate. Refuse a new write
+whose acceptance envelope cannot fit before mutation. After commit retain
+acceptance and receipt even when live detail is unavailable. No arbitrary new
+budget or change to semantic traversal. *(A7, A8, G1, L4, L12)*
 
 **FD-59 — Recording context scope is fixed; derived operational scope is complete.**
 Source evidence admission requires membership in the supplied context's scope;
@@ -1443,10 +1506,14 @@ operational scope never changes understanding's semantic scope. Context-admitted
 references remain context-bound and are never dropped or made portable.
 *(A5, A8, F7, F9, L5, L7)*
 
-**FD-60 — Accepted understanding reports ownership through live status.**
-After commitment, compose current status for the understanding's canonical owner.
-Operational status failure preserves acceptance and reports explicit status
-unavailability. Status is never persisted in the receipt. *(F9, L4)*
+**FD-60 — Accepted understanding reports exact accepted effects.**
+After commitment qualify only accepted resulting supported revision refs
+(including accepted no-op confirmation), using the single evaluator. Read
+curation at accepted version; withdrawal has neither maturity nor reusable
+verdict. Operational failure preserves accepted effect with SupportUnavailable.
+Report canonical surface identity, no owner-wide or recursive status; ask owns
+surface status. Store immutable acceptance facts, not live qualification.
+*(F9, L4, L17)*
 
 ### Beta 3 capture and curation
 
@@ -1854,6 +1921,35 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
     options before operational effects; failure, readiness and recovery
     messages contain public actionable coordinates and no private diagnostics.
     FD-27/88B continue to govern every MCP result, including prose fields.
+### Public lifecycle boundary acceptance amendment (API-01–23)
+
+These extend the named existing FA cases; verification remains OPEN until
+executable evidence is mapped in the existing functional-acceptance matrix.
+
+- FA-01–04/36/41/71: status only member IDs, candidate no echo, accepted writes
+  only exact effects, receipt exact immutable audit, no private digest or
+  declaration inventory outside receipt; large result continuation.
+- FA-09/10/14/16/72: nested root and direct member requests yield identical
+  complete parent-root public locations and applicable placements; unrelated
+  roots qualified, no prefix guessing or implicit participation; embedded
+  multi-path and directory continuation preserve selection and unresolved state.
+- FA-24/25/38/41: deep/branching/cyclic cross-repo affected sets recoverable,
+  exact per-revision causes, one context per actionable owner, replay only
+  immutable accepted refs, no false completion when interrupted.
+- FA-28/48/49/51/66: exact question/current selector status scoped to selected
+  membership, no recursive descendant inventory, latest applicable verification
+  including failures, older history recoverable, evidence admission exact order
+  across restart and later context extension, outcome metadata paged, primary
+  content preserved under large auxiliaries.
+- FA-45/47/50/53–59/62/66: exact accepted revision actions including no-op and
+  withdrawal, explicit maturity independent of live support, exact challenge
+  prior content and accepted dispositions, surface CAS receipt replay after
+  later change, immutable audit vs live qualification; no fabricated migration.
+- FA-65/66/71/72: all advertised result branches and nested unions, real wire
+  plus free text checked for private carrier/route/digest/diagnostic leakage;
+  no increased response ceiling or weakened gate; every bounded collection
+  complete or explicitly recoverable, postcommit acceptance never lost.
+
 ## 16. What this layer does not define
 
 Layer 3 does not choose storage layout, wire encoding, transport framing,
