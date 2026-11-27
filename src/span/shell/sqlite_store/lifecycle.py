@@ -10,6 +10,7 @@ explicit offline protocol; the runtime never migrates at open.
 
 from __future__ import annotations
 
+import contextlib as _contextlib
 import dataclasses as _dataclasses
 import datetime as _datetime
 import json as _json
@@ -36,6 +37,7 @@ from span.core.recording import (
     receipt_decision,
 )
 from span.core.rejection import RejectionCauseKind, SurfaceConflict
+from span.shell.sqlite_ownership import store_use_ownership
 from span.shell.sqlite_store import curation as _curation
 from span.shell.sqlite_store import dependents as _dependents
 from span.shell.sqlite_store.contexts import (
@@ -129,6 +131,7 @@ class LifecycleStore:
         retention: m.LifecycleRetention,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         initialize_schema: bool = True,
+        ownership_root: _pathlib.Path | None = None,
     ) -> None:
         self.path = _pathlib.Path(path)
         self.retention = retention
@@ -138,13 +141,16 @@ class LifecycleStore:
             if initialize_schema
             else f"{self.path.resolve().as_uri()}?mode=rw"
         )
-        self._connection = _sqlite3.connect(
-            database,
-            uri=not initialize_schema,
-            check_same_thread=False,
-        )
-        self._connection.row_factory = _sqlite3.Row
-        try:
+        with _contextlib.ExitStack() as resources:
+            if ownership_root is not None:
+                resources.enter_context(store_use_ownership(ownership_root))
+            self._connection = _sqlite3.connect(
+                database,
+                uri=not initialize_schema,
+                check_same_thread=False,
+            )
+            resources.callback(self._connection.close)
+            self._connection.row_factory = _sqlite3.Row
             self._connection.execute("PRAGMA foreign_keys = ON")
             _validate_schema(
                 self._connection,
@@ -153,12 +159,10 @@ class LifecycleStore:
             )
             if initialize_schema:
                 self._initialize_schema()
-        except BaseException:
-            self._connection.close()
-            raise
+            self._resources = resources.pop_all()
 
     def close(self) -> None:
-        self._connection.close()
+        self._resources.close()
 
     def _initialize_schema(self) -> None:
         with _transaction(self._connection) as connection:

@@ -9,7 +9,11 @@ failure instead of re-implementing the lock protocol.
 from __future__ import annotations
 
 import contextlib
+import fcntl
+import os
 import sqlite3
+import stat
+from pathlib import Path
 from typing import Iterator
 
 #: How long a caller waits for a live holder to release the store. This is the
@@ -22,8 +26,46 @@ class StoreHeldError(RuntimeError):
 
 
 @contextlib.contextmanager
+def stable_ownership(
+    data_dir: str | Path, name: str, *, exclusive: bool
+) -> Iterator[None]:
+    """Advisory ownership on a stable canonical installation-local path."""
+    root = Path(data_dir).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / name
+    try:
+        handle = os.open(
+            path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
+        )
+    except OSError as exc:
+        raise StoreHeldError(f"cannot open ownership lock {path}: {exc}") from exc
+    try:
+        identity = os.fstat(handle)
+        if not stat.S_ISREG(identity.st_mode):
+            raise StoreHeldError(f"invalid ownership lock: {path}")
+        try:
+            mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+            fcntl.flock(handle, mode | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise StoreHeldError(f"ownership lock held or unavailable: {path}") from exc
+        current = path.stat(follow_symlinks=False)
+        if (identity.st_dev, identity.st_ino) != (current.st_dev, current.st_ino):
+            raise StoreHeldError(f"ownership lock identity changed: {path}")
+        yield
+    finally:
+        os.close(handle)
+
+
+def store_use_ownership(
+    data_dir: str | Path, *, exclusive: bool = False
+) -> contextlib.AbstractContextManager[None]:
+    """Shared runtime admission or exclusive installation recovery."""
+    return stable_ownership(data_dir, ".store-use.lock", exclusive=exclusive)
+
+
+@contextlib.contextmanager
 def exclusive_ownership(
-    path, timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
+    path: str | Path, timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
 ) -> Iterator[sqlite3.Connection]:
     """Hold SQLite exclusive ownership until the context exits.
 
@@ -34,7 +76,10 @@ def exclusive_ownership(
     may use the context without touching it.
     """
     connection = sqlite3.connect(
-        str(path), timeout=timeout_seconds, isolation_level=None
+        Path(path).resolve().as_uri() + "?mode=rw",
+        timeout=timeout_seconds,
+        isolation_level=None,
+        uri=True,
     )
     try:
         connection.execute(f"PRAGMA busy_timeout = {int(timeout_seconds * 1000)}")

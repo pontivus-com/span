@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import json
 import sqlite3
 from pathlib import Path
 
@@ -74,8 +75,43 @@ def database_facts(path) -> DatabaseFacts:
     )
 
 
-def copy_database(source, destination) -> None:
-    src = sqlite3.connect(read_only_uri(source), uri=True)
+def logical_database_digest(connection: sqlite3.Connection) -> str:
+    """Fingerprint complete typed SQLite content, independently of page layout."""
+    if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+        raise ValueError("database integrity is not established")
+    schema = [
+        tuple(row)
+        for row in connection.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name"
+        )
+    ]
+    digest = hashlib.sha256(json.dumps(schema).encode("utf-8"))
+
+    def typed(value: object) -> tuple[str, object]:
+        return (
+            type(value).__name__,
+            value.hex() if isinstance(value, bytes) else value,
+        )
+
+    for pragma in ("user_version", "application_id", "encoding"):
+        value = connection.execute(f"PRAGMA {pragma}").fetchone()[0]
+        digest.update(json.dumps((pragma, typed(value))).encode("utf-8"))
+    for kind, name, _, _ in schema:
+        if kind != "table":
+            continue
+        quoted = '"' + name.replace('"', '""') + '"'
+        rows = sorted(
+            json.dumps(tuple(typed(value) for value in row))
+            for row in connection.execute(f"SELECT * FROM {quoted}")
+        )
+        digest.update(json.dumps((name, rows)).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def copy_database(
+    source, destination, *, connection: sqlite3.Connection | None = None
+) -> None:
+    src = connection or sqlite3.connect(read_only_uri(source), uri=True)
     try:
         dst = sqlite3.connect(str(destination))
         try:
@@ -83,4 +119,5 @@ def copy_database(source, destination) -> None:
         finally:
             dst.close()
     finally:
-        src.close()
+        if connection is None:
+            src.close()

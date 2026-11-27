@@ -23,6 +23,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import sys
@@ -36,6 +37,7 @@ from span.shell.install.backup_io import (
     utc_stamp,
 )
 from span.shell.install.constants import INSTALL_VERSION
+from span.shell.install.receipt import fsync_directory, publish_install_bytes
 from span.shell.install.manifest import (
     BackupArtifact,
     BackupManifest,
@@ -85,7 +87,16 @@ def _backup_root(data_dir, backup_root):
     return Path(backup_root) if backup_root is not None else Path(data_dir) / "backups"
 
 
-def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
+def create_backup(
+    data_dir,
+    backup_root=None,
+    label="operator",
+    dry_run=False,
+    *,
+    required_databases: tuple[str, ...] = (),
+    governed_files: dict[str, Path] | None = None,
+    locked_databases: dict[str, sqlite3.Connection] | None = None,
+):
     """Take one verified point-in-time backup and write its manifest.
 
     Returns the artifact directory, or ``None`` when the data dir or its
@@ -102,7 +113,7 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
             *([installation_db] if installation_db.is_file() else []),
         ]
     )
-    if not databases:
+    if not databases and not required_databases and not governed_files:
         return None
     root = _backup_root(data_dir, backup_root)
     destination = root / utc_stamp()
@@ -113,11 +124,21 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
     try:
         artifacts = []
         absent = []
+        present = {db.relative_to(data_dir).as_posix() for db in databases}
+        for name in required_databases:
+            if name not in present:
+                absent.append(ManifestReason(name, "not present at backup time"))
         for db in databases:
             relative = db.relative_to(data_dir)
+            if db.is_symlink():
+                raise SystemExit(f"database backup source is a symlink: {db}")
             copied = destination / relative
             copied.parent.mkdir(parents=True, exist_ok=True)
-            copy_database(db, copied)
+            copy_database(
+                db,
+                copied,
+                connection=(locked_databases or {}).get(relative.as_posix()),
+            )
             artifacts.append(
                 BackupArtifact(
                     path=str(relative),
@@ -126,14 +147,18 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
                     database=database_facts(copied),
                 )
             )
-        for name in SUPPORT_FILES:
-            source = data_dir / name
+        files = {name: data_dir / name for name in SUPPORT_FILES}
+        files.update(governed_files or {})
+        for name, source in sorted(files.items()):
+            if source.is_symlink() or (source.exists() and not source.is_file()):
+                raise SystemExit(f"invalid backup source: {source}")
             if not source.is_file():
                 absent.append(
                     ManifestReason(path=name, reason="not present at backup time")
                 )
                 continue
-            copied = destination / name
+            copied = _artifact_path(destination, name)
+            copied.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, copied)
             artifacts.append(
                 BackupArtifact(
@@ -159,11 +184,27 @@ def create_backup(data_dir, backup_root=None, label="operator", dry_run=False):
         manifest_bytes = (
             json.dumps(manifest.payload(), indent=2, sort_keys=True) + "\n"
         ).encode("utf-8")
-        (destination / BACKUP_MANIFEST).write_bytes(manifest_bytes)
+        for artifact in artifacts:
+            with (destination / artifact.path).open("rb") as handle:
+                os.fsync(handle.fileno())
         digest = hashlib.sha256(manifest_bytes).hexdigest()
-        (destination / BACKUP_MANIFEST_DIGEST).write_text(
-            f"{digest}  {BACKUP_MANIFEST}\n"
+        publish_install_bytes(
+            destination / BACKUP_MANIFEST, manifest_bytes, replace=False
         )
+        publish_install_bytes(
+            destination / BACKUP_MANIFEST_DIGEST,
+            f"{digest}  {BACKUP_MANIFEST}\n".encode("utf-8"),
+            replace=False,
+        )
+        for directory in sorted(
+            (path for path in destination.rglob("*") if path.is_dir()),
+            key=lambda path: len(path.parts),
+            reverse=True,
+        ):
+            fsync_directory(directory)
+        fsync_directory(destination)
+        fsync_directory(destination.parent)
+        fsync_directory(destination.parent.parent)
     except BaseException:
         shutil.rmtree(destination, ignore_errors=True)
         raise
@@ -237,15 +278,33 @@ def _load_manifest(backup_dir):
 
 def _artifact_path(backup_dir, name):
     candidate = Path(name)
-    if candidate.is_absolute() or ".." in candidate.parts:
+    if (
+        not candidate.parts
+        or candidate.is_absolute()
+        or ".." in candidate.parts
+        or candidate.as_posix() != name
+    ):
         raise SystemExit(f"recovery artifact path escapes the backup: {name}")
-    return Path(backup_dir) / candidate
+    path = Path(backup_dir)
+    for part in candidate.parts:
+        path = path / part
+        if path.is_symlink():
+            raise SystemExit(f"symlink in recovery artifact path: {path}")
+    return path
 
 
 def verify_backup(backup_dir):
     """Verify artifact identity, database integrity and schema compatibility."""
     backup_dir = Path(backup_dir)
     manifest = _load_manifest(backup_dir)
+    names = [item.path for item in (*manifest.artifacts, *manifest.absent)]
+    if len(names) != len(set(names)):
+        raise SystemExit("duplicate recovery manifest path")
+    for name in names:
+        _artifact_path(backup_dir, name)
+    for item in manifest.absent:
+        if _artifact_path(backup_dir, item.path).exists():
+            raise SystemExit(f"recorded absent artifact exists: {item.path}")
     current, supported = _supported_schemas()
     failures: list[str] = []
     results: list[VerifiedArtifact] = []
@@ -366,13 +425,22 @@ def restore_backup(backup_dir, data_dir, confirm, backup_root=None, dry_run=Fals
         for failure in report.failures:
             print(f"  {failure}", file=sys.stderr)
         raise SystemExit(f"refusing to restore an unverified artifact: {backup_dir}")
-    _assert_quiescent(data_dir)
-    snapshot = create_backup(data_dir, backup_root=backup_root, label="pre-restore")
     if dry_run:
         print(f"+ restore (dry-run, not executed): {backup_dir} -> {data_dir}")
         return RestoreResult(
-            restored=(), pre_restore_backup=snapshot, schema_actions=(), dry_run=True
+            restored=(), pre_restore_backup=None, schema_actions=(), dry_run=True
         )
+    from span.shell.install.governed_recovery import pending_restore
+
+    pending = pending_restore(backup_dir, data_dir, backup_root)
+    if pending is not None:
+        return pending
+    if any(
+        item.path.startswith("governed-targets/") for item in report.artifacts
+    ) or _load_manifest(backup_dir).label.startswith("governed-"):
+        raise SystemExit("governed recovery backup requires its original pending intent")
+    _assert_quiescent(data_dir)
+    snapshot = create_backup(data_dir, backup_root=backup_root, label="pre-restore")
     restored = []
     for artifact in report.artifacts:
         destination = _restore_artifact(backup_dir, data_dir, artifact)

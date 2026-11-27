@@ -91,18 +91,27 @@ def ensure_structural_indexer(venv_dir, dry_run=False):
     return str(binary)
 
 
-def write_indexer_pointer(data_dir, binary, dry_run=False):
-    """Record the provisioned indexer pointer under the data dir."""
-    payload = {
+def indexer_pointer_payload(binary: str) -> dict[str, str]:
+    """Canonical managed-indexer pointer used by preflight and publication."""
+    return {
         "package": STRUCTURAL_INDEXER_PACKAGE,
         "version": STRUCTURAL_INDEXER_VERSION,
         "binary": str(binary),
     }
+
+
+def write_indexer_pointer(data_dir, binary, dry_run=False):
+    """Record the provisioned indexer pointer under the data dir."""
+    from span.shell.install.receipt import publish_install_bytes
+
+    payload = indexer_pointer_payload(str(binary))
     print(f"+ write indexer pointer: {Path(data_dir) / 'structural-indexer.json'}")
     if dry_run:
         return payload
     Path(data_dir).mkdir(parents=True, exist_ok=True)
-    (Path(data_dir) / "structural-indexer.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    publish_install_bytes(
+        Path(data_dir) / "structural-indexer.json",
+        (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+        replace=True,
     )
     return payload

@@ -59,25 +59,35 @@ def _canonical_bindings(value: object) -> tuple[m.AuthorityBinding, ...]:
     return tuple(m.from_canonical(m.AuthorityBinding, item) for item in _array(value))
 
 
-def _existing_roots(data_dir: Path) -> dict[str, str]:
+def _existing_roots(
+    data_dir: Path, pending: dict[str, object] | None = None
+) -> dict[str, str]:
     from span.shell.readiness import probe_store
+    from span.shell.install.governed_recovery import owned_empty_repository_store
 
     roots: dict[str, str] = {}
     for path in sorted(data_dir.glob("*.db")):
         readiness = probe_store(data_dir, path.stem)
         if not readiness.ready or readiness.bound_root is None:
+            if pending is not None and owned_empty_repository_store(data_dir, pending, path.stem):
+                continue
             raise ValueError(f"registered repository store is unavailable: {path.stem}")
         roots[path.stem] = readiness.bound_root
     return roots
 
 
-def _bindings(data_dir: Path, repository_id: str) -> tuple[m.AuthorityBinding, ...]:
+def _bindings(
+    data_dir: Path, repository_id: str, pending: dict[str, object] | None = None
+) -> tuple[m.AuthorityBinding, ...]:
     from span.shell.readiness import installed_authority_bindings
+    from span.shell.install.governed_recovery import owned_empty_repository_store
 
     if not (data_dir / f"{repository_id}.db").exists():
         return ()
     raw = installed_authority_bindings(data_dir, repository_id)
     if raw is None:
+        if pending is not None and owned_empty_repository_store(data_dir, pending, repository_id):
+            return ()
         raise ValueError(f"registered authority unavailable: {repository_id}")
     return _canonical_bindings(raw)
 
@@ -259,7 +269,7 @@ def _configuration(
             if identity.repository_id == repository_id
         }
         if pending is not None:
-            current = set(_bindings(data_dir, repository_id))
+            current = set(_bindings(data_dir, repository_id, pending))
             if current not in (
                 set(_canonical_bindings(entry["previous_bindings"])),
                 set(_canonical_bindings(entry["bindings"])),
@@ -359,13 +369,15 @@ def prepare(
         raise ValueError(
             "competing ordinary authority binding input for governed member"
         )
-    registered = _existing_roots(data_dir)
-    for repository_id, root in roots.items():
-        if repository_id in registered and registered[repository_id] != str(root):
-            raise ValueError(f"repository root conflict: {repository_id}")
     accepted = _object(prior.get(ACCEPTED, {}))
     pending_value = prior.get(PENDING)
     pending = None if pending_value is None else _object(pending_value)
+    if pending is not None and "restore_intent" in pending:
+        raise ValueError("restore is in progress; resume the authorized restore")
+    registered = _existing_roots(data_dir, pending)
+    for repository_id, root in roots.items():
+        if repository_id in registered and registered[repository_id] != str(root):
+            raise ValueError(f"repository root conflict: {repository_id}")
     classification, entries, fingerprints = _classify(roots, mapped)
     members, artifacts = _artifacts(classification)
     _configuration(data_dir, entries, classification, fingerprints, accepted, pending)

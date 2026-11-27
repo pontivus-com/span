@@ -19,12 +19,15 @@ from span.ports.structural import StructuralSource
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.mcp import ServiceContext
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+from span.shell.sqlite_ownership import store_use_ownership
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
     LifecycleStoreError,
 )
 from span.shell.sqlite_store.functional_pyramid import (
+    FunctionalPyramidInstallationStore,
     ensure_functional_pyramid_installation_store,
+    functional_pyramid_installation_path,
 )
 from span.shell.structural import (
     canonical_root_from_config,
@@ -85,6 +88,7 @@ def _open_store(
         store_path,
         retention=DEFAULT_LIFECYCLE_RETENTION,
         initialize_schema=False,
+        ownership_root=data_root,
     )
     try:
         try:
@@ -237,9 +241,24 @@ def close_repository_context(context: ServiceContext) -> None:
     store.close()
 
 
+def create_empty_repository_store(path: _pathlib.Path) -> None:
+    """Create canonical empty schema; no authority or semantic registration."""
+    LifecycleStore(path, retention=DEFAULT_LIFECYCLE_RETENTION).close()
+
+
+def create_empty_installation_store(path: _pathlib.Path) -> None:
+    FunctionalPyramidInstallationStore.create(
+        path, retention=DEFAULT_LIFECYCLE_RETENTION
+    ).close()
+
+
 def provision_repository_runtime(
     data_dir: str | _pathlib.Path,
     request: m.InitializeRepositoryRequest,
+    *,
+    prepare_store: _typing.Callable[
+        [_pathlib.Path, _typing.Callable[[_pathlib.Path], None]], None
+    ] | None = None,
 ) -> tuple[RepositoryRuntime, m.InitializeRepositoryResult]:
     """Explicit setup, returning raw capabilities rather than partial services."""
     data_root = _pathlib.Path(data_dir)
@@ -260,15 +279,23 @@ def provision_repository_runtime(
             f"structural indexer unavailable for {root!r}: {currency.state.value}; "
             "rerun installation to provision the indexer, then retry setup"
         )
-    data_root.mkdir(parents=True, exist_ok=True)
-    installation_store = ensure_functional_pyramid_installation_store(
-        data_root, retention=DEFAULT_LIFECYCLE_RETENTION
-    )
-    installation_store.close()
-    store = LifecycleStore(
-        data_root / f"{repository_id}.db",
-        retention=DEFAULT_LIFECYCLE_RETENTION,
-    )
+    with store_use_ownership(data_root):
+        repository_path = data_root / f"{repository_id}.db"
+        if prepare_store is not None:
+            prepare_store(
+                functional_pyramid_installation_path(data_root),
+                create_empty_installation_store,
+            )
+            prepare_store(repository_path, create_empty_repository_store)
+        installation_store = ensure_functional_pyramid_installation_store(
+            data_root, retention=DEFAULT_LIFECYCLE_RETENTION
+        )
+        installation_store.close()
+        store = LifecycleStore(
+            repository_path,
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+            ownership_root=data_root,
+        )
     try:
         evidence = FilesystemEvidenceSource(repository_id, root)
         result = initialize_repository(

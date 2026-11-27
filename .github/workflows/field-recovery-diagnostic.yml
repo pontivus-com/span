@@ -1,0 +1,31 @@
+name: Temporary field recovery diagnostic
+on:
+  push:
+    branches: ["release/1.0.0-beta5"]
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install diagnostic dependencies
+        run: python -m pip install -e '.[test,dev]'
+      - name: Format diagnostic working tree and show required corrections
+        run: |
+          black src/span tests/unit/test_recovery.py tests/integration/test_installed_mcp.py
+          git diff --check
+          git diff -- src/span tests/unit/test_recovery.py tests/integration/test_installed_mcp.py
+      - name: Measure existing code budget
+        run: python -c 'import json; from tests.unit.test_code_budget import measure; print(json.dumps(measure(), sort_keys=True))'
+      - name: Lint and typing
+        run: |
+          ruff check .
+          python scripts/typecheck.py
+      - name: Focused recovery regressions
+        if: always()
+        run: python -m pytest -q tests/unit/test_recovery.py tests/unit/test_beta3_initialization_regressions.py tests/unit/test_install.py

@@ -271,5 +271,303 @@ class RecoveryTests(unittest.TestCase):
             self.assertTrue((data / "repo.db").is_file())
 
 
+class GovernedRecoveryTests(unittest.TestCase):
+    def _fixture(self, root, *, existing=False, unrelated=False):
+        from span.shell.context import (
+            create_empty_installation_store,
+            create_empty_repository_store,
+        )
+        from span.shell.install import governed, governed_recovery
+        from span.shell.install.constants import INSTALL_VERSION
+        from span.shell.install.indexer import indexer_pointer_payload
+        from span.shell.install.preflight import validate_authority_files
+        from span.shell.install.receipt import write_receipt
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+        data = root / "data"
+        data.mkdir()
+        repo = root / "repo-a"
+        docs = repo / "docs"
+        docs.mkdir(parents=True)
+        (docs / "foundation.md").write_text("# Foundation\n")
+        classification = docs / "classification.json"
+        classification.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "rows": [
+                        {
+                            "declaring_repository_id": repo.name,
+                            "repository_id": repo.name,
+                            "document_ref": "docs/foundation.md",
+                            "disposition": "place",
+                            "layer": "P0",
+                            "scope": ".",
+                            "governing_documents": ["ROOT"],
+                            "authority_kind": "REPOSITORY_RULE",
+                            "authority_status": "ACCEPTED",
+                        }
+                    ],
+                }
+            )
+        )
+        prior = {}
+        if existing or unrelated:
+            create_empty_installation_store(
+                data / "installation/functional-pyramid.db"
+            )
+            prior = {
+                "install_version": INSTALL_VERSION,
+                "repos": [],
+                "host_registration": {},
+            }
+            for selected in ([repo] if existing else []) + (
+                [root / "repo-c"] if unrelated else []
+            ):
+                selected.mkdir(exist_ok=True)
+                store_path = data / f"{selected.name}.db"
+                create_empty_repository_store(store_path)
+                store = LifecycleStore(
+                    store_path,
+                    retention=DEFAULT_LIFECYCLE_RETENTION,
+                    initialize_schema=False,
+                )
+                try:
+                    store.register_repository(selected.name, str(selected))
+                finally:
+                    store.close()
+                prior["repos"].append(str(selected))
+            write_receipt(data, prior)
+            (data / "structural-indexer.json").write_text('{"prior": true}\n')
+        pending, artifacts = governed.prepare(
+            data, (repo,), [[repo.name, str(classification)]], [], prior
+        )
+        requests = validate_authority_files(
+            (repo,), {}, governed.bindings_for(pending)
+        )
+        backup = pathlib.Path(
+            governed_recovery.protect_setup(
+                data, prior, pending, requests, indexer_pointer_payload("/graft")
+            )
+        )
+        self.assertTrue(install.verify_backup(backup).ok)
+        return data, repo, prior, pending, artifacts, requests, backup
+
+    def _publish(self, fixture, boundary):
+        from span.shell.context import (
+            create_empty_installation_store,
+            create_empty_repository_store,
+        )
+        from span.shell.install import governed, governed_recovery
+        from span.shell.install.indexer import write_indexer_pointer
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+        data, repo, prior, pending, artifacts, requests, backup = fixture
+        governed.retain_pending(data, prior, pending, str(backup))
+        if boundary < 1:
+            return
+        write_indexer_pointer(data, "/graft")
+        if boundary < 2:
+            return
+        governed.publish(pending, artifacts, bootstrap=False)
+        if boundary < 3:
+            return
+        governed_recovery.prepare_store(
+            data,
+            pending,
+            data / "installation/functional-pyramid.db",
+            create_empty_installation_store,
+        )
+        if boundary < 4:
+            return
+        governed_recovery.prepare_store(
+            data, pending, data / "repo-a.db", create_empty_repository_store
+        )
+        if boundary < 5:
+            return
+        store = LifecycleStore(
+            data / "repo-a.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+            initialize_schema=False,
+        )
+        try:
+            store.register_repository(
+                repo.name,
+                str(repo),
+                authority_seeds=requests[0].authority_seeds or (),
+                authority_bindings=requests[0].authority_bindings,
+            )
+        finally:
+            store.close()
+
+    def _restore(self, fixture):
+        data, _, _, _, _, _, backup = fixture
+        from span.shell.install.receipt import administrative_ownership
+
+        with administrative_ownership(data):
+            return install.restore_backup(backup, data, confirm=backup.name)
+
+    def _assert_restored(self, fixture):
+        from span.shell.install.governed_recovery import _database_digest
+
+        data, repo, _, _, artifacts, _, backup = fixture
+        for name in ("install.json", "structural-indexer.json"):
+            before = backup / name
+            after = data / name
+            if before.exists():
+                self.assertEqual(after.read_bytes(), before.read_bytes())
+            else:
+                self.assertFalse(after.exists())
+        for name in ("repo-a.db", "installation/functional-pyramid.db"):
+            before = backup / name
+            after = data / name
+            if before.exists():
+                self.assertEqual(_database_digest(after), _database_digest(before))
+            else:
+                self.assertFalse(after.exists())
+        for _, locator in artifacts:
+            self.assertFalse((repo / locator).exists())
+
+    def test_governed_restore_every_setup_publication_boundary(self):
+        for existing in (False, True):
+            for boundary in range(6):
+                with (
+                    self.subTest(existing=existing, boundary=boundary),
+                    tempfile.TemporaryDirectory() as tmp,
+                ):
+                    fixture = self._fixture(pathlib.Path(tmp), existing=existing)
+                    data, _, _, _, _, _, backup = fixture
+                    # Baseline capture itself does not publish pending or mutate data.
+                    self.assertEqual(
+                        (data / "install.json").exists(),
+                        (backup / "install.json").exists(),
+                    )
+                    self._publish(fixture, boundary)
+                    result = self._restore(fixture)
+                    self._assert_restored(fixture)
+                    self.assertTrue(install.verify_backup(result.pre_restore_backup).ok)
+
+    def test_interrupted_restore_reuses_snapshot_and_excludes_idle_runtime(self):
+        from span.shell.install import governed_recovery
+        from span.shell.install.receipt import read_receipt
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_ownership import StoreHeldError, store_use_ownership
+        from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self._fixture(pathlib.Path(tmp))
+            data = fixture[0]
+            self._publish(fixture, 5)
+            holder = LifecycleStore(
+                data / "repo-a.db",
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+                initialize_schema=False,
+                ownership_root=data,
+            )
+            try:
+                with self.assertRaisesRegex(SystemExit, "ownership"):
+                    self._restore(fixture)
+            finally:
+                holder.close()
+            original = governed_recovery._restore_database
+
+            def interrupt(*args):
+                with self.assertRaises(StoreHeldError):
+                    with store_use_ownership(data / ".." / data.name):
+                        self.fail("runtime admitted during exclusive recovery")
+                original(*args)
+                raise RuntimeError("interrupted after database reconciliation")
+
+            with mock.patch.object(
+                governed_recovery, "_restore_database", side_effect=interrupt
+            ):
+                with self.assertRaisesRegex(RuntimeError, "interrupted"):
+                    self._restore(fixture)
+            pending = read_receipt(data)["pending_governed_initialization"]
+            snapshot = pending["restore_intent"]["snapshot"]
+            count = len(list((data / "backups").iterdir()))
+            completed = self._restore(fixture)
+            self.assertEqual(completed.pre_restore_backup, snapshot)
+            self.assertEqual(len(list((data / "backups").iterdir())), count)
+            self._assert_restored(fixture)
+
+    def test_recovery_conflicts_before_mutating_independent_or_unowned_state(self):
+        from span.shell.context import create_empty_repository_store
+
+        for case in ("unexplained", "fresh-write", "existing-write", "shared-write", "generated"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                fixture = self._fixture(
+                    pathlib.Path(tmp), existing=case == "existing-write"
+                )
+                data, repo, _, _, artifacts, _, _ = fixture
+                self._publish(fixture, 2 if case == "unexplained" else 5)
+                if case == "unexplained":
+                    create_empty_repository_store(data / "repo-a.db")
+                elif case in ("fresh-write", "existing-write", "shared-write"):
+                    path = (
+                        data / "installation/functional-pyramid.db"
+                        if case == "shared-write"
+                        else data / "repo-a.db"
+                    )
+                    with sqlite3.connect(path) as connection:
+                        connection.execute("INSERT INTO meta VALUES('independent', 'write')")
+                    connection.close()
+                else:
+                    locator = next(
+                        locator for _, locator in artifacts
+                        if (repo / locator).is_file()
+                    )
+                    (repo / locator).write_text("independent modification")
+                receipt = (data / "install.json").read_bytes()
+                pointer = (data / "structural-indexer.json").read_bytes()
+                with self.assertRaisesRegex(SystemExit, "governed recovery conflict"):
+                    self._restore(fixture)
+                self.assertEqual((data / "install.json").read_bytes(), receipt)
+                self.assertEqual((data / "structural-indexer.json").read_bytes(), pointer)
+
+    def test_unrelated_repository_is_not_restored_from_full_backup(self):
+        from span.shell.install.governed_recovery import _database_digest
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self._fixture(pathlib.Path(tmp), existing=True, unrelated=True)
+            data = fixture[0]
+            self._publish(fixture, 5)
+            with sqlite3.connect(data / "repo-c.db") as connection:
+                connection.execute("INSERT INTO meta VALUES('independent', 'later')")
+            connection.close()
+            current = _database_digest(data / "repo-c.db")
+            self._restore(fixture)
+            self.assertEqual(_database_digest(data / "repo-c.db"), current)
+            self._assert_restored(fixture)
+
+    def test_owned_empty_store_can_resume_original_setup(self):
+        from span.shell.install import governed, governed_recovery
+        from span.shell.install.indexer import indexer_pointer_payload
+        from span.shell.install.receipt import read_receipt
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self._fixture(pathlib.Path(tmp))
+            data, repo, _, _, _, requests, backup = fixture
+            self._publish(fixture, 4)
+            prior = read_receipt(data)
+            pending, _ = governed.prepare(
+                data,
+                (repo,),
+                [[repo.name, str(repo / "docs/classification.json")]],
+                [],
+                prior,
+            )
+            self.assertEqual(
+                governed_recovery.protect_setup(
+                    data, prior, pending, requests, indexer_pointer_payload("/graft")
+                ),
+                str(backup),
+            )
+            self._restore(fixture)
+            self._assert_restored(fixture)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,6 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 implementation candidate awaits verification; S-FIELD-02–04 remain open and unverified.
+**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-02 candidate implementation under test; S-FIELD-03–04 remain open.
 **Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
@@ -179,13 +179,12 @@ CI or a successful count-only installation.
 
 ### S-FIELD-01 — Exhaustive exact administrative authority validation
 
-**Status:** IMPLEMENTED IN CANDIDATE, VERIFICATION OPEN. **Owner:** existing
+**Status:** VERIFIED at `49f43b8798fd` ([CI 45922217648](https://github.com/pontivus-com/span/actions/runs/45922217648): 1,024 passed, 1 skipped, 186 subtests; zero-error typing and distribution passed). **Owner:** existing
 `service/administration.py` and installer preflight/provisioning composition,
 existing EvidenceSource port. The exact-locator validator and installer
 preflight are implemented; unit and installed field-scale regressions added.
 Test-line ratchet records the measured added regression lines (189); no
-delivery or semantic budget changed. Do not accept this gate until focused
-and exact-candidate CI evidence is available; S-FIELD-02–04 remain open.
+delivery or semantic budget changed. S-FIELD-02–04 remain open.
 
 1. Implement the exact unbounded-by-delivery validation mechanism in TD §20.
    Replace first-page inventory consumption for both ordinary seeds and bindings.
@@ -237,7 +236,7 @@ design/task level below; no production correction or executable proof yet.
 
 ### S-FIELD-02 — Restore pending governed setup without orphaned ownership
 
-**Status:** OPEN. **Owner:** existing installer receipt, governed artifact
+**Status:** IMPLEMENTED IN CANDIDATE, VERIFICATION OPEN. **Owner:** existing installer receipt, governed artifact
 publication and full installation backup/restore owners. Depends on S-FIELD-01
 for the corrected preflight boundary, not for ownership semantics.
 

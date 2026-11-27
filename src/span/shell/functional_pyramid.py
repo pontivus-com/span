@@ -18,6 +18,7 @@ from span.ports.functional_pyramid import (
     FunctionalPyramidStatePort,
 )
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
+from span.shell.sqlite_ownership import store_use_ownership
 from span.shell.sqlite_store.functional_pyramid import (
     FunctionalPyramidInstallationStore,
     functional_pyramid_installation_path,
@@ -139,23 +140,24 @@ def open_functional_pyramid_service(
         yield None
         return
 
-    state = FunctionalPyramidInstallationStore(
-        path,
-        retention=DEFAULT_LIFECYCLE_RETENTION,
-    )
-    try:
-        yield compose_functional_pyramid_service(
-            state=state,
-            policy=policy,
-            repository_runtime=repository_runtime,
-            registered_repository_ids=registered_repository_ids,
-            repository_paths=lambda repository_ids: tuple(
-                (repository_id, str(root / f"{repository_id}.db"))
-                for repository_id in repository_ids
-            ),
+    with store_use_ownership(root):
+        state = FunctionalPyramidInstallationStore(
+            path,
+            retention=DEFAULT_LIFECYCLE_RETENTION,
         )
-    finally:
-        state.close()
+        try:
+            yield compose_functional_pyramid_service(
+                state=state,
+                policy=policy,
+                repository_runtime=repository_runtime,
+                registered_repository_ids=registered_repository_ids,
+                repository_paths=lambda repository_ids: tuple(
+                    (repository_id, str(root / f"{repository_id}.db"))
+                    for repository_id in repository_ids
+                ),
+            )
+        finally:
+            state.close()
 
 
 def compose_functional_pyramid_service(

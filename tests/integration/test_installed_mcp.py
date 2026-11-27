@@ -421,7 +421,7 @@ dispose();
         self.assertIn("Functional Pyramid UNCONFIGURED", observed[0]["text"])
         self.assertIn("ask the relevant surface", observed[0]["text"])
 
-    def _install_governed_runtime(
+    def _governed_runtime_command(
         self,
         repo_a: _pathlib.Path,
         repo_b: _pathlib.Path,
@@ -469,9 +469,22 @@ dispose();
             repo_b.name,
             str(repo_b / "docs/classification.json"),
         ]
-        self._execute_installer(command if governed else ordinary, env)
         runtime_exe = venv_dir / "bin" / "span-mcp"
-        self.assertTrue(runtime_exe.is_file())
+        return str(runtime_exe), command if governed else ordinary, env
+
+    def _install_governed_runtime(
+        self,
+        repo_a: _pathlib.Path,
+        repo_b: _pathlib.Path,
+        data_dir: _pathlib.Path,
+        *,
+        governed: bool = True,
+    ) -> tuple[str, list[str], dict[str, str]]:
+        runtime_exe, command, env = self._governed_runtime_command(
+            repo_a, repo_b, data_dir, governed=governed
+        )
+        self._execute_installer(command, env)
+        self.assertTrue(_pathlib.Path(runtime_exe).is_file())
         self.assertTrue((data_dir / f"{repo_a.name}.db").is_file())
         self.assertTrue((data_dir / f"{repo_b.name}.db").is_file())
         for root in (repo_a, repo_b):
@@ -589,11 +602,116 @@ dispose();
             "pending_governed_initialization"
         ]
         self.assertEqual(pending["accepted_version"], 2)
+        backup = _pathlib.Path(pending["backup"])
+        restore = [
+            command[0], "--data-dir", str(data_dir),
+            "--restore-backup", str(backup), "--restore-confirm", backup.name,
+        ]
+        accepted_bytes = receipt_path.read_bytes()
+        refused = _subprocess.run(
+            restore, cwd=str(self.tmp), capture_output=True, text=True, timeout=900, env=env
+        )
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("participation was accepted", refused.stderr + refused.stdout)
+        self.assertEqual(receipt_path.read_bytes(), accepted_bytes)
         self._execute_installer(command, env)
         recovered = _json.loads(receipt_path.read_text())
         self.assertNotIn("pending_governed_initialization", recovered)
         self.assertEqual(recovered["governed_initialization"]["repo-a"]["version"], 2)
         self.assertTrue(recovered["verify"]["acceptance_ok"])
+
+    def test_installed_abandonment_and_interrupted_restore(self):
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                root = self.tmp / f"abandon-{existing}"
+                repo_a, repo_b = root / "repo-a", root / "repo-b"
+                for repo, files in ((repo_a, _GOVERNED_A_FILES), (repo_b, _GOVERNED_B_FILES)):
+                    repo.mkdir(parents=True)
+                    _write_files(repo, files)
+                data_dir = root / "data"
+                _, command, env = self._governed_runtime_command(repo_a, repo_b, data_dir)
+                receipt_path = data_dir / "install.json"
+                before = None
+                prior_artifacts = {}
+                if existing:
+                    self._execute_installer(command, env)
+                    before = receipt_path.read_bytes()
+                    for repo in (repo_a, repo_b):
+                        entry = _json.loads(before)["governed_initialization"][repo.name]
+                        for locator in entry["artifacts"]:
+                            path = repo / locator
+                            prior_artifacts[path] = path.read_bytes()
+                        classification = repo / "docs/classification.json"
+                        payload = _json.loads(classification.read_text())
+                        for row in payload["rows"]:
+                            if row["document_ref"] == "rules/p2s.md":
+                                row["authority_kind"] = "DECISION_RECORD"
+                        classification.write_text(_json.dumps(payload))
+                injected = (
+                    "from span.shell import context; from span.shell.install import cli; "
+                    "from unittest.mock import patch; import sys\n"
+                    "original = context.provision_repository_runtime\n"
+                    "def interrupt(*args, **kwargs):\n"
+                    "    runtime, result = original(*args, **kwargs)\n"
+                    "    context.close_repository_runtime(runtime)\n"
+                    "    raise RuntimeError('after first registration')\n"
+                    "patch.object(context, 'provision_repository_runtime', side_effect=interrupt).start()\n"
+                    "cli.main(sys.argv[1:])"
+                )
+                failed = _subprocess.run(
+                    [self.isolated_python, "-c", injected, *command[1:]],
+                    cwd=str(self.tmp), capture_output=True, text=True, timeout=900, env=env,
+                )
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertIn("after first registration", failed.stderr)
+                pending = _json.loads(receipt_path.read_text())["pending_governed_initialization"]
+                backup = _pathlib.Path(pending["backup"])
+                restore = [
+                    command[0], "--data-dir", str(data_dir),
+                    "--restore-backup", str(backup), "--restore-confirm", backup.name,
+                ]
+                injected_restore = (
+                    "from span.shell.install import cli, governed_recovery as recovery; "
+                    "from unittest.mock import patch; import sys\n"
+                    "original = recovery._restore_database\n"
+                    "def interrupt(*args, **kwargs):\n"
+                    "    original(*args, **kwargs)\n"
+                    "    raise RuntimeError('during recovery')\n"
+                    "patch.object(recovery, '_restore_database', side_effect=interrupt).start()\n"
+                    "cli.main(sys.argv[1:])"
+                )
+                failed = _subprocess.run(
+                    [self.isolated_python, "-c", injected_restore, *restore[1:]],
+                    cwd=str(self.tmp), capture_output=True, text=True, timeout=900, env=env,
+                )
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertIn("during recovery", failed.stderr)
+                retained = _json.loads(receipt_path.read_text())["pending_governed_initialization"]
+                snapshot = _pathlib.Path(retained["restore_intent"]["snapshot"])
+                count = len(list((data_dir / "backups").iterdir()))
+                self._execute_installer(restore, env)
+                self.assertTrue(snapshot.is_dir())
+                self.assertEqual(len(list((data_dir / "backups").iterdir())), count)
+                if before is None:
+                    self.assertFalse(receipt_path.exists())
+                    self.assertFalse((data_dir / "structural-indexer.json").exists())
+                    self.assertFalse((data_dir / "repo-a.db").exists())
+                    self.assertFalse((data_dir / "repo-b.db").exists())
+                    self.assertFalse((data_dir / "installation/functional-pyramid.db").exists())
+                else:
+                    self.assertEqual(receipt_path.read_bytes(), before)
+                for repo in (repo_a, repo_b):
+                    for locator in pending["repositories"][repo.name]["artifacts"]:
+                        path = repo / locator
+                        if path in prior_artifacts:
+                            self.assertEqual(path.read_bytes(), prior_artifacts[path])
+                        else:
+                            self.assertFalse(path.exists())
+                # The owner's revised classification can now be installed without cleanup.
+                self._execute_installer(command, env)
+                completed = _json.loads(receipt_path.read_text())
+                self.assertNotIn("pending_governed_initialization", completed)
+                self.assertTrue(completed["verify"]["acceptance_ok"])
 
     def test_installed_field_scale_governed_authority(self):
         import sqlite3

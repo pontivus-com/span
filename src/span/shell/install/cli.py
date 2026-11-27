@@ -323,14 +323,14 @@ def _run_one_shot(env: _Environment) -> bool:
 
 def _initialize_repositories(
     env: _Environment,
-    authority_seeds: dict[str, tuple[m.EvidenceRef, ...]],
-    authority_bindings: dict[str, tuple[m.AuthorityBinding, ...]],
+    requests: tuple[m.InitializeRepositoryRequest, ...],
+    *,
+    pending: dict[str, object] | None = None,
 ) -> tuple[m.InitializeRepositoryResult, ...]:
     """Initialize selected repositories through the canonical setup owner."""
     if env.dry:
         return ()
 
-    from span.core import model as m
     from span.shell.context import (
         close_repository_runtime,
         provision_repository_runtime,
@@ -339,15 +339,20 @@ def _initialize_repositories(
     from span.shell.structural.graft import GraftUnavailableError
 
     results: list[m.InitializeRepositoryResult] = []
-    for target in env.targets:
-        repository_id = repository_id_from_config(str(target))
-        request = m.InitializeRepositoryRequest(
-            repository_locator=str(target),
-            authority_seeds=authority_seeds.get(repository_id),
-            authority_bindings=authority_bindings.get(repository_id),
-        )
+    for request in requests:
+        repository_id = repository_id_from_config(request.repository_locator)
         try:
-            runtime, result = provision_repository_runtime(env.data_dir, request)
+            if pending is not None and "setup_requests" in pending:
+                from functools import partial
+                from span.shell.install.governed_recovery import prepare_store
+
+                runtime, result = provision_repository_runtime(
+                    env.data_dir,
+                    request,
+                    prepare_store=partial(prepare_store, env.data_dir, pending),
+                )
+            else:
+                runtime, result = provision_repository_runtime(env.data_dir, request)
         except (OSError, ValueError, GraftUnavailableError) as exc:
             raise SystemExit(
                 f"repository initialization failed for {repository_id!r}: {exc}"
@@ -362,6 +367,8 @@ def _initialize_repositories(
 def _sync_runtime_distribution(
     env: _Environment,
     venv_python: Path,
+    *,
+    data_backup: str | None = None,
 ) -> tuple[dict[str, object], str | None, str | None]:
     """Bring the installed runtime in sync without touching repository state."""
     mode = install_mode(env.span_repo)
@@ -374,13 +381,13 @@ def _sync_runtime_distribution(
         in_sync, files_checked, extra_files = distribution_venv_in_sync(venv_python)
         match_detail = f"span-mcp {distribution_version()}"
 
-    data_backup = None
     post_install_verified = None
     if in_sync:
         print(f"venv matches {match_detail}; skipping reinstall with proof.")
         reinstalled = False
     else:
-        data_backup = backup_data_dir(env.data_dir, dry_run=env.dry)
+        if data_backup is None:
+            data_backup = backup_data_dir(env.data_dir, dry_run=env.dry)
         if mode == "checkout":
             _clean_build_staging(env.span_repo, dry_run=env.dry)
         pip_install(venv_python, env.span_repo, dry_run=env.dry)
@@ -433,8 +440,11 @@ def _provision_runtime(
     )
     if pending is not None:
         authority_bindings.update(governed.bindings_for(pending))
-    if not env.dry:
-        validate_authority_files(env.targets, authority_seeds, authority_bindings)
+    requests = (
+        ()
+        if env.dry
+        else validate_authority_files(env.targets, authority_seeds, authority_bindings)
+    )
     preflight = preflight_facts(
         env.targets,
         binding_files=args.authority_bindings_file,
@@ -443,11 +453,24 @@ def _provision_runtime(
 
     venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
     indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)
+    data_backup = None
+    if pending is not None and not env.dry:
+        from span.shell.install.governed_recovery import protect_setup
+        from span.shell.install.indexer import indexer_pointer_payload
+
+        data_backup = protect_setup(
+            env.data_dir,
+            prior,
+            pending,
+            requests,
+            indexer_pointer_payload(indexer_binary),
+        )
+        governed.retain_pending(env.data_dir, prior, pending, data_backup)
     indexer_pointer = write_indexer_pointer(
         env.data_dir, indexer_binary, dry_run=env.dry
     )
     source_venv_sync, data_backup, post_install_verified = _sync_runtime_distribution(
-        env, venv_python
+        env, venv_python, data_backup=data_backup
     )
     expose_binary(env.venv_dir, env.bin_dir, dry_run=env.dry)
 
@@ -456,13 +479,8 @@ def _provision_runtime(
         data_backup = backup_data_dir(env.data_dir, dry_run=False)
 
     if pending is not None and not env.dry:
-        governed.retain_pending(env.data_dir, prior, pending, data_backup)
         governed.publish(pending, artifacts, bootstrap=False)
-    initializations = _initialize_repositories(
-        env,
-        authority_seeds,
-        authority_bindings,
-    )
+    initializations = _initialize_repositories(env, requests, pending=pending)
     if pending is not None and not env.dry:
         governed.establish(env.data_dir, pending)
         governed.publish(pending, artifacts, bootstrap=True)
@@ -1003,5 +1021,14 @@ def main(argv=None):
     if not _mutating_invocation(env):
         _execute(env)
         return
-    with administrative_ownership(env.data_dir):
-        _execute(env)
+    from span.shell.sqlite_ownership import StoreHeldError, store_use_ownership
+
+    try:
+        with administrative_ownership(env.data_dir):
+            if env.args.restore_backup is not None:
+                _execute(env)
+            else:
+                with store_use_ownership(env.data_dir):
+                    _execute(env)
+    except StoreHeldError as exc:
+        raise SystemExit(f"installation store ownership conflict: {exc}") from None

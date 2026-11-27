@@ -70,36 +70,32 @@ def _validate_current_receipt(path: Path, receipt: object) -> dict[str, object]:
 @contextlib.contextmanager
 def administrative_ownership(data_dir: str | Path) -> Iterator[None]:
     """Hold the single installation-local administrative lock (TD §17.2)."""
-    import fcntl
-    import stat
+    from span.shell.sqlite_ownership import StoreHeldError, stable_ownership
 
-    root = Path(data_dir).resolve()
-    root.mkdir(parents=True, exist_ok=True)
-    lock_path = root / ".install.lock"
-    try:
-        handle = os.open(
-            lock_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600
-        )
-    except OSError as exc:
-        raise SystemExit(
-            f"cannot open administrative lock {lock_path}: {exc}"
-        ) from None
-    try:
-        if not stat.S_ISREG(os.fstat(handle).st_mode):
-            raise SystemExit(f"invalid administrative lock file: {lock_path}")
+    with contextlib.ExitStack() as resources:
         try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            resources.enter_context(
+                stable_ownership(data_dir, ".install.lock", exclusive=True)
+            )
+        except StoreHeldError as exc:
             raise SystemExit(
-                f"another installer owns {root}; no administrative state changed"
-            ) from None
-        except OSError as exc:
-            raise SystemExit(
-                f"cannot acquire administrative ownership: {exc}"
+                f"another installer owns or cannot acquire administrative ownership "
+                f"of {Path(data_dir).resolve()}: {exc}"
             ) from None
         yield
+
+
+def fsync_directory(path: Path) -> None:
+    handle = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(handle)
     finally:
         os.close(handle)
+
+
+def durable_unlink(path: Path) -> None:
+    path.unlink()
+    fsync_directory(path.parent)
 
 
 def publish_install_bytes(destination: Path, encoded: bytes, *, replace: bool) -> None:
@@ -119,11 +115,7 @@ def publish_install_bytes(destination: Path, encoded: bytes, *, replace: bool) -
             os.replace(temporary, destination)
         else:
             os.link(temporary, destination)
-        directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        fsync_directory(root)
     finally:
         temporary.unlink(missing_ok=True)
 
