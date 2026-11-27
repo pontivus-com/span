@@ -239,7 +239,7 @@ class ReconsiderServiceTest(unittest.TestCase):
                     locator=surface_locator,
                 ),
                 target=m.ExplicitTarget(
-                    question="What does this do?",
+                    question=f"What does {understanding_id} do?",
                     scope=semantic_scope,
                 ),
                 conclusions=(
