@@ -402,6 +402,7 @@ class FunctionalPyramidRouteRelevanceTest(unittest.TestCase):
         members: tuple[m.FunctionalPyramidMemberView, ...] | None = None,
     ) -> m.FunctionalPyramidView:
         view = fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=members or (_member(repository_id),),
@@ -584,11 +585,13 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
             (_entry(shared, invariants),),
         )
         declarations = (repository, area, shared_source)
+        roots = {"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"}
         self.assertEqual(
             fp.evaluate_functional_pyramid_source_structure(declarations), ()
         )
 
         view = fp.resolve_functional_pyramid_directory_route(
+            roots=roots,
             pyramid_id=m.FunctionalPyramidId("example"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -607,11 +610,12 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
             },
         ).view
         self.assertEqual(view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
-        self.assertIn(contract, view.placements)
-        self.assertIn(goals, view.placements)
+        self.assertIn(m.public_pyramid_placement(contract, roots), view.placements)
+        self.assertIn(m.public_pyramid_placement(goals, roots), view.placements)
         self.assertIn(m.FunctionalPyramidLayer.P2W, view.absent_layers)
 
         shared_view = fp.resolve_functional_pyramid_directory_route(
+            roots=roots,
             pyramid_id=m.FunctionalPyramidId("example"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -628,10 +632,15 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
             },
         ).view
         self.assertEqual(shared_view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
-        self.assertIn(shared, shared_view.placements)
-        self.assertIn(goals, shared_view.placements)
+        self.assertIn(
+            m.public_pyramid_placement(shared, roots), shared_view.placements
+        )
+        self.assertIn(
+            m.public_pyramid_placement(goals, roots), shared_view.placements
+        )
 
         narrowless = fp.resolve_functional_pyramid_directory_route(
+            roots=roots,
             pyramid_id=m.FunctionalPyramidId("example"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -647,7 +656,12 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
             },
         ).view
         self.assertEqual(narrowless.status, m.FunctionalPyramidRouteStatus.RESOLVED)
-        self.assertEqual(narrowless.placements, (goals, invariants))
+        self.assertEqual(
+            narrowless.placements,
+            tuple(
+                m.public_pyramid_placement(item, roots) for item in (goals, invariants)
+            ),
+        )
 
 
 def _classification_row(

@@ -1729,6 +1729,17 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(parent["surface"], member["surface"])
+            rejected = await self._call(
+                session,
+                "ask",
+                {
+                    "repository_id": REPOSITORY_ID,
+                    "request_id": "cross-owner-admission",
+                    "surface": {"kind": "FILE", "locator": parent_path},
+                    "evidence": [{"locator": "src/app.py"}],
+                },
+            )
+            self.assertEqual(rejected["$type"], "Rejected")
             return await self._call(
                 session,
                 "ask",

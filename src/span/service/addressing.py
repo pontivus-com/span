@@ -38,8 +38,26 @@ class AddressingService:
         return owner, _dataclasses.replace(surface, locator=locator)
 
     def obtain(self, request: m.AskRequest) -> m.AskRequest:
-        """Canonicalize pure path-addressed obtain, never identity selectors."""
-        if request.evidence is not None or request.continuation is not None:
+        """Canonicalize path-addressed obtain and admission before dispatch."""
+        selected = self._selection(request)
+        if request.evidence is None:
+            return selected
+        assert request.repository_id is not None
+        assert selected.repository_id is not None
+        evidence: list[m.EvidenceRequest] = []
+        for item in request.evidence:
+            owner, locator = self._locator(request.repository_id, item.locator)
+            if owner != selected.repository_id:
+                raise RecordingValidationError(
+                    "admission crosses registered repository owners",
+                    public_identity=item.locator,
+                    public_cause="admit evidence within the selected repository owner",
+                )
+            evidence.append(_dataclasses.replace(item, locator=locator))
+        return _dataclasses.replace(selected, evidence=tuple(evidence))
+
+    def _selection(self, request: m.AskRequest) -> m.AskRequest:
+        if request.continuation is not None:
             return request
         selector = request.selector
         if isinstance(selector, m.RecordedQuestionSelector):

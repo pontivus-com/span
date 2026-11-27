@@ -166,7 +166,11 @@ class McpAdapter:
                 )
             else:
                 assert repository_id is not None
-                if self.addressing is not None and isinstance(request, m.AskRequest):
+                if (
+                    self.addressing is not None
+                    and isinstance(request, m.AskRequest)
+                    and repository_id in self.registered_repository_ids()
+                ):
                     request = self.addressing.obtain(request)
                     repository_id = repository_route(tool_name, request, None)
                 context = self._context(repository_id)

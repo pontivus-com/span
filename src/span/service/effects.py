@@ -57,16 +57,13 @@ class DependencyEffectService:
         self._new_context_id = new_context_id or server_context_id
         self._context_issuer = context_issuer or self._issue_reestablishment_context
 
-    def _registered_ids(self) -> tuple[str, ...]:
-        return self._registered_repository_ids()
-
     def _store_for_repository(self, repository_id: str) -> LifecycleStorePort:
         return self._repository_runtime(repository_id).store
 
     def _repository_for_ref(self, ref: m.ConclusionRevisionRef) -> str:
         owners = [
             repository_id
-            for repository_id in self._registered_ids()
+            for repository_id in self._registered_repository_ids()
             if self._store_for_repository(repository_id).has_conclusion_revision(
                 ref.understanding_id.value,
                 ref.conclusion_id.value,
@@ -87,7 +84,7 @@ class DependencyEffectService:
         self, dependency_kind: str, dependency_ref: str
     ) -> tuple[m.ConclusionRevisionRef, ...]:
         refs: list[m.ConclusionRevisionRef] = []
-        for repository_id in self._registered_ids():
+        for repository_id in self._registered_repository_ids():
             refs.extend(
                 self._store_for_repository(repository_id).support_dependents(
                     dependency_kind, dependency_ref
