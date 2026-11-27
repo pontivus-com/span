@@ -407,7 +407,9 @@ class SupportServiceTest(unittest.TestCase):
             evidence_ref=recorded.evidence,
             authority_kind=m.AuthorityKind.REPOSITORY_RULE,
             status=m.AuthorityStatus.SUPERSEDED,
-            applicability=m.AuthorityApplicability(description="Recorded applicability"),
+            applicability=m.AuthorityApplicability(
+                description="Recorded applicability"
+            ),
             declared_precedence=m.DeclaredPrecedence(
                 kind=m.PrecedenceKind.PRIORITY_RANK,
                 priority_rank=1,
