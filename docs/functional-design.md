@@ -127,10 +127,22 @@ layer, one explicit repository-relative directory `scope` in its declaring
 repository, and its declared governing placements. The repository root is the
 explicit `.` scope and the widest scope.
 
-For an exact directory lookup, Span normalizes the requested repository-relative
-directory and selects every placement declared by that repository whose scope
-contains the directory: the directory itself, or an ancestor directory scope
-including `.`. A placement confined to a descendant directory does not apply to
+For an exact directory lookup, normalize the requested address and establish
+its owning registered repository before looking up participation. Resolve the
+address against the supplied repository's canonical root; validate containment
+and directory existence. Select the unique deepest registered canonical root
+containing the directory, using path segments, not string prefixes. Strictly
+nested roots are valid; multiple identities for the same deepest root are
+ambiguous and rejected. Reject escaping paths and symlink aliases that would
+change the addressed repository boundary; do not infer unregistered roots or
+participation. If registry/root availability prevents a definitive selection,
+return operational unavailability rather than selecting the enclosing root.
+Translate the selected directory relative to that root (`.` for the root).
+Determine that repository's own participation and instance, including explicit
+UNCONFIGURED/EXCLUDED or operational unavailability; never substitute the
+addressing repository's governance. For an ACTIVE owner, select every placement
+declared by that repository whose scope contains the resolved directory: the
+directory itself, or an ancestor directory scope including `.`. A placement confined to a descendant directory does not apply to
 its parent. The selection is a point selection; it never enumerates descendant
 files, never uses the file inventory to decide relevance, and never requires a
 semantic surface declaration.
@@ -787,8 +799,9 @@ fitting prefix, `truncated=true`, one constant omission statement and a public
 continuation token. `FunctionalPyramidDirectorySelector` accepts that token and
 returns the next deterministic page for the same directory and selection.
 `unresolved` is never truncated. The token is opaque, versioned and bound to the
-repository, directory, selection and declaration version; it carries no internal
-route, provenance or authority state. *(A7, A8, G1, L12)*
+original addressing repository/directory, resolved repository/directory,
+selection and declaration version; changes to that binding invalidate the token.
+It carries no internal route, provenance or authority state. *(A7, A8, G1, L12)*
 
 **FD-89 — Cross-repository change propagation uses one dependency engine.**
 Repository changed-scope and accepted Functional Pyramid participation changes

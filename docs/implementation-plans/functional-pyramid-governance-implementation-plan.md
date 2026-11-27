@@ -1,6 +1,6 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 implemented in candidate; full CI, native host delivery and operator-output boundary acceptance remain open.
+**Status:** Public lifecycle boundary remediation PUB-01–10 OPEN (§3B), including API-23. Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 implemented in candidate; full CI, native host delivery and operator-output boundary acceptance remain open.
 **Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
@@ -513,6 +513,144 @@ acceptance, independent review and DCO sign-off remain OPEN.
 **Gate:** all field fixes demonstrated by executable evidence; complete
 candidate CI green, then owner-authorized local Beta-5 retest. Prior green
 CI and the adopter's reported version 8 are not closure of FIELD-01–03.
+
+## 3B. Public lifecycle boundary remediation — 2026-11-27
+
+**Status:** OPEN — source review at `fd571b4a9fc2d28dc4e9177537a590e5ab7490b1`.
+This is the single task owner for this cross-cutting Beta-5 correction, including
+ordinary lifecycle prerequisites; no implementation or installed acceptance is
+asserted. Authority: lifecycle §5, F2/F4/F6–F9/F11–F13, L1–L17, FD-27/54–57,
+FD-62/88B/88C, TD §§9/17.1/21. Existing exact carrier contracts must be reconciled
+at their owning layer before implementation; this register is not a second
+product authority. Preserve S-FIELD-01–07 obligations and release gates.
+
+### Anti-patterns
+
+AP-01 over-fetch; AP-02 under-fetch; AP-03 private representation leakage;
+AP-04 scope expansion; AP-05 duplication; AP-06 consumer reconstruction;
+AP-07 unrecoverable truncation; AP-08 primary outcome displaced; AP-09
+unbounded auxiliary growth; AP-10 ambiguous/misleading lifecycle outcome;
+AP-11 private diagnostic leakage; AP-12 inconsistent lifecycle guarantees.
+Apply these criteria transitively to all public request/result branches,
+including errors, audit retrieval and installed delivery.
+
+### Finding register and target correction
+
+Paths below are under `src/span/` at the pinned baseline. The first 22 rows
+consolidate the public-boundary investigation; API-23 is the new field report.
+
+| ID / AP | Source evidence and producer | Required outcome / solution direction | Acceptance discriminator |
+| --- | --- | --- | --- |
+| API-01 / 01,03,09 | core/model/functional_pyramid.py:276–291,469–494; service/functional_pyramid.py:351–370 | Status returns participation, identity/version, health, member IDs and actionable findings, not declaration inventory. Retain source refs in internal state and justified audit. | Vary declaration count without unrelated status growth. |
+| API-02 / 01,05 | service/functional_pyramid.py:644–693 | Candidate returns action, observed target/version, readiness and findings; no echoed resolved declaration collection or commit token. | Valid/invalid and stale multi-member candidates. |
+| API-03 / 01,05,10 | service/functional_pyramid.py:1448–1463 | Accepted action, receipt, participation effects and recoverable dependent obligations; no complete member inventory. Preserve replay. | All actions, exact replay and effects. |
+| API-04 / 07,09,12 | shell/mcp/adapter.py:397–450 | Bound installation-scoped results using existing delivery semantics; never lose committed identity or unresolved findings. | Large status/candidate/receipt/effects. |
+| API-05 / 01,04,09 | service/surface_status.py:25–108; service/answer.py:99–170 | Status scoped to selected subject; exact selectors do not carry unrelated recursive status. Preserve truthful distribution and actionable pending/stale refs. | Unrelated descendant/sibling growth. |
+| API-06 / 01,09 | service/answer.py:589–609 | Relevant verification evidence rather than all history; preserve conflicting failures, scope, time, outcome, limitations and qualification; history recoverable. | Repeated runs, distinct scenarios, later failure. |
+| API-07 / 08 | service/answer.py:1008–1105 | Primary result before auxiliary data; page necessary remainder without losing mandatory qualification. | Large auxiliary payload cannot evict primary answer. |
+| API-08 / 07,12 | service/answer.py:1022–1072 | Embedded multi-path governance continuation recovers exact original selection, not guessed directories. | Multi-path selection, deterministic complete paging. |
+| API-09 / 04,07,09 | service/answer.py:611–701 | Exact historical retrieval bounded and pinned; distinguish later challenge events/live qualification. | Large history and later mutations. |
+| API-10 / 03,05 | core/model/understanding.py:62–104,299–308; core/model/support.py:82–139 | Audit returns exact semantic content/withdrawal, evidence, premise/governing references and provenance, not stored content/support dependency unions. | Historical semantic equivalence and no transitive private type. |
+| API-11 / 01,04 | service/lifecycle.py:823–898 | Qualify affected knowledge, separately identify dependent obligations; do not return entire owner state. | Narrow update in broad surface. |
+| API-12 / 02,06,10 | core/model/outcomes.py:27–38; L17 | Explicit revision-bound CAPTURED/CURATED independent of support, with withdrawal distinct. | Create/correct/confirm/curate/withdraw/replay. |
+| API-13 / 02,06,10 | core/model/outcomes.py:27–38; core/model/understanding.py:270–295 | Exact accepted challenge revision/disposition and remaining question; no inference from acceptance. | Resolved/unresolved/batched dispositions. |
+| API-14 / 12 | service/lifecycle.py:201–246; ports/lifecycle.py:284–320; shell/sqlite_store/lifecycle.py:361–436; core/model/recording.py:76–111 | Surface write atomic request receipt and CAS/replay under L4; existing content idempotence is insufficient. No artificial investigation context. | Retry after intervening update, conflict, atomic crash/concurrency. |
+| API-15 / 01,03,09 | core/model/answers.py:298–315; service/effects.py:412–448 | Change qualification uses public causes/evidence, exact revision/version and reasons, not full SupportEvaluation. | Direct/indirect/forced/non-current/unavailable. |
+| API-16 / 02,07 | service/effects.py:300–410 | Complete discoverability of affected obligations independently of delivery bounds, including per-repo context and accepted effects on replay. | Deep/branching/cyclic cross-repo graph, all refs recoverable. |
+| API-17 / 02,06 | service/reconsider.py:110–136; lifecycle §4.3 | Challenge returns exact disputed prior statements and evidence, challenge coordinates and context. | Older and multiple target revisions. |
+| API-18 / 03,12 | core/model/support.py:36–80,178–272; core/model/functional_pyramid.py:751–760 | Correct existing qualification projection: DependencyFinding currently embeds internal SupportDependency even in compact results. Semantic causes and evidence/premise/governing coordinates only; all non-current causes retained. | Generated schema and installed wire across every nested consumer. |
+| API-19 / 04,06,10 | service/lifecycle.py:858–898 | Return exact accepted effects rather than snapshot membership; semantic_effects computed then not used for normal updates. | One of two revisions, gap-only/no-op, confirm, withdraw, curate. |
+| API-20 / 04,10 | service/effects.py:300–432 | Track change reasons per exact revision, separately aggregate surface reasons; no reason bleed. | Direct-only and indirect-only in one surface; true multi-reason case. |
+| API-21 / 04,07,12 | service/answer.py:451–536,771–806; service/evidence.py:76–84; service/continuation.py:24–32 | Pin ordered admitted selection/ranges at issuance; same sequence in initial and continuation, not all mutable context observations in sorted ID order. | Reverse order, later context extension, drift and restart replay. |
+| API-22 / 01,07,08,09 | service/answer.py:451–536,1008–1141; service/evidence.py:244–270 | Page admission outcomes and source content; distinguish omitted admission and deferred content, no duplicate omission inventory or lost accepted context. | Large batch, failure/range metadata, oversized line. |
+| API-23 / 02,04,06,10 | service/functional_pyramid.py:404–449; shell/functional_pyramid.py:66–73; core/model/functional_pyramid.py:517–529,620–675; shell/mcp/adapter.py:60–99,397–450 | Correct directory address ownership before participation; FD-62/88C and TD §17.1. Same exact owner-relative governance via either address; no namespace discovery preflight. | Nested registered roots, direct/parent-relative equivalence, explicit non-ACTIVE and ambiguous/unavailable cases, stable pages and no leak. |
+
+### API-23 field evidence and decision
+
+Owner-reported installed runtime (not independently reproduced): parent-relative
+queries into two nested member directories returned 7 root placements, versus
+47 and 74 from equivalent member-relative queries. This is a plausible but
+mis-scoped RESOLVED answer, not proof of a missing declaration or a graph defect.
+The directory service currently calls _active_participation on the supplied ID,
+then passes the same ID and relative path to the pure resolver. The filesystem
+existence check permits nested paths but does not establish owner. Registry
+roots already exist; no new metadata or adopter shim is required.
+
+Adopt existing directory selector with server-side ownership resolution, not
+a new root-relative selector, root map in status, or adopter path rewrite.
+Strict nested roots are intentionally supported; only non-unique deepest
+ownership is ambiguous. Registered ownership precedes participation (including
+a nested registered repository in another instance or UNCONFIGURED/EXCLUDED);
+never combine ancestor and child governance merely by filesystem nesting.
+Return resolved repository and owner-relative directory, not redundant input
+path or absolute roots. The original address remains in the request. The
+directory contract is distinct from automatic rewrites of semantic identity:
+audit ordinary surface/reference obtain, evidence admission, record scope,
+changed-scope reconsideration and hooks for the same namespace assumption;
+document exact ownership semantics for each before any broader change. Do not
+silently reroute a retained revision or split a write across owners. Existing
+classification scope and document authority remain independent.
+
+### Ordered tasks and decision gates
+
+- PUB-01 (all): close exhaustive recursive generated output schema and actual
+  wire-field audit for all 21 consumer intents (12 ask, 7 record, 2 reconsider),
+  ambiguity, rejection and unavailable variants. Source audit is not runtime
+  proof. Close INV-01 ordinary/Pyramid receipt digest/context/expiry consumer
+  justification; INV-02 preserve opaque context handle; INV-03/04 public
+  override/provider failure and free-text sentinel audit; INV-05 preserve
+  evidence identity, distinguish duplicate fingerprints; INV-06 historical
+  challenge cutoff versus live qualification; INV-07 verification relevance
+  and complete history; INV-08 exact governance receipt details. Freeze exact
+  P2 public fields/variants, P3 decisions and P4 mechanisms, including all
+  recovery coordinates, before dependent code. Resolve contradictions with
+  existing exact detailed-support/receipt/qualification/status contracts in
+  their own paragraphs, not a competing addendum. Record remaining decisions
+  explicitly; no guessed schemas or implementation authorization before closure.
+- PUB-02 (10/15/18): canonical support and snapshot projection at support and
+  answer owners; preserve private stored carriers; prove transitive exclusion,
+  not downstream field filtering.
+- PUB-03 (16/20): complete effect discovery and exact per-revision attribution
+  at service/effects.py; retain immutable accepted effects and separate bounded
+  delivery. Verify hooks and governance replay use same owner.
+- PUB-04 (04/07–09/21/22): exact selection-bound continuation, safe response
+  priority and bounded output through service/answer.py, continuation.py,
+  evidence.py, bounds.py and installation-scoped producer. No new arbitrary
+  limit, no lost accepted write or context.
+- PUB-05 (05/06): scope status and verification to actual request; define
+  deterministic selection/history recovery before changing service/surface_status.py
+  and service/answer.py.
+- PUB-06 (01–04/23): compact governance outcomes; implement FD-62 directory
+  address resolution in existing registry/filesystem/core/service ownership.
+  First close registry availability and alias/canonical path semantics, including
+  actual registry-root composition and failure mapping. Prove nested --repo
+  fixtures using installed MCP: parent-relative/member-relative equality after
+  all pages, exact member root '.', sibling and prefix-lookalike, three-level
+  nesting, equal-root ambiguity, unknown/missing root, escapes and symlink
+  aliases, excluded/unconfigured/other-instance child, no implicit participation,
+  no union from sibling/parent, stale token after root/participation/selection
+  change, no internal leakage and no absolute root map. Keep existing graph,
+  member intent, canonical authority and effect semantics.
+- PUB-07 (11–14/19): exact accepted action effects, independent maturity and
+  challenge disposition; surface CAS receipt/replay at existing transaction
+  owner; settle migration and historical boundary semantics first.
+- PUB-08 (17): exact disputed prior content/evidence through existing Challenged
+  result; replay preserves exact target.
+- PUB-09: reconcile lifecycle/functional/technical documents, generated schema,
+  MCP reference, glossary, guides, skills and hooks. No parallel wire shapes,
+  second writer/evaluator, compatibility bridges or new tool. Update acceptance
+  case definitions and map actual executable tests in existing matrix; do not
+  predeclare passing evidence or break its ordinal checks.
+- PUB-10: failure-before/fix-after, unit/strict schema and installed MCP
+  round-trips, large generic fixtures, full existing CI, native host evidence
+  where required; record exact head and sanitized results. No release or
+  adopter live mutation authorization.
+
+PUB-01 is OPEN; API-23's functional direction is selected in lifecycle §4.1,
+FD-62/88C and TD §17.1. The remaining field-level designs and acceptance proof
+are not closed. Execute PUB-02/03 before dependent result-family work;
+PUB-04 before bounded family delivery; PUB-09/10 close the same programme with
+S-FIELD-04. Preserve original passing obligations, no gate weakening.
 
 ## 4. Execution sequence
 

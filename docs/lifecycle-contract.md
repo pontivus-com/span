@@ -129,11 +129,19 @@ or generated answer.
 existing pyramid instance and returns its durable participation state and, for
 ACTIVE participation, current live health.
 
-`FunctionalPyramidDirectorySelector` resolves the Functional Pyramid for an
-exact existing repository-relative directory. A directory value of `.` selects
-the repository root. The result is `FunctionalPyramidView`,
-`FunctionalPyramidParticipation` or `FunctionalPyramidUnavailable`. Invalid
-paths or identities follow the ordinary exact-selector rejection.
+The `FunctionalPyramidDirectorySelector` addresses one exact existing directory
+relative to the supplied registered repository. `.` addresses its root. Span
+resolves the registered repository owning that directory before determining
+participation and applicable governance; the caller need not translate a
+nested registered repository's path or discover its identifier first. The
+result is `FunctionalPyramidView`, `FunctionalPyramidParticipation` or
+`FunctionalPyramidUnavailable`. A successful directory result names the
+resolved repository and its repository-relative directory; the original
+request is already the caller's address. Invalid or ambiguous addresses are
+rejected; inability to establish the owning registered repository is explicit
+unavailability, never a parent-governance fallback. Directory addressing is
+a point selection, not a request to enumerate nested members. Registration and
+directory containment never establish participation or governing authority.
 
 A `FunctionalPyramidCandidateSelector` validates the exact intended write.
 `action="activate"` carries the complete proposed member intents.
@@ -298,10 +306,12 @@ The nested carriers are exact:
   selected directory or `EvidenceScope`, the applicable placement identities
   and, for a multi-path semantic scope, the path or boundary that selected them.
   It is not serialized into a public answer.
-- `FunctionalPyramidView` carries exactly one selection. `directory` is set for
-  directory lookup and `semantic_scope` is set for ordinary surface obtain.
-  It also carries `placements`, `unresolved`, `declared_layers`, and
-  `absent_layers`.
+- `FunctionalPyramidView` carries exactly one selection. For directory lookup,
+  `repository_id: str` identifies the resolved repository and `directory` is
+  its normalized repository-relative directory. For ordinary surface obtain,
+  `semantic_scope` is set and the enclosing surface identifies the repository;
+  directory-only coordinates are absent. It also carries `placements`,
+  `unresolved`, `declared_layers`, and `absent_layers`.
 
 An unresolved finding identifies a repository plus the applicable placement or
 whole-document coordinates. A structural finding without a placement still makes
@@ -342,8 +352,10 @@ parallel setup DTOs.
 - `FunctionalPyramidMemberView` carries
   `repository_id: str` and
   `declaration_refs: tuple[EvidenceRef, ...]`.
-- `FunctionalPyramidParticipation` carries exactly
-  `state: UNCONFIGURED | EXCLUDED`.
+- `FunctionalPyramidParticipation` carries `state: UNCONFIGURED | EXCLUDED`.
+  For directory lookup it also carries the resolved `repository_id: str` and
+  normalized `directory: str`; for ordinary surface obtain those coordinates
+  are absent because the enclosing surface identifies the subject.
 - `FunctionalPyramidParticipationEffect` carries
   `repository_id: str` and
   `state: UNCONFIGURED | EXCLUDED | ACTIVE`; it is the canonical per-repository
@@ -1026,6 +1038,19 @@ settled through `record` with named dispositions.
 
 
 ## 5. The internal boundary
+
+**Public result boundary (F6–F8, L1–L17).** Each request branch returns the
+minimum sufficient semantic outcome of its consumer intent: exact subject,
+requested content or accepted decision, applicable qualification, material
+limitations, necessary evidence and outstanding obligations, with usable public
+references for subsequent actions. Do not return unrelated scope or history,
+duplicate facts, or require the caller to reconstruct an outcome Span owns.
+The boundary is transitive through nested carriers, unions and failure text.
+Audit retrieval preserves exact retained semantic content and evidence; it does
+not grant access to private dependency/resolution, persistence, identity
+construction or diagnostic representations. Opaque handles and evidence
+identity may be public where required by a supported consumer action or audit.
+Delivery limits do not change semantic truth or erase obligations (FD-54–57).
 
 Everything in this table exists. None of it is the agent's job. The right-hand
 column is the law that forces it inward.

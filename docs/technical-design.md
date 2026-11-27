@@ -916,12 +916,30 @@ answer, and no read result carries another read result's data.
 | `record` (functional_pyramid) | Change participation | receipt and dependent effects |
 | `reconsider` | What must be re-established? | changed surfaces and conclusions |
 
+Directory address resolution precedes `_active_participation` in
+`FunctionalPyramidService.directory`. Reuse the registered repository ID/root
+mapping supplied by the installation/runtime composition and the existing
+filesystem containment owner (`FilesystemFunctionalPyramidDeclarations`); the
+pure segment-containment/unique-root selection belongs in the core. Supply
+canonical roots through the existing root/path capability (extend its contract
+only if needed), without opening every member store, crawling directories or
+creating a second registry. Pass the resolved repository and relative directory
+to the existing `resolve_functional_pyramid_directory_route` and project them
+in the canonical `FunctionalPyramidView` or non-ACTIVE participation result.
+Bind `_directory_page` to both the original address and resolved selection
+(FD-62, FD-88C); no independent route or authority resolver. The status API
+is not a member-root discovery API. Do not expose absolute roots, namespace
+maps or private path-resolution state. Ordinary semantic identity/routing is
+not silently rewritten by this directory-only correction; audit other path
+consumers separately under the active remediation plan.
+
 The directory answer is exactly:
 
 ```json
 {
   "pyramid_id": "...",
   "version": 5,
+  "repository_id": "member",
   "directory": "workflows/contract_integrity_audit",
   "status": "RESOLVED",
   "placements": [
@@ -992,8 +1010,8 @@ The ordered placement list is paged, not merely omitted. When it exceeds the
 response budget, the answer returns the largest fitting prefix,
 `truncated=true`, one constant omission statement and `next_after`.
 `FunctionalPyramidDirectorySelector` accepts `after` and returns the next
-deterministic page for the same repository, directory, selection and declaration
-version. The token is opaque, versioned and uses the existing paging contract; a
+deterministic page for the same original address, resolved repository/directory,
+selection and declaration version. The token is opaque, versioned and uses the existing paging contract; a
 stale token returns the paging stale-continuation failure rather than silently
 restarting. `unresolved` is complete on every page and is never truncated.
 
