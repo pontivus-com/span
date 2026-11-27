@@ -714,5 +714,7 @@ class DependencyEffectService:
         traversal = _support_rules.premise_closure(direct, forced)
         position = next(traversal)
         while isinstance(position, m.ConclusionRevisionRef):
-            position = traversal.send(self._support_dependents("PREMISE", position.label))
+            position = traversal.send(
+                self._support_dependents("PREMISE", position.label)
+            )
         return position

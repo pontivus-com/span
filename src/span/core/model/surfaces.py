@@ -89,7 +89,9 @@ class AcceptedDependencyEffect:
         if not self.reasons or len(set(self.reasons)) != len(self.reasons):
             raise ValueError("accepted dependency causes must be nonempty and distinct")
         if ChangeReason.CONTAINMENT in self.reasons:
-            raise ValueError("containment alone is a surface cause, not a revision cause")
+            raise ValueError(
+                "containment alone is a surface cause, not a revision cause"
+            )
 
 
 @_dataclass(frozen=True)
