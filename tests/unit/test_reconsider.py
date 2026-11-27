@@ -142,14 +142,12 @@ class ReconsiderServiceTest(unittest.TestCase):
         self,
         *,
         support=None,
-        policy=None,
         clock=None,
         new_context_id=None,
         functional_route_impacts=None,
     ) -> DependencyEffectService:
         selected_support = self.support if support is None else support
         selected_clock = clock or (lambda: NOW)
-        selected_policy = policy or DEFAULT_SERVICE_BOUNDS_POLICY
         runtime = mock.Mock(
             repository_id="repo-1",
             root=str(self.root),
@@ -175,7 +173,6 @@ class ReconsiderServiceTest(unittest.TestCase):
                 functional_route_impacts
                 or (lambda _repository_id, _paths, _surfaces: ())
             ),
-            policy=selected_policy,
             clock=selected_clock,
             new_context_id=new_context_id,
         )
@@ -195,7 +192,6 @@ class ReconsiderServiceTest(unittest.TestCase):
         if effects is None:
             effects = self._effects(
                 support=support,
-                policy=selected_policy,
                 clock=selected_clock,
                 new_context_id=new_context_id,
             )
@@ -326,6 +322,29 @@ class ReconsiderServiceTest(unittest.TestCase):
             set(affected.reasons), {m.ChangeReason.DIRECT, m.ChangeReason.INDIRECT}
         )
 
+    def test_direct_seed_reached_as_premise_retains_both_reasons(self) -> None:
+        direct = m.ConclusionRevisionRef(
+            m.UnderstandingId("u-a"),
+            m.ConclusionId("c-1"),
+            m.ConclusionRevisionNumber(1),
+        )
+        dependent = m.ConclusionRevisionRef(
+            m.UnderstandingId("u-b"),
+            m.ConclusionId("c-1"),
+            m.ConclusionRevisionNumber(1),
+        )
+        result = support_rules.dependency_change_reasons(
+            {direct, dependent}, {dependent}
+        )
+        self.assertEqual(result[direct], {m.ChangeReason.DIRECT})
+        self.assertEqual(
+            result[dependent], {m.ChangeReason.DIRECT, m.ChangeReason.INDIRECT}
+        )
+        self.assertEqual(
+            support_rules.unvisited_premises((dependent, direct), {direct}),
+            (dependent,),
+        )
+
     def test_curated_revision_reconsiders_without_mutating_curation(self) -> None:
         self.store.record_understanding(
             m.UpdateUnderstandingCommand(
@@ -425,7 +444,10 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(a_conclusions[0].expected_version.value, 2)
 
     def test_changed_scope_context_does_not_admit_current_support(self) -> None:
-        support = mock.Mock()
+        support = mock.Mock(spec=SupportService)
+        support.qualify_support.side_effect = (
+            lambda evaluation: m.compact_support(evaluation, ())
+        )
         support.evaluate_revision.return_value = support_rules.evaluation(
             m.SupportState.CURRENT,
             NOW,
@@ -495,13 +517,12 @@ class ReconsiderServiceTest(unittest.TestCase):
                 max_candidate_relationships=1,
             ),
         )
-        effects = self._effects(policy=policy)
-        result = effects.repository_change(
+        service = self._service(policy=policy)
+        result = service.preview_changed_scope(
             m.ReconsiderRequest(
                 repository_id="repo-1",
                 changed_paths=("src/a.py",),
-            ),
-            issue_contexts=False,
+            )
         )
         self.assertFalse(result.truncated)
         self.assertEqual(
@@ -537,13 +558,12 @@ class ReconsiderServiceTest(unittest.TestCase):
             maximum_query_bounds=bounds,
             hook_fast_bounds=bounds,
         )
-        effects = self._effects(policy=policy)
-        result = effects.repository_change(
+        service = self._service(policy=policy)
+        result = service.preview_changed_scope(
             m.ReconsiderRequest(
                 repository_id="repo-1",
                 changed_paths=("src/a.py",),
-            ),
-            issue_contexts=False,
+            )
         )
         self.assertFalse(result.truncated)
         locators = {item.surface.locator for item in result.surfaces}
@@ -770,7 +790,10 @@ class ReconsiderServiceTest(unittest.TestCase):
             assertion_nature=m.AssertionNature.NORMATIVE,
             store=store_auth,
         )
-        support = mock.Mock()
+        support = mock.Mock(spec=SupportService)
+        support.qualify_support.side_effect = (
+            lambda evaluation: m.compact_support(evaluation, ())
+        )
         support.evaluate_revision.return_value = support_rules.evaluation(
             m.SupportState.CURRENT,
             NOW,
@@ -886,7 +909,10 @@ class ReconsiderServiceTest(unittest.TestCase):
             assertion_nature=m.AssertionNature.NORMATIVE,
             store=store_two,
         )
-        support = mock.Mock()
+        support = mock.Mock(spec=SupportService)
+        support.qualify_support.side_effect = (
+            lambda evaluation: m.compact_support(evaluation, ())
+        )
         support.evaluate_revision.return_value = support_rules.evaluation(
             m.SupportState.REASSESSMENT_REQUIRED,
             NOW,

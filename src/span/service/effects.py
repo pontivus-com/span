@@ -17,7 +17,6 @@ from span.core import support_rules as _support_rules
 from span.core.recording import RecordingValidationError
 from span.ports.functional_pyramid import FunctionalPyramidRepositoryRuntime
 from span.ports.lifecycle import LifecycleStorePort
-from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.contexts import ContextBinding, context_binding, issue_context
 from span.service.ids import server_context_id
 from span.service.support import SupportService
@@ -46,7 +45,6 @@ class DependencyEffectService:
         registered_repository_ids: _RegisteredRepositoryIds,
         support_for_repository: _SupportLookup,
         functional_route_impacts: _FunctionalRouteImpactLookup,
-        policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
         context_issuer: _ReestablishmentContextIssuer | None = None,
@@ -55,7 +53,6 @@ class DependencyEffectService:
         self._registered_repository_ids = registered_repository_ids
         self._support_for_repository = support_for_repository
         self._functional_route_impacts = functional_route_impacts
-        self._policy = policy
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or server_context_id
         self._context_issuer = context_issuer or self._issue_reestablishment_context
@@ -145,16 +142,12 @@ class DependencyEffectService:
             direct=direct,
             forced_reassessment={},
             root_scopes=root_scopes,
-            max_depth=self._policy.default_query_bounds.max_depth,
-            max_nodes=self._policy.default_query_bounds.max_results,
             issue_contexts=issue_contexts,
         )
-        surfaces_out, contexts, _, omitted, truncated = projected
+        surfaces_out, contexts, _ = projected
         return m.Changed(
             reestablishment_contexts=contexts,
             surfaces=surfaces_out,
-            omitted=omitted,
-            truncated=truncated,
         )
 
     def retained_functional_pyramid_effects(
@@ -282,19 +275,12 @@ class DependencyEffectService:
                     "recorded governing route deliberately ceased to be ACTIVE"
                 )
 
-        surfaces, contexts, refs, omitted, truncated = self._project(
+        return self._project(
             reasons={},
             direct=direct,
             forced_reassessment=forced,
             root_scopes={},
-            max_depth=None,
-            max_nodes=None,
         )
-        if omitted or truncated:
-            raise AssertionError(
-                "unbounded Functional Pyramid effect projection cannot truncate"
-            )
-        return surfaces, contexts, refs
 
     def _project(
         self,
@@ -303,68 +289,29 @@ class DependencyEffectService:
         direct: _typing.Iterable[m.ConclusionRevisionRef],
         forced_reassessment: dict[m.ConclusionRevisionRef, str],
         root_scopes: dict[str, tuple[m.EvidenceScope, ...]],
-        max_depth: int | None,
-        max_nodes: int | None,
         issue_contexts: bool = True,
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
         tuple[m.ConclusionRevisionRef, ...],
-        tuple[str, ...],
-        bool,
     ]:
-        omitted: list[str] = []
-        truncated = False
-        unique_direct = list(dict.fromkeys(direct))
-        if max_nodes is not None and len(unique_direct) > max_nodes:
-            omitted.append(
-                "direct dependency bound reached before every dependent was examined"
+        roots = set(direct)
+        indirect, forced_descendants = self._premise_closure(
+            roots, set(forced_reassessment)
+        )
+        for ref in forced_descendants:
+            forced_reassessment.setdefault(
+                ref,
+                "premise depends on a conclusion whose governing support changed",
             )
-            unique_direct = unique_direct[:max_nodes]
-            truncated = True
-
+        per_ref = _support_rules.dependency_change_reasons(roots, indirect)
         affected: dict[m.SurfaceKey, set[m.ConclusionRevisionRef]] = {}
-
-        def record(
-            ref: m.ConclusionRevisionRef,
-            reason: m.ChangeReason,
-        ) -> None:
+        for ref, causes in per_ref.items():
             surface = self._surface_of(ref)
-            reasons.setdefault(surface, set()).add(reason)
+            reasons.setdefault(surface, set()).update(causes)
             affected.setdefault(surface, set()).add(ref)
 
-        for ref in unique_direct:
-            record(ref, m.ChangeReason.DIRECT)
-
-        indirect, cut = self._indirect(unique_direct, max_depth, max_nodes)
-        if cut:
-            omitted.append("premise traversal bound reached before the walk completed")
-            truncated = True
-        for ref in indirect:
-            record(ref, m.ChangeReason.INDIRECT)
-
-        forced_descendants: tuple[m.ConclusionRevisionRef, ...] = ()
-        if forced_reassessment:
-            forced_descendants, forced_cut = self._indirect(
-                list(forced_reassessment), max_depth, max_nodes
-            )
-            if forced_cut:
-                omitted.append(
-                    "premise traversal bound reached while propagating governance effects"
-                )
-                truncated = True
-            for ref in forced_descendants:
-                forced_reassessment.setdefault(
-                    ref,
-                    "premise depends on a conclusion whose governing support changed",
-                )
-
         ordered = containment.order_surfaces(reasons)
-        if max_nodes is not None and len(ordered) > max_nodes:
-            omitted.append(f"{len(ordered) - max_nodes} surface(s) beyond the bound")
-            ordered = ordered[:max_nodes]
-            truncated = True
-
         current_versions: dict[str, m.UnderstandingVersion] = {}
         changed_surfaces: list[m.ChangedSurface] = []
         effect_refs: list[m.ConclusionRevisionRef] = []
@@ -376,7 +323,7 @@ class DependencyEffectService:
             ):
                 conclusion = self._changed_conclusion(
                     ref,
-                    reasons[surface],
+                    per_ref[ref],
                     current_versions,
                     forced_reassessment.get(ref),
                 )
@@ -404,8 +351,6 @@ class DependencyEffectService:
             projection,
             contexts,
             tuple(dict.fromkeys(effect_refs)),
-            tuple(omitted),
-            truncated,
         )
 
     def _changed_conclusion(
@@ -749,29 +694,30 @@ class DependencyEffectService:
         store = self._store_for_ref(ref)
         return store.get_understanding(ref.understanding_id.value).surface
 
-    def _indirect(
+    def _premise_closure(
         self,
-        direct: list[m.ConclusionRevisionRef],
-        max_depth: int | None,
-        max_nodes: int | None,
-    ) -> tuple[tuple[m.ConclusionRevisionRef, ...], bool]:
-        visited = set(direct)
-        frontier = [(ref, 0) for ref in direct]
-        found: list[m.ConclusionRevisionRef] = []
-        truncated = False
-        while frontier:
-            ref, depth = frontier.pop()
-            dependents = self._support_dependents("PREMISE", ref.label)
-            if max_depth is not None and depth >= max_depth:
-                if dependents:
-                    truncated = True
+        direct: set[m.ConclusionRevisionRef],
+        forced: set[m.ConclusionRevisionRef],
+    ) -> tuple[set[m.ConclusionRevisionRef], set[m.ConclusionRevisionRef]]:
+        """Read each reached reverse-index entry once, forced roots first."""
+        visited = direct | forced
+        pending = [(ref, False) for ref in direct - forced]
+        pending.extend((ref, True) for ref in forced)
+        indirect: set[m.ConclusionRevisionRef] = set()
+        processed: set[m.ConclusionRevisionRef] = set()
+        while pending:
+            ref, propagated = pending.pop()
+            if ref in processed:
                 continue
-            for dependent in dependents:
-                if dependent in visited:
-                    continue
-                if max_nodes is not None and len(visited) >= max_nodes:
-                    return tuple(found), True
-                visited.add(dependent)
-                found.append(dependent)
-                frontier.append((dependent, depth + 1))
-        return tuple(found), truncated
+            processed.add(ref)
+            dependents = self._support_dependents("PREMISE", ref.label)
+            indirect.update(dependents)
+            unseen = _support_rules.unvisited_premises(dependents, visited)
+            if propagated:
+                # A queued direct root can itself be a forced descendant.
+                promoted = set(dependents) - forced
+                forced.update(dependents)
+                pending.extend((item, True) for item in promoted & direct)
+            visited.update(unseen)
+            pending.extend((item, propagated) for item in unseen)
+        return indirect, forced

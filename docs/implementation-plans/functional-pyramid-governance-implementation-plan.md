@@ -751,6 +751,20 @@ filesystem/SQL/service fixture, every nested generated variant negative
 schema test, no raw dependency object or parallel stored support model.
 I-01/04/06/15/18/43.
 
+**PUB-03 candidate increment (OPEN).** CI 45955614825 confirmed the
+PUB-02 live schema checks for record and reconsider passed; ask still
+exposes retained audit carriers. Three mock fixtures failed because
+they did not implement the new qualification contract. Restore the
+test-double contract through the real core projection, without weakening
+assertions. Remove traversal limits from the shared effects engine and
+its constructor, retaining result budgets at the service delivery owner.
+Read the complete reverse index, propagate forced governance roots first,
+track every indirect edge before visited-set deduplication, and assign
+per-revision causes through pure core rules. Add direct+indirect and
+frontier tests; exact test-line delta 26. Accepted receipt cause persistence,
+effect disposition and bounded delivery are not implemented by this
+increment and remain required. No acceptance gate is closed by this change.
+
 **PUB-03 — Exact complete effects (API-16/20).** After PUB-02, modify
 service/effects.py at _project/_indirect/_changed_conclusion and shared
 reconsider/Pyramid record callers. Keep full direct roots and premise closure

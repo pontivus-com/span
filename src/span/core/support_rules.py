@@ -14,6 +14,25 @@ from span.core import model as _m
 from span.core.model import support as _s
 
 
+def unvisited_premises(
+    dependents: tuple[_m.ConclusionRevisionRef, ...],
+    visited: set[_m.ConclusionRevisionRef],
+) -> tuple[_m.ConclusionRevisionRef, ...]:
+    """Select new frontier members, independent of edge cause attribution."""
+    return tuple(dict.fromkeys(ref for ref in dependents if ref not in visited))
+
+
+def dependency_change_reasons(
+    direct: set[_m.ConclusionRevisionRef],
+    indirect: set[_m.ConclusionRevisionRef],
+) -> dict[_m.ConclusionRevisionRef, set[_m.ChangeReason]]:
+    """Assign each exact revision its own causes, including both when present."""
+    reasons = {ref: {_m.ChangeReason.DIRECT} for ref in direct}
+    for ref in indirect:
+        reasons.setdefault(ref, set()).add(_m.ChangeReason.INDIRECT)
+    return reasons
+
+
 def combine_states(states: tuple[_m.SupportState, ...]) -> _m.SupportState:
     """Combine independent conclusion states without promoting uncertainty."""
     if not states:

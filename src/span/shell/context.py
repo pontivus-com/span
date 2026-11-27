@@ -178,7 +178,6 @@ def compose_context(
         ),
         support_for_repository=support_for,
         functional_route_impacts=functional_pyramid.changed_route_identities,
-        policy=policy,
     )
     reconsider = ReconsiderService(
         store=store,
