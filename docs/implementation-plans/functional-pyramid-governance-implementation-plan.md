@@ -469,6 +469,16 @@ behavior, and record exact source/run evidence against FA-73/74. No defect
 cause or completion is asserted before reproduction; isolated native host
 preview remains separately required.
 
+**Source increment (verification OPEN).** At `9b784118afd0` registration
+and doctor no longer resolve the managed executable from PATH; the
+configured exposed console-script path is shared with the existing link
+owner, and doctor rejects an exposed path resolving to a different runtime.
+The existing OpenCode registration regression now exercises a competing
+PATH executable and the shared Codex/Claude command construction; the
+installed cross-repository journey launches the registered OpenCode command
+under an isolated competing PATH. Native authenticated host delivery and
+exact-candidate verification remain open; no gate is closed by these changes.
+
 Closeout review of `6d66e89ad222`: [CI 45935891140](https://github.com/pontivus-com/span/actions/runs/45935891140)
 passed 1,035 tests with 2 failed acceptance-matrix checks (FA-73–75 were
 unmapped and the ordinal assertion stopped at FA-72). It did not establish

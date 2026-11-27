@@ -98,7 +98,11 @@ span-mcp --help
 registration information Span can inspect without changing the installation.
 
 When run without `--repo`, it uses the repository bindings retained in the
-current install receipt when those bindings are available.
+current install receipt when those bindings are available. For a custom
+installation, supply the same `--bin-dir`, `--venv-dir` and `--data-dir` used
+during installation. Managed host entries use the configured absolute
+executable location, not another Span executable earlier on `PATH`. Verification
+checks that this location identifies the requested runtime.
 
 After installer-driven MCP registration changes, reconnect or restart the
 coding-agent host. If the complete Span tool set is not available, start a

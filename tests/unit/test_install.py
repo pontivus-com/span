@@ -439,10 +439,10 @@ class OpencodeScopeTest(unittest.TestCase):
             )
             args = SimpleNamespace(
                 opencode_config=None,
-                with_codex=False,
-                no_codex=True,
-                with_claude=False,
-                no_claude=True,
+                with_codex=True,
+                no_codex=False,
+                with_claude=True,
+                no_claude=False,
                 with_hooks=True,
                 no_hooks=False,
                 no_skills=True,
@@ -474,6 +474,9 @@ class OpencodeScopeTest(unittest.TestCase):
                         },
                     ),
                     mock.patch.object(cli_module, "wire_codex_hooks", return_value={}),
+                    mock.patch.object(cli_module, "wire_claude_hooks", return_value={}),
+                    mock.patch.object(cli_module, "register_codex") as codex,
+                    mock.patch.object(cli_module, "register_claude") as claude,
                     mock.patch.object(
                         cli_module, "_hook_bin", return_value="/bin/hooks"
                     ),
@@ -504,6 +507,8 @@ class OpencodeScopeTest(unittest.TestCase):
             ]
             self.assertEqual(registration["opencode"]["status"], "merged")
             self.assertEqual(command[0], str(env.bin_dir / "span-mcp"))
+            self.assertEqual(codex.call_args.args[0][0], command[0])
+            self.assertEqual(claude.call_args.args[0][0], command[0])
             self.assertIn("--repo", command)
             self.assertIn(str(target), command)
 

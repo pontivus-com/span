@@ -871,9 +871,28 @@ dispose();
         _write_files(repo_a, _GOVERNED_A_FILES)
         _write_files(repo_b, _GOVERNED_B_FILES)
         data_dir = self.tmp / "governed-data"
-        runtime_exe, command, env = self._install_governed_runtime(
-            repo_a, repo_b, data_dir, governed=False
+        runtime_exe, ordinary, command, env = self._governed_runtime_command(
+            repo_a, repo_b, data_dir
         )
+        foreign = root / "foreign-bin" / "span-mcp"
+        foreign.parent.mkdir()
+        foreign.write_text("#!/bin/sh\nexit 97\n")
+        foreign.chmod(0o755)
+        env["PATH"] = str(foreign.parent) + _os.pathsep + env["PATH"]
+        config = root / "opencode.json"
+        ordinary += ["--opencode-config", str(config)]
+        command += ["--opencode-config", str(config)]
+        self._execute_installer(ordinary, env)
+        self.assertEqual(_shutil.which("span-mcp", path=env["PATH"]), str(foreign))
+        registered = _json.loads(config.read_text())["mcp"]["servers"]["span"][
+            "command"
+        ]
+        bin_dir = _pathlib.Path(ordinary[ordinary.index("--bin-dir") + 1])
+        self.assertEqual(registered[0], str(bin_dir / "span-mcp"))
+        self.assertEqual(
+            _pathlib.Path(registered[0]).resolve(), _pathlib.Path(runtime_exe)
+        )
+        self._execute_installer(ordinary + ["--verify-only"], env)
 
         probe = _pathlib.Path(__file__).with_name(
             "functional_pyramid_governed_probe.py"
@@ -882,7 +901,7 @@ dispose();
             [
                 self.isolated_python,
                 str(probe),
-                runtime_exe,
+                registered[0],
                 str(repo_a),
                 str(repo_b),
                 str(data_dir),
