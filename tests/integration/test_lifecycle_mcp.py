@@ -1337,7 +1337,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                         {
                             "$type": "resolved",
                             "challenge_id": challenge["facts"]["challenge_id"]["value"],
-                            "expected_challenge_revision": challenge["facts"]["challenge_revision"]["value"],
+                            "expected_challenge_revision": challenge["facts"][
+                                "challenge_revision"
+                            ]["value"],
                             "reasoning": (
                                 "The ADR supplies the additional support required "
                                 "to settle the challenge."
@@ -1497,7 +1499,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                         {
                             "$type": "resolved",
                             "challenge_id": challenge["facts"]["challenge_id"]["value"],
-                            "expected_challenge_revision": challenge["facts"]["challenge_revision"]["value"],
+                            "expected_challenge_revision": challenge["facts"][
+                                "challenge_revision"
+                            ]["value"],
                             "reasoning": "This payload must reject before the write.",
                             "resulting_version": 2,
                         }

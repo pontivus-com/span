@@ -51,6 +51,26 @@ def _validate_execution(
         raise ValueError("VerificationRun.observed_at must be aware")
 
 
+def _validate_run(
+    *,
+    repository_id: str,
+    observations: tuple[SourceObservationId, ...],
+    command: str | None,
+    scenario: str | None,
+    observer: str,
+    observed_at: _datetime.datetime,
+) -> None:
+    if not observations:
+        raise ValueError("a verification run requires source observations")
+    _validate_execution(
+        repository_id=repository_id,
+        command=command,
+        scenario=scenario,
+        observer=observer,
+        observed_at=observed_at,
+    )
+
+
 @_dataclass(frozen=True)
 class ProposedVerificationRun:
     """The command-side content of one independent run."""
@@ -67,10 +87,9 @@ class ProposedVerificationRun:
     provenance: str = ""
 
     def __post_init__(self) -> None:
-        if not self.observations:
-            raise ValueError("a verification run requires source observations")
-        _validate_execution(
+        _validate_run(
             repository_id=self.repository_id,
+            observations=self.observations,
             command=self.command,
             scenario=self.scenario,
             observer=self.observer,
@@ -119,10 +138,9 @@ class VerificationRun:
     provenance: str = ""
 
     def __post_init__(self) -> None:
-        if not self.observations:
-            raise ValueError("a verification run requires source observations")
-        _validate_execution(
+        _validate_run(
             repository_id=self.repository_id,
+            observations=self.observations,
             command=self.command,
             scenario=self.scenario,
             observer=self.observer,
