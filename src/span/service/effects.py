@@ -15,7 +15,6 @@ from span.core import containment
 from span.core import model as m
 from span.core import support_rules as _support_rules
 from span.core.recording import RecordingValidationError
-from span.ports.functional_pyramid import FunctionalPyramidRepositoryRuntime
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.contexts import ContextBinding, context_binding, issue_context
 from span.service.ids import server_context_id
@@ -30,7 +29,7 @@ _ReestablishmentContextIssuer = _typing.Callable[
     [str, str, ContextBinding, tuple[str, ...], tuple[str, ...]],
     m.InvestigationContextRef,
 ]
-_RepositoryRuntimeLookup = _typing.Callable[[str], FunctionalPyramidRepositoryRuntime]
+_StoreLookup = _typing.Callable[[str], LifecycleStorePort]
 _RegisteredRepositoryIds = _typing.Callable[[], tuple[str, ...]]
 _SupportLookup = _typing.Callable[[str], SupportService]
 
@@ -41,7 +40,7 @@ class DependencyEffectService:
     def __init__(
         self,
         *,
-        repository_runtime: _RepositoryRuntimeLookup,
+        store_for_repository: _StoreLookup,
         registered_repository_ids: _RegisteredRepositoryIds,
         support_for_repository: _SupportLookup,
         functional_route_impacts: _FunctionalRouteImpactLookup,
@@ -49,16 +48,13 @@ class DependencyEffectService:
         new_context_id: _typing.Callable[[], str] | None = None,
         context_issuer: _ReestablishmentContextIssuer | None = None,
     ) -> None:
-        self._repository_runtime = repository_runtime
+        self._store_for_repository = store_for_repository
         self._registered_repository_ids = registered_repository_ids
         self._support_for_repository = support_for_repository
         self._functional_route_impacts = functional_route_impacts
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or server_context_id
         self._context_issuer = context_issuer or self._issue_reestablishment_context
-
-    def _store_for_repository(self, repository_id: str) -> LifecycleStorePort:
-        return self._repository_runtime(repository_id).store
 
     def _repository_for_ref(self, ref: m.ConclusionRevisionRef) -> str:
         owners = [

@@ -167,7 +167,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             return selected_support
 
         return DependencyEffectService(
-            repository_runtime=repository_runtime,
+            store_for_repository=lambda owner: repository_runtime(owner).store,
             registered_repository_ids=lambda: ("repo-1",),
             support_for_repository=support_for_repository,
             functional_route_impacts=(
@@ -658,8 +658,8 @@ class ReconsiderServiceTest(unittest.TestCase):
             evidence=FilesystemEvidenceSource("repo-1", str(self.root)),
         )
         engine = DependencyEffectService(
-            repository_runtime=lambda repository_id: (
-                runtime
+            store_for_repository=lambda repository_id: (
+                runtime.store
                 if repository_id == "repo-1"
                 else self.fail(f"unexpected repository: {repository_id}")
             ),
@@ -879,8 +879,8 @@ class ReconsiderServiceTest(unittest.TestCase):
             evidence=FilesystemEvidenceSource("repo-auth", root_auth),
         )
         effects = DependencyEffectService(
-            repository_runtime=lambda repository_id: (
-                runtime_auth
+            store_for_repository=lambda repository_id: (
+                runtime_auth.store
                 if repository_id == "repo-auth"
                 else self.fail(f"unexpected repository: {repository_id}")
             ),
@@ -1006,7 +1006,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         runtimes = {"repo-1": runtime_one, "repo-2": runtime_two}
         effects = DependencyEffectService(
-            repository_runtime=lambda repository_id: runtimes[repository_id],
+            store_for_repository=lambda repository_id: runtimes[repository_id].store,
             registered_repository_ids=lambda: ("repo-1", "repo-2"),
             support_for_repository=lambda repository_id: support,
             functional_route_impacts=lambda repository_id, paths, surfaces: (

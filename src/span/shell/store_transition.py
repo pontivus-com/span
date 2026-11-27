@@ -1321,6 +1321,7 @@ def _smoke(paths: TransitionPaths, config: TransitionConfig) -> None:
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
     from span.service.evidence import EvidenceService
+    from span.service.effects import DependencyEffectService
     from span.service.lifecycle import LifecycleService
     from span.service.support import SupportService
 
@@ -1357,6 +1358,13 @@ def _smoke(paths: TransitionPaths, config: TransitionConfig) -> None:
                 authority=store,
                 support=support,
                 evidence=evidence_service,
+                effects=DependencyEffectService(
+                    store_for_repository=lambda _owner: store,
+                    registered_repository_ids=lambda: (config.repository_id,),
+                    support_for_repository=lambda _owner: support,
+                    functional_route_impacts=lambda _owner, _paths, _surfaces: (),
+                    clock=config.clock,
+                ),
                 clock=config.clock,
             )
             context = service.start_context(

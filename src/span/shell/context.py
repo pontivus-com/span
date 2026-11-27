@@ -167,7 +167,7 @@ def compose_context(
     support = support_for(repository_id)
     evidence_service = EvidenceService(store=store, evidence=evidence, policy=policy)
     effects = DependencyEffectService(
-        repository_runtime=repository_runtime,
+        store_for_repository=lambda owner: repository_runtime(owner).store,
         registered_repository_ids=lambda: tuple(
             sorted(functional_pyramid.registered_repository_ids())
         ),

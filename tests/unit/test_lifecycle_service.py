@@ -23,6 +23,7 @@ from span.core.rejection import Rejection
 from span.core.schema import record_wire as w
 from span.service.evidence import EvidenceService
 from span.service.lifecycle import LifecycleService
+from span.service.effects import DependencyEffectService
 from span.service.support import SupportService
 from span.shell.sqlite_store.lifecycle import (
     LifecycleStore,
@@ -176,6 +177,15 @@ def _create_wire(
     )
 
 
+def _effects(store, support):
+    return DependencyEffectService(
+        store_for_repository=lambda _owner: store,
+        registered_repository_ids=lambda: ("repo-1",),
+        support_for_repository=lambda _owner: support,
+        functional_route_impacts=lambda _owner, _paths, _surfaces: (),
+    )
+
+
 class LifecycleServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -205,6 +215,7 @@ class LifecycleServiceTest(unittest.TestCase):
             store=self.store,
             authority=self.authority,
             support=self.support,
+            effects=_effects(self.store, self.support),
             evidence=self.evidence_service,
             clock=lambda: self.clock[0],
             new_context_id=lambda: f"ctx-{next(self._context_ids)}",
@@ -713,6 +724,7 @@ class LifecycleServiceTest(unittest.TestCase):
             store=self.store,
             authority=self.authority,
             support=self.support,
+            effects=_effects(self.store, self.support),
             evidence=EvidenceService(
                 store=self.store,
                 evidence=_CurrentEvidence(),
@@ -725,6 +737,7 @@ class LifecycleServiceTest(unittest.TestCase):
             store=second_store,
             authority=self.authority,
             support=self.support,
+            effects=_effects(second_store, self.support),
             evidence=EvidenceService(
                 store=second_store,
                 evidence=_CurrentEvidence(),
@@ -841,6 +854,7 @@ class LifecycleServiceTest(unittest.TestCase):
             store=self.store,
             authority=self.store,
             support=support,
+            effects=_effects(self.store, support),
             evidence=self.evidence_service,
             clock=lambda: self.clock[0],
             new_context_id=lambda: "ctx-2",
@@ -863,6 +877,7 @@ class LifecycleServiceTest(unittest.TestCase):
             store=self.store,
             authority=self.authority,
             support=self.support,
+            effects=_effects(self.store, self.support),
             evidence=self.evidence_service,
             clock=lambda: self.clock[0],
             new_context_id=lambda: "ctx-evidence",
@@ -1326,6 +1341,7 @@ class LifecycleServiceTest(unittest.TestCase):
             store=self.store,
             authority=self.authority,
             support=self.support,
+            effects=_effects(self.store, self.support),
             evidence=self.evidence_service,
             clock=lambda: self.clock[0],
             new_context_id=lambda: context_id,
@@ -2903,6 +2919,7 @@ class LifecycleServiceTest(unittest.TestCase):
             store=self.store,
             authority=self.authority,
             support=support,
+            effects=_effects(self.store, support),
             evidence=self.evidence_service,
             clock=lambda: self.clock[0],
             new_context_id=lambda: f"ctx-{next(self._context_ids)}",
