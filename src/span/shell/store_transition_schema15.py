@@ -181,7 +181,9 @@ def receipt_payload(value: object) -> dict[str, object]:
         for item in _sequence(payload.pop("dependent_effects", []))
     )
     if len(understanding_ids) != len(versions):
-        raise TransitionError("historical receipt has unpaired understanding coordinates")
+        raise TransitionError(
+            "historical receipt has unpaired understanding coordinates"
+        )
     if not (understanding_ids or runs or challenges):
         raise TransitionError("historical receipt lacks accepted identity")
     if len(runs) == 1 and not (understanding_ids or challenges or dependents):
@@ -218,8 +220,7 @@ def receipt_payload(value: object) -> dict[str, object]:
 
 def installation_dependency_payload(value: object) -> object:
     refs = tuple(
-        m.from_canonical(m.ConclusionRevisionRef, item)
-        for item in _sequence(value)
+        m.from_canonical(m.ConclusionRevisionRef, item) for item in _sequence(value)
     )
     if refs:
         return _historical(dependent_effect_refs=refs)

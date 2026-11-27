@@ -1997,7 +1997,9 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     "addressed_requests",
                 ):
                     self.assertEqual(
-                        connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                        connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[
+                            0
+                        ],
                         0,
                     )
 
