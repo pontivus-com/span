@@ -59,6 +59,9 @@ class FilesystemRegisteredRoots:
         roots = {identity: self.root(identity) for identity in self.repository_ids()}
         if repository_id not in roots:
             raise ValueError("unknown registered repository")
+        relative = _pathlib.PurePosixPath(path)
+        if not path or relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("path must be relative to its requested repository")
         origin = _pathlib.Path(roots[repository_id])
         selected = (origin / path).resolve()
         if not selected.is_relative_to(origin):

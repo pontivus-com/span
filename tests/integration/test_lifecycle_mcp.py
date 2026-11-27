@@ -1740,6 +1740,18 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(rejected["$type"], "Rejected")
+            self.assertIn(REPOSITORY_ID, rejected["cause"])
+            self.assertIn(child_id, rejected["cause"])
+            for invalid_path in (str(child / "src/child.py"), "../outside.py"):
+                invalid = await self._call(
+                    session,
+                    "ask",
+                    {
+                        "repository_id": REPOSITORY_ID,
+                        "reference": invalid_path,
+                    },
+                )
+                self.assertEqual(invalid["$type"], "Rejected")
             return await self._call(
                 session,
                 "ask",

@@ -51,7 +51,10 @@ class AddressingService:
                 raise RecordingValidationError(
                     "admission crosses registered repository owners",
                     public_identity=item.locator,
-                    public_cause="admit evidence within the selected repository owner",
+                    public_cause=(
+                        f"evidence belongs to {owner}; selected repository owner "
+                        f"is {selected.repository_id}"
+                    ),
                 )
             evidence.append(_dataclasses.replace(item, locator=locator))
         return _dataclasses.replace(selected, evidence=tuple(evidence))
