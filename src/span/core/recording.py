@@ -51,7 +51,11 @@ from span.core.model.recording import (
     RecordingIdentity,
     RecordingKey,
 )
+from span.core.model.surfaces import AcceptedDependencyEffects
 from span.core.model.understanding import (
+    AcceptedChallengeDispositionRef,
+    AcceptedChallengeOpeningEffect,
+    AcceptedUnderstandingEffect,
     Challenge,
     ChallengeDispositionRecord,
     ChallengeResolution,
@@ -137,6 +141,37 @@ class UnderstandingTransition:
     challenge_effects: tuple[ChallengeEffect, ...] = ()
     curations: tuple[CurationDisposition, ...] = ()
     revision_effects: tuple[AcceptedRevisionEffect, ...] = ()
+
+    def accepted_effect(
+        self, dependencies: AcceptedDependencyEffects
+    ) -> AcceptedUnderstandingEffect:
+        """Project accepted facts directly, without inspecting a later version."""
+        return AcceptedUnderstandingEffect(
+            understanding_id=self.understanding.understanding_id,
+            version=self.new_version.version,
+            revision_effects=self.revision_effects,
+            challenge_dispositions=tuple(
+                AcceptedChallengeDispositionRef(effect.challenge_id, effect.new_revision)
+                for effect in self.challenge_effects
+            ),
+            dependency_effects=dependencies,
+        )
+
+
+def accepted_challenge_opening(challenge: Challenge) -> AcceptedChallengeOpeningEffect:
+    """Preserve the original opening coordinate before any disposition."""
+    if (
+        challenge.state is not ChallengeState.OPEN
+        or challenge.challenge_revision.value != 1
+    ):
+        raise ValueError("challenge opening requires the newly accepted revision")
+    return AcceptedChallengeOpeningEffect(
+        challenge_id=challenge.challenge_id,
+        challenge_revision=challenge.challenge_revision,
+        understanding_id=challenge.understanding_id,
+        target_version=challenge.target_version,
+        target_conclusions=challenge.target_conclusions,
+    )
 
 
 def receipt_content_decision(

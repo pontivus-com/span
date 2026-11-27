@@ -15,6 +15,7 @@ from span.core.identity import payload_digest, record_content_digest, recording_
 from span.core.recording import (
     RecordingConflict,
     RecordingValidationError,
+    accepted_challenge_opening,
     apply_challenge_dispositions,
     apply_update,
     build_receipt,
@@ -425,6 +426,41 @@ class AcceptedRevisionEffectTest(unittest.TestCase):
             m.from_canonical(m.AcceptedRevisionEffect, m.to_canonical(effect)), effect
         )
 
+    def test_accepted_transition_keeps_exact_action_and_dependency_causes(self):
+        transition = create_understanding(
+            m.UnderstandingId("u-1"), _create_command(), _context(), NOW
+        )
+        dependency = m.AcceptedDependencyEffect(
+            m.SurfaceKey("other", m.SurfaceKind.FILE, "src/b.py"),
+            m.ConclusionRevisionRef(
+                m.UnderstandingId("u-2"),
+                m.ConclusionId("c-2"),
+                m.ConclusionRevisionNumber(3),
+            ),
+            (m.ChangeReason.INDIRECT,),
+        )
+        dependencies = m.AcceptedDependencyEffects((dependency,))
+        accepted = transition.accepted_effect(dependencies)
+        self.assertEqual(accepted.revision_effects, transition.revision_effects)
+        self.assertEqual(accepted.dependency_effects, dependencies)
+        self.assertEqual(accepted.challenge_dispositions, ())
+        self.assertEqual(
+            m.from_canonical(m.AcceptedUnderstandingEffect, m.to_canonical(accepted)),
+            accepted,
+        )
+        with self.assertRaisesRegex(ValueError, "crosses understandings"):
+            dataclasses.replace(accepted, understanding_id=m.UnderstandingId("other"))
+
+    def test_accepted_surface_boundary_is_exact(self):
+        surface = m.SurfaceKey("repo-1", m.SurfaceKind.SERVICE, "service")
+        accepted = m.AcceptedSurfaceEffect(m.SurfaceAction.UPDATE, surface, 2)
+        self.assertEqual(
+            m.from_canonical(m.AcceptedSurfaceEffect, m.to_canonical(accepted)),
+            accepted,
+        )
+        with self.assertRaises(ValueError):
+            dataclasses.replace(accepted, boundary_version=1)
+
     def test_replacement_records_exact_old_and_new_lineages(self):
         understanding, version, revisions = _created()
         old = version.conclusions[0]
@@ -461,6 +497,9 @@ class AcceptedRevisionEffectTest(unittest.TestCase):
         )
         self.assertEqual(transition.revision_effects, ())
         self.assertEqual(transition.new_version.conclusions, version.conclusions)
+        accepted = transition.accepted_effect(m.AcceptedDependencyEffects(()))
+        self.assertEqual(accepted.revision_effects, ())
+        self.assertEqual(accepted.version, transition.new_version.version)
 
 
 class CreateUnderstandingTest(unittest.TestCase):
@@ -693,6 +732,30 @@ def _resulting_version(
 
 
 class ChallengeTransitionTest(unittest.TestCase):
+    def test_opening_acceptance_retains_exact_original_target(self):
+        _, version, _ = _created()
+        challenge = create_challenge(
+            challenge_id=m.ChallengeId("ch-1"),
+            understanding_id=m.UnderstandingId("u-1"),
+            target_version=version.version,
+            target_conclusions=version.conclusions,
+            reason="why?",
+            evidence=(_evidence(),),
+            provenance="test",
+            now=NOW,
+        )
+        accepted = accepted_challenge_opening(challenge)
+        self.assertEqual(accepted.target_conclusions, version.conclusions)
+        self.assertEqual(accepted.target_version, version.version)
+        self.assertEqual(
+            m.from_canonical(m.AcceptedChallengeOpeningEffect, m.to_canonical(accepted)),
+            accepted,
+        )
+        with self.assertRaisesRegex(ValueError, "newly accepted revision"):
+            accepted_challenge_opening(
+                dataclasses.replace(challenge, challenge_revision=m.ChallengeRevision(2))
+            )
+
     def test_unresolved_disposition_advances_revision(self):
         understanding, version, revisions = _created()
         challenge = create_challenge(

@@ -35,7 +35,11 @@ from span.core.model.primitives import (
     VerificationRunId,
     _require_non_empty,
 )
-from span.core.model.surfaces import SurfaceKey, SurfaceReference
+from span.core.model.surfaces import (
+    AcceptedDependencyEffects,
+    SurfaceKey,
+    SurfaceReference,
+)
 from span.core.model.support import (
     SupportBasis,
     SupportDependency,
@@ -769,6 +773,60 @@ class RetrievedContext:
 class UnderstandingVersionRef:
     understanding_id: UnderstandingId
     version: UnderstandingVersionNumber
+
+
+@_dataclass(frozen=True)
+class AcceptedChallengeDispositionRef:
+    """The exact accepted disposition revision, not later challenge state."""
+
+    challenge_id: ChallengeId
+    challenge_revision: ChallengeRevision
+
+
+@_dataclass(frozen=True)
+class AcceptedUnderstandingEffect:
+    """Immutable understanding acceptance from the canonical transition (FD-37)."""
+
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+    revision_effects: tuple[AcceptedRevisionEffect, ...]
+    challenge_dispositions: tuple[AcceptedChallengeDispositionRef, ...]
+    dependency_effects: AcceptedDependencyEffects
+
+    def __post_init__(self) -> None:
+        if any(
+            effect.ref.understanding_id != self.understanding_id
+            for effect in self.revision_effects
+        ):
+            raise ValueError("accepted revision effect crosses understandings")
+        actions = tuple((effect.action, effect.ref) for effect in self.revision_effects)
+        if len(set(actions)) != len(actions):
+            raise ValueError("accepted revision actions require distinct coordinates")
+        challenges = tuple(
+            effect.challenge_id for effect in self.challenge_dispositions
+        )
+        if len(set(challenges)) != len(challenges):
+            raise ValueError("accepted challenge dispositions require distinct IDs")
+
+
+@_dataclass(frozen=True)
+class AcceptedChallengeOpeningEffect:
+    """Exact target and accepted revision of a newly opened dispute (FD-37)."""
+
+    challenge_id: ChallengeId
+    challenge_revision: ChallengeRevision
+    understanding_id: UnderstandingId
+    target_version: UnderstandingVersionNumber
+    target_conclusions: tuple[ConclusionRevisionRef, ...]
+
+    def __post_init__(self) -> None:
+        if any(
+            ref.understanding_id != self.understanding_id
+            for ref in self.target_conclusions
+        ):
+            raise ValueError("accepted challenge target crosses understandings")
+        if len(set(self.target_conclusions)) != len(self.target_conclusions):
+            raise ValueError("accepted challenge targets require distinct refs")
 
 
 @_dataclass(frozen=True)

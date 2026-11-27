@@ -57,13 +57,6 @@ class RecordKind(_enum.Enum):
     FUNCTIONAL_PYRAMID = "functional_pyramid"
 
 
-class SurfaceAction(_enum.Enum):
-    """A surface declaration is either created or boundary-updated."""
-
-    CREATE = "create"
-    UPDATE = "update"
-
-
 @_dataclass(frozen=True)
 class ContextBoundTarget:
     """The context's bound question/scope is the create target."""

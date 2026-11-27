@@ -17,6 +17,7 @@ from span.core.model.primitives import (
     UnderstandingId,
     UnderstandingVersionNumber,
     _require_non_empty,
+    _require_positive_int,
 )
 from span.core.model.support import SupportState
 
@@ -27,6 +28,13 @@ class ChangeReason(_enum.Enum):
     CONTAINMENT = "containment"
     DIRECT = "direct"
     INDIRECT = "indirect"
+
+
+class SurfaceAction(_enum.Enum):
+    """A surface declaration is either created or boundary-updated."""
+
+    CREATE = "create"
+    UPDATE = "update"
 
 
 class SurfaceKind(_enum.Enum):
@@ -104,6 +112,24 @@ class AcceptedDependencyEffects:
         refs = tuple(item.ref for item in self.effects)
         if len(set(refs)) != len(refs):
             raise ValueError("accepted dependency effects require distinct refs")
+
+
+@_dataclass(frozen=True)
+class AcceptedSurfaceEffect:
+    """Immutable accepted surface boundary coordinate (FD-3/46–48)."""
+
+    action: SurfaceAction
+    surface: SurfaceKey
+    boundary_version: int
+
+    def __post_init__(self) -> None:
+        _require_positive_int(
+            "accepted surface boundary version", self.boundary_version
+        )
+        if not self.surface.kind.is_declared:
+            raise ValueError("accepted declaration requires a declared surface")
+        if (self.action is SurfaceAction.CREATE) != (self.boundary_version == 1):
+            raise ValueError("surface creation alone accepts boundary version one")
 
 
 @_dataclass(frozen=True)
