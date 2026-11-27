@@ -269,7 +269,9 @@ def _write_historical_payloads(connection):
         ("challenges", _historical_fact_payload),
         ("record_receipts", _historical_receipt_payload),
     ):
-        rows = connection.execute(f"SELECT rowid, canonical_json FROM {table}").fetchall()
+        rows = connection.execute(
+            f"SELECT rowid, canonical_json FROM {table}"
+        ).fetchall()
         for rowid, canonical in rows:
             connection.execute(
                 f"UPDATE {table} SET canonical_json=? WHERE rowid=?",
@@ -775,7 +777,7 @@ def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
 
 
 def _schema14_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
-    """Build schema-15 state, then remove only curation storage to reproduce 14."""
+    """Build current state, then recreate the historical schema-14 payload."""
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
     from span.shell.sqlite_store.lifecycle import LifecycleStore
 
@@ -1274,7 +1276,7 @@ class ApplyTest(unittest.TestCase):
                 version = connection.execute(
                     "SELECT value FROM meta WHERE key='schema_version'"
                 ).fetchone()[0]
-                self.assertEqual(version, "15")
+                self.assertEqual(version, "16")
                 root_row = connection.execute(
                     "SELECT root FROM repositories WHERE repository_id='demo'"
                 ).fetchone()[0]
@@ -1631,10 +1633,10 @@ class RefusalTest(unittest.TestCase):
                 )
                 self.assertIsNotNone(receipt)
                 assert receipt is not None
-                self.assertIsInstance(receipt.accepted_effect, m.AcceptedVerificationEffect)
-                run = store.get_verification_run(
-                    receipt.accepted_effect.run_id.value
+                self.assertIsInstance(
+                    receipt.accepted_effect, m.AcceptedVerificationEffect
                 )
+                run = store.get_verification_run(receipt.accepted_effect.run_id.value)
                 self.assertEqual(run.command, "python3 -m unittest")
                 self.assertEqual(run.repository_id, "demo")
                 self.assertEqual(run.scope.scope.paths, ("src/a.py",))
@@ -1938,7 +1940,7 @@ class InstallerCommandTest(unittest.TestCase):
             mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
             self.assertEqual(mapping["counts"]["unresolved"], 0)
             self.assertGreaterEqual(mapping["counts"]["transformed"], 1)
-            self.assertEqual(st._read_schema_version_ro(source), 15)
+            self.assertEqual(st._read_schema_version_ro(source), 16)
             from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
             from span.shell.sqlite_store.lifecycle import LifecycleStore
 
@@ -1955,7 +1957,7 @@ class InstallerCommandTest(unittest.TestCase):
                 self.assertEqual(len(store.get_version("u-1", 1).gaps), 1)
                 self.assertEqual(len(store.get_challenges("u-1")), 1)
                 self.assertEqual(
-                    store.get_verification_run("run:ctx-2:req-2").run_id.value,
+                    store.get_verification_run("run:ctx-2:req-2").facts.run_id.value,
                     "run:ctx-2:req-2",
                 )
                 receipt = store.get_receipt(
@@ -1965,7 +1967,7 @@ class InstallerCommandTest(unittest.TestCase):
                 )
                 self.assertIsNotNone(receipt)
                 assert receipt is not None
-                self.assertEqual(receipt.identity.context_id.value, "ctx-1")
+                self.assertEqual(receipt.context.context_id.value, "ctx-1")
             finally:
                 store.close()
 
@@ -2079,7 +2081,9 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     recorded_at=NOW,
                 ),
                 m.ResolvedChallengeRecord(
-                    decision=m.ChallengeDispositionDecision(m.ChallengeRevision(3), NOW),
+                    decision=m.ChallengeDispositionDecision(
+                        m.ChallengeRevision(3), NOW
+                    ),
                     resolution=resolution,
                 ),
             ),
@@ -2102,7 +2106,9 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     challenge_facts = m.from_canonical(
                         m.ChallengeFacts, staged["facts"]
                     )
-                    self.assertEqual(challenge_facts.challenge_id, value.facts.challenge_id)
+                    self.assertEqual(
+                        challenge_facts.challenge_id, value.facts.challenge_id
+                    )
                     self.assertEqual(challenge_facts.state, value.facts.state)
 
     def test_accepted_dependency_coordinates_are_strict_and_round_trip(self):
