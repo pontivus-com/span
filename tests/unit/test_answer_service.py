@@ -1877,6 +1877,43 @@ class AnswerServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(result, m.RetrievedReceipt)
         self.assertNotIsInstance(result, m.Answer)
+        assert isinstance(result, m.RetrievedReceipt)
+        self.assertEqual(result.receipt_selector.request_id, "req-u-a")
+        self.assertEqual(result.committed_at, NOW)
+        effect = result.accepted_effect
+        self.assertIsInstance(effect, m.HistoricalAcceptanceDetailUnavailable)
+        assert isinstance(effect, m.HistoricalAcceptanceDetailUnavailable)
+        self.assertEqual(
+            effect.understanding_versions,
+            (
+                m.UnderstandingVersionRef(
+                    m.UnderstandingId("u-a"), m.UnderstandingVersionNumber(1)
+                ),
+            ),
+        )
+        payload = m.to_canonical(result)
+        self.assertNotIn("content_digest", str(payload))
+        self.assertNotIn("context_id", str(payload))
+
+    def test_verification_receipt_retains_exact_execution_without_live_support(
+        self,
+    ) -> None:
+        receipt = self._record_verification_paths("receipt-run", ("src/a.py",))
+        run = self.store.get_verification_run(
+            receipt.accepted_verification_run_ids[0].value
+        )
+        (self.root / "src/a.py").write_text("changed\n", encoding="utf-8")
+        result = self.service.ask(
+            m.AskRequest(
+                selector=m.ReceiptRetrievalSelector(
+                    repository_id="repo-1", request_id="receipt-run"
+                )
+            )
+        )
+        assert isinstance(result, m.RetrievedReceipt)
+        self.assertEqual(
+            result.accepted_effect, m.AcceptedVerificationReceipt((run,))
+        )
 
     def _page_service(self, *, clock=None):
         import dataclasses

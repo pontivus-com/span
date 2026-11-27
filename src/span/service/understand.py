@@ -103,9 +103,36 @@ class UnderstandService:
                     "do not repeat the historical write"
                 ),
             )
+        accepted_effect: (
+            m.AcceptedVerificationReceipt | m.HistoricalAcceptanceDetailUnavailable
+        )
+        if (
+            verification_runs
+            and not receipt.accepted_understanding_ids
+            and not receipt.accepted_challenge_ids
+            and not receipt.dependent_effects
+        ):
+            accepted_effect = m.AcceptedVerificationReceipt(verification_runs)
+        else:
+            accepted_effect = m.HistoricalAcceptanceDetailUnavailable(
+                understanding_versions=tuple(
+                    m.UnderstandingVersionRef(identity, version)
+                    for identity, version in zip(
+                        receipt.accepted_understanding_ids,
+                        receipt.accepted_understanding_versions,
+                        strict=True,
+                    )
+                ),
+                verification_run_ids=receipt.accepted_verification_run_ids,
+                challenge_ids=receipt.accepted_challenge_ids,
+                dependent_effect_refs=receipt.dependent_effects,
+                reason="the retained receipt does not contain exact accepted effects",
+                recovery="retrieve the named historical records; do not repeat the write",
+            )
         return m.RetrievedReceipt(
-            receipt=receipt,
-            verification_runs=verification_runs,
+            receipt_selector=request,
+            committed_at=receipt.committed_at,
+            accepted_effect=accepted_effect,
         )
 
     def _snapshot(

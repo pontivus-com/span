@@ -32,9 +32,9 @@ from span.core.model.primitives import (
     SemanticBasis,
     UnderstandingId,
     UnderstandingVersionNumber,
+    VerificationRunId,
     _require_non_empty,
 )
-from span.core.model.recording import RecordReceipt
 from span.core.model.surfaces import SurfaceKey, SurfaceReference
 from span.core.model.support import (
     SupportBasis,
@@ -586,11 +586,48 @@ class RetrievedContext:
 
 
 @_dataclass(frozen=True)
-class RetrievedReceipt:
-    """One retained receipt plus exact accepted verification-run detail."""
+class UnderstandingVersionRef:
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
 
-    receipt: RecordReceipt
-    verification_runs: tuple[VerificationRun, ...] = ()
+
+@_dataclass(frozen=True)
+class HistoricalAcceptanceDetailUnavailable:
+    """Retained acceptance coordinates whose original effect detail was not stored."""
+
+    understanding_versions: tuple[UnderstandingVersionRef, ...]
+    verification_run_ids: tuple[VerificationRunId, ...]
+    challenge_ids: tuple[ChallengeId, ...]
+    dependent_effect_refs: tuple[ConclusionRevisionRef, ...]
+    reason: str
+    recovery: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("historical acceptance reason", self.reason)
+        _require_non_empty("historical acceptance recovery", self.recovery)
+
+
+@_dataclass(frozen=True)
+class AcceptedVerificationReceipt:
+    """Exact recorded execution facts, without live qualification."""
+
+    verification_runs: tuple[VerificationRun, ...]
+
+    def __post_init__(self) -> None:
+        if not self.verification_runs:
+            raise ValueError("verification acceptance requires a recorded run")
+
+
+@_dataclass(frozen=True)
+class RetrievedReceipt:
+    """Public immutable acceptance audit; replay internals stay private."""
+
+    receipt_selector: ReceiptRetrievalSelector
+    committed_at: _datetime.datetime
+    accepted_effect: AcceptedVerificationReceipt | HistoricalAcceptanceDetailUnavailable
+
+    def __post_init__(self) -> None:
+        _require_aware("RetrievedReceipt.committed_at", self.committed_at)
 
 
 RetrieveResult = _typing.Union[
