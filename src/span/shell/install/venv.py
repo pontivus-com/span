@@ -96,8 +96,17 @@ def _source_identity(span_repo: str | Path) -> dict[str, str] | None:
     return decode_build_identity(result.stdout)
 
 
+def requested_build_identity(span_repo: str | Path) -> dict[str, str] | None:
+    if install_mode(span_repo) == "checkout":
+        return _source_identity(span_repo)
+    return installed_build_identity()
+
+
 def source_venv_in_sync(
-    span_repo: str | Path, venv_python: str | Path
+    span_repo: str | Path,
+    venv_python: str | Path,
+    *,
+    expected_identity: dict[str, str] | None = None,
 ) -> tuple[bool, int, tuple[str, ...]]:
     """Prove observed build identity and installed source bytes agree."""
     venv_site = Path(venv_python).parent.parent / "lib"
@@ -109,23 +118,27 @@ def source_venv_in_sync(
         installed = _hash_tree(candidates[0])
     except OSError:
         return False, 0, ()
-    expected = _source_identity(span_repo)
+    current = _source_identity(span_repo)
+    expected = current if expected_identity is None else expected_identity
     extra = tuple(sorted(set(installed) - set(source)))
     in_sync = (
         bool(source)
         and expected is not None
-        and expected == read_build_identity(candidates[0])
-        and all(installed.get(name) == digest for name, digest in source.items())
+        and expected == current == read_build_identity(candidates[0])
+        and installed == source
     )
     return in_sync, len(source), extra
 
 
 def distribution_venv_in_sync(
     venv_python: str | Path,
+    *,
+    expected_identity: dict[str, str] | None = None,
 ) -> tuple[bool, int, tuple[str, ...]]:
     """Require the same distribution version and actual packaged identity."""
-    expected = installed_build_identity()
-    if expected is None:
+    current = installed_build_identity()
+    expected = current if expected_identity is None else expected_identity
+    if expected is None or current != expected:
         return False, 0, ()
     probe = (
         "import json; from importlib.metadata import version; "
@@ -194,25 +207,32 @@ def pip_install(venv_python, span_repo, dry_run=False):
 
 
 def verify_installed(
-    span_repo: str | Path, venv_python: str | Path
+    span_repo: str | Path,
+    venv_python: str | Path,
+    *,
+    expected_identity: dict[str, str] | None = None,
 ) -> tuple[bool, str]:
     """Use the same exact proof after installation as on the reuse path."""
     if install_mode(span_repo) == "distribution":
-        in_sync, _, _ = distribution_venv_in_sync(venv_python)
+        in_sync, _, _ = distribution_venv_in_sync(
+            venv_python, expected_identity=expected_identity
+        )
         if in_sync:
             return True, f"span-mcp {distribution_version()} build verified"
         return (
             False,
             "installed build differs or cannot be verified; reinstall the requested Span build",
         )
-    in_sync, checked, extra = source_venv_in_sync(span_repo, venv_python)
+    in_sync, checked, extra = source_venv_in_sync(
+        span_repo, venv_python, expected_identity=expected_identity
+    )
+    if extra:
+        return False, "obsolete runtime files remain; recreate the runtime environment"
     if not in_sync:
         return (
             False,
             "installed build differs or cannot be verified; reinstall the requested Span build",
         )
-    if extra:
-        return False, "obsolete runtime files remain; recreate the runtime environment"
     return True, f"{checked} files match source and build identity"
 
 

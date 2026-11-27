@@ -263,6 +263,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                 ),
                 mock.patch.object(cli, "write_indexer_pointer", return_value={}),
                 mock.patch.object(cli, "install_mode", return_value="checkout"),
+                mock.patch.object(cli, "requested_build_identity", return_value={"source_revision": "a" * 40, "source_digest": "b" * 64}),
                 mock.patch.object(
                     cli,
                     "source_venv_in_sync",
@@ -272,7 +273,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                 mock.patch.object(cli, "read_receipt", return_value=None),
                 mock.patch.object(cli, "_register_hosts", return_value={}),
                 mock.patch.object(
-                    cli, "verify_installation", return_value={"repos": []}
+                    cli, "verify_installation", return_value={"repos": [], "build_identity": {"source_revision": "a" * 40, "source_digest": "b" * 64}}
                 ),
                 mock.patch.object(cli, "write_receipt"),
                 mock.patch.object(cli, "git_rev", return_value="test"),
@@ -500,6 +501,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                 ),
                 mock.patch.object(cli, "write_indexer_pointer", return_value={}),
                 mock.patch.object(cli, "install_mode", return_value="checkout"),
+                mock.patch.object(cli, "requested_build_identity", return_value={"source_revision": "a" * 40, "source_digest": "b" * 64}),
                 mock.patch.object(
                     cli,
                     "source_venv_in_sync",
@@ -510,7 +512,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                 mock.patch.object(cli, "read_receipt", return_value=None),
                 mock.patch.object(cli, "_register_hosts", side_effect=hosts),
                 mock.patch.object(
-                    cli, "verify_installation", return_value={"repos": []}
+                    cli, "verify_installation", return_value={"repos": [], "build_identity": {"source_revision": "a" * 40, "source_digest": "b" * 64}}
                 ),
                 mock.patch.object(cli, "write_receipt") as write_receipt,
                 mock.patch.object(cli, "git_rev", return_value="test"),
@@ -621,6 +623,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                 ),
                 mock.patch.object(cli, "write_indexer_pointer", return_value={}),
                 mock.patch.object(cli, "install_mode", return_value="checkout"),
+                mock.patch.object(cli, "requested_build_identity", return_value={"source_revision": "a" * 40, "source_digest": "b" * 64}),
                 mock.patch.object(
                     cli,
                     "source_venv_in_sync",
@@ -680,6 +683,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                 ),
                 mock.patch.object(cli, "write_indexer_pointer", return_value={}),
                 mock.patch.object(cli, "install_mode", return_value="checkout"),
+                mock.patch.object(cli, "requested_build_identity", return_value={"source_revision": "a" * 40, "source_digest": "b" * 64}),
                 mock.patch.object(
                     cli,
                     "source_venv_in_sync",
@@ -689,7 +693,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                 mock.patch.object(cli, "read_receipt", return_value=None),
                 mock.patch.object(cli, "_register_hosts", return_value={}),
                 mock.patch.object(
-                    cli, "verify_installation", return_value={"repos": []}
+                    cli, "verify_installation", return_value={"repos": [], "build_identity": {"source_revision": "a" * 40, "source_digest": "b" * 64}}
                 ),
                 mock.patch.object(cli, "write_receipt"),
                 mock.patch.object(cli, "git_rev", return_value="test"),

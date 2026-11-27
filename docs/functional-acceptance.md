@@ -123,8 +123,8 @@ names and results at closeout, not speculative evidence.
 | FA-70 | Exclusive administrative ownership, existing-binding reuse, durable interruption recovery; scoped abandonment, continuous runtime exclusion, complete state proof, per-instance guidance and finalized receipt agreement (additional evidence OPEN) | `test_administrative_owner_blocks_alias_and_competing_maintenance`; `test_classification_reconciles_authority_without_claiming_ordinary_ownership`; `test_installed_document_only_governed_initialization` |
 | FA-71 | Public findings | `test_public_governance_findings_exclude_internal_diagnostics`; `test_installed_cross_repository_governance_journey` |
 | FA-72 | Complete bounded retrieval | `test_directory_continuation_recovers_every_placement` |
-| FA-73 | Installed runtime identity (FD-88A) | OPEN — S-FIELD-05; actual installed identity across checkout/distribution and same-version different builds |
-| FA-74 | Current complete native host reachability (FD-49/52/53/58) | OPEN — S-FIELD-06; adapter tests and recorded authenticated host delivery |
-| FA-75 | Early invocation compatibility and user-oriented administrative outputs (FD-27/88A/88B) | OPEN — S-FIELD-07; named flag conflicts before effects, stable public causes/actions, structured/free-text negative leak coverage |
+| FA-73 | Installed runtime identity (FD-88A) | `test_checkout_sync_rejects_missing_or_stale_build_identity`; `test_sync_check_fails_on_drift_and_missing_tree`; `test_distribution_sync_requires_same_build_at_same_version`; `test_installed_document_only_governed_initialization`; full acceptance OPEN |
+| FA-74 | Current complete native host reachability (FD-49/52/53/58) | `test_span_hooks_notice.mjs`; authenticated native delivery evidence OPEN |
+| FA-75 | Early invocation compatibility and user-oriented administrative outputs (FD-27/88A/88B) | `test_classification_conflicts_before_installation_state_access`; `test_verifier_does_not_expose_failed_process_diagnostics`; `test_recovery_conflicts_before_mutating_independent_or_unowned_state`; `test_changing_membership_observation_is_unavailable`; `test_functional_pyramid_probe_validates_bootstrap_and_declarations`; full output audit OPEN |
 The matrix names enforcement boundaries; the CI execution receipt remains the
 evidence that those tests passed for a particular candidate.

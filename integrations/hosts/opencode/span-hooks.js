@@ -277,11 +277,14 @@ export default {
             const tools = await ctx.tool.list();
             const ids = new Set(tools.map((tool) => tool.id));
             if (["span_ask", "span_record", "span_reconsider"].every((id) => ids.has(id))) {
-              const state = pending.get(sessionID);
-              if (state) {
-                state.reachabilityText = "";
-                removeEmptyPending(pending, sessionID, state);
-              }
+              // The catalogue does not attest live transport or the running
+              // installation. Do not promote it to a readiness claim.
+              const notice =
+                "span: tool names are present, but live Span access is not verified. " +
+                "Use ask; if it is unavailable or the installation has changed, " +
+                "reconnect or restart your coding-agent host and start a fresh session.";
+              if (sessionID === "*") console.warn(notice);
+              else pendingState(pending, sessionID).reachabilityText = notice;
               return;
             }
           } catch {

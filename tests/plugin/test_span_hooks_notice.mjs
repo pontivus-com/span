@@ -686,7 +686,8 @@ test("prompt re-observes complete Span tool availability after loss and recovery
     await registered["session:prompt"](event);
     const restored = { ...event, system: [] };
     registered["session:context"](restored);
-    assert.equal(restored.system.length, 0);
+    assert.match(restored.system[0].text, /live Span access is not verified/);
+    assert.match(restored.system[0].text, /installation has changed/);
   } finally {
     dispose();
     fs.rmSync(root, { recursive: true, force: true });

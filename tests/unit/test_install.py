@@ -1864,7 +1864,7 @@ class Tier1MechanismTest(unittest.TestCase):
             (site / "a.py").write_text("1\n")
             (site / "stale.py").write_text("old\n")
             in_sync, _, extra = install.source_venv_in_sync(repo, python)
-            self.assertTrue(in_sync)
+            self.assertFalse(in_sync)
             self.assertEqual(extra, ("stale.py",))
 
     def test_verify_installed(self):
@@ -1937,6 +1937,17 @@ class Tier1MechanismTest(unittest.TestCase):
             self.assertFalse(install.source_venv_in_sync(repo, python)[0])
             (site / "BUILD_IDENTITY").write_text(json.dumps(self.identity))
             self.assertTrue(install.source_venv_in_sync(repo, python)[0])
+            changed = {**self.identity, "source_digest": "d" * 64}
+            with unittest.mock.patch(
+                "span.shell.install.venv._source_identity", return_value=changed
+            ):
+                (site / "BUILD_IDENTITY").write_text(json.dumps(changed))
+                self.assertFalse(install.source_venv_in_sync(
+                    repo, python, expected_identity=self.identity
+                )[0])
+                self.assertFalse(install.verify_installed(
+                    repo, python, expected_identity=self.identity
+                )[0])
 
     def test_clean_build_staging(self):
         import tempfile

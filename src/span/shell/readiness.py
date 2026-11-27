@@ -276,6 +276,11 @@ def _functional_pyramid_participation(
     }
 
 
+def _public_declaration_coordinate(repository_id: str, locator: str) -> str:
+    # Generated declarations are installer-owned, never a user repair input.
+    return repository_id if locator == ".span/functional-pyramid.json" or locator.startswith(".span/functional-pyramid/") else locator
+
+
 def _functional_pyramid_declaration_report(
     repository_id: str,
     canonical_root: str,
@@ -327,9 +332,11 @@ def _functional_pyramid_declaration_report(
     source_reports: list[dict[str, object]] = []
     valid = True
     for request in bootstrap.declaration_sources:
+        coordinate = _public_declaration_coordinate(repository_id, request.locator)
         if request.ranges:
             source_reports.append(
                 {
+                    "locator": coordinate,
                     "status": "invalid",
                     "reason": "declaration source must be a whole document",
                 }
@@ -341,6 +348,7 @@ def _functional_pyramid_declaration_report(
         except FunctionalPyramidRepositoryUnavailable:
             source_reports.append(
                 {
+                    "locator": coordinate,
                     "status": "unavailable",
                     "reason": "repository cannot be read",
                 }
@@ -350,6 +358,7 @@ def _functional_pyramid_declaration_report(
         except FunctionalPyramidDeclarationInvalid:
             source_reports.append(
                 {
+                    "locator": coordinate,
                     "status": "invalid",
                     "reason": "declaration violates the Version-3 contract",
                 }
@@ -359,6 +368,7 @@ def _functional_pyramid_declaration_report(
         if isinstance(result, m.EvidenceSourceFailure):
             source_reports.append(
                 {
+                    "locator": coordinate,
                     "status": result.kind.value.lower(),
                     "reason": "the governing document cannot be read",
                 }
@@ -368,6 +378,7 @@ def _functional_pyramid_declaration_report(
         _, _, graph_findings = result
         source_reports.append(
             {
+                "locator": coordinate,
                 "status": "valid" if not graph_findings else "invalid",
                 "findings": [
                     m.public_pyramid_finding(finding).reason.value
@@ -457,20 +468,22 @@ def _active_declaration_report(
     valid = True
     for ref in refs:
         locator = ref.locator
+        coordinate = _public_declaration_coordinate(repository_id, locator)
         request = m.EvidenceRequest(locator)
         try:
             result = store.read_declaration(repository_id, request)
         except FunctionalPyramidRepositoryUnavailable:
-            sources.append({"status": "unavailable"})
+            sources.append({"locator": coordinate, "status": "unavailable"})
             valid = False
             continue
         except FunctionalPyramidDeclarationInvalid:
-            sources.append({"status": "invalid"})
+            sources.append({"locator": coordinate, "status": "invalid"})
             valid = False
             continue
         if isinstance(result, m.EvidenceSourceFailure):
             sources.append(
                 {
+                    "locator": coordinate,
                     "status": result.kind.value.lower(),
                     "reason": "the governing document cannot be read",
                 }
@@ -480,6 +493,7 @@ def _active_declaration_report(
         _, _, findings = result
         sources.append(
             {
+                "locator": coordinate,
                 "status": "valid" if not findings else "invalid",
                 "findings": [
                     m.public_pyramid_finding(finding).reason.value

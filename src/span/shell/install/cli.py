@@ -62,6 +62,7 @@ from span.shell.install.paths import (
     platform_paths,
 )
 from span.shell.install.preflight import (
+    administrative_failure,
     load_authority_files,
     preflight_facts,
     validate_authority_files,
@@ -91,6 +92,7 @@ from span.shell.install.venv import (
     ensure_venv,
     expose_binary,
     pip_install,
+    requested_build_identity,
     source_venv_in_sync,
     verify_installed,
 )
@@ -124,6 +126,7 @@ class _RuntimeState:
     source_venv_sync: dict[str, object]
     data_backup: str | None
     post_install_verified: str | None
+    expected_identity: dict[str, str] | None
 
 
 def _environment(args: argparse.Namespace) -> _Environment:
@@ -354,8 +357,8 @@ def _initialize_repositories(
             else:
                 runtime, result = provision_repository_runtime(env.data_dir, request)
         except (OSError, ValueError, GraftUnavailableError) as exc:
-            raise SystemExit(
-                f"repository initialization failed for {repository_id!r}: {exc}"
+            raise administrative_failure(
+                exc, action=f"Repository initialization failed for {repository_id!r}; check repository access and configuration before retrying."
             ) from None
         try:
             results.append(result)
@@ -369,16 +372,19 @@ def _sync_runtime_distribution(
     venv_python: Path,
     *,
     data_backup: str | None = None,
+    expected_identity: dict[str, str] | None = None,
 ) -> tuple[dict[str, object], str | None, str | None]:
     """Bring the installed runtime in sync without touching repository state."""
     mode = install_mode(env.span_repo)
     if mode == "checkout":
         in_sync, files_checked, extra_files = source_venv_in_sync(
-            env.span_repo, venv_python
+            env.span_repo, venv_python, expected_identity=expected_identity
         )
         match_detail = f"source ({files_checked} files)"
     else:
-        in_sync, files_checked, extra_files = distribution_venv_in_sync(venv_python)
+        in_sync, files_checked, extra_files = distribution_venv_in_sync(
+            venv_python, expected_identity=expected_identity
+        )
         match_detail = f"span-mcp {distribution_version()}"
 
     post_install_verified = None
@@ -393,7 +399,9 @@ def _sync_runtime_distribution(
         pip_install(venv_python, env.span_repo, dry_run=env.dry)
         reinstalled = not env.dry
         if reinstalled:
-            ok, detail = verify_installed(env.span_repo, venv_python)
+            ok, detail = verify_installed(
+                env.span_repo, venv_python, expected_identity=expected_identity
+            )
             if not ok:
                 raise SystemExit(
                     f"installed runtime failed verification: {detail}. "
@@ -450,6 +458,9 @@ def _provision_runtime(
     )
     print("Repository configuration preflight complete.")
 
+    expected_identity = None if env.dry else requested_build_identity(env.span_repo)
+    if not env.dry and expected_identity is None:
+        raise SystemExit("The requested Span build cannot be verified. Use a known source revision or verified distribution.")
     venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
     indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)
     data_backup = None
@@ -469,7 +480,7 @@ def _provision_runtime(
         env.data_dir, indexer_binary, dry_run=env.dry
     )
     source_venv_sync, data_backup, post_install_verified = _sync_runtime_distribution(
-        env, venv_python, data_backup=data_backup
+        env, venv_python, data_backup=data_backup, expected_identity=expected_identity
     )
     expose_binary(env.venv_dir, env.bin_dir, dry_run=env.dry)
 
@@ -492,6 +503,7 @@ def _provision_runtime(
         source_venv_sync=source_venv_sync,
         data_backup=data_backup,
         post_install_verified=post_install_verified,
+        expected_identity=expected_identity,
     )
 
 
@@ -963,8 +975,8 @@ def _execute(env: _Environment) -> None:
                 env.data_dir, env.targets, mappings, args.authority_bindings_file, prior
             )
         except (OSError, ValueError, KeyError) as exc:
-            raise SystemExit(
-                f"governed initialization preflight rejected: {exc}"
+            raise administrative_failure(
+                exc, action="Governed initialization cannot proceed; check the selected repositories and supplied classification. If installation was interrupted, resume the original request or restore its verified backup."
             ) from None
     elif governed.PENDING in prior:
         print("incomplete governed initialization; observation only")
@@ -974,7 +986,12 @@ def _execute(env: _Environment) -> None:
         if governed.PENDING in prior and not prior.get("host_registration"):
             scope_receipt = None
         scope, _ = resolve_opencode_scope(args.opencode_plugin_scope, scope_receipt)
-    state = _provision_runtime(env, prior, pending, artifacts)
+    try:
+        state = _provision_runtime(env, prior, pending, artifacts)
+    except (OSError, ValueError, KeyError) as exc:
+        raise administrative_failure(
+            exc, action="Installation could not complete; verify the current installation and follow the reported recovery action."
+        ) from None
     host_registration = _register_hosts(env, scope, prior_receipt)
     report = verify_installation(
         state.venv_python,
@@ -984,6 +1001,16 @@ def _execute(env: _Environment) -> None:
         strict=pending is not None,
         pending_setup=pending is not None,
     )
+    if not env.dry:
+        identity = report.get("build_identity")
+        expected = state.expected_identity
+        if (
+            expected is None
+            or requested_build_identity(env.span_repo) != expected
+            or not isinstance(identity, dict)
+            or any(identity.get(key) != value for key, value in expected.items())
+        ):
+            raise SystemExit("The requested Span build changed or could not be verified. Reinstall the intended revision.")
     receipt = _build_receipt(env, state, host_registration, report)
     if not env.dry:
         governed.finalize(receipt, prior, pending)
@@ -1009,4 +1036,6 @@ def main(argv=None):
                 with store_use_ownership(env.data_dir):
                     _execute(env)
     except StoreHeldError as exc:
-        raise SystemExit(f"installation store ownership conflict: {exc}") from None
+        raise administrative_failure(
+            exc, action="Installation ownership is unavailable; stop other Span installation, recovery or runtime processes and retry."
+        ) from None

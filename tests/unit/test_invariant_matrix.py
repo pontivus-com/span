@@ -72,6 +72,8 @@ def _live_tests() -> dict[str, list[str]]:
                 node.name.startswith("test_")
             ):
                 index.setdefault(node.name, []).append(f"{relative}::{node.name}")
+    for path in sorted((REPO_ROOT / "tests" / "plugin").glob("test_*.mjs")):
+        index.setdefault(path.name, []).append(str(path.relative_to(REPO_ROOT)))
     return index
 
 
@@ -85,7 +87,7 @@ def _claimed_tests(evidence: str) -> list[str]:
     claimed = []
     for raw in _BACKTICK.findall(evidence):
         token = raw.strip()
-        if token.endswith(".py"):
+        if token.endswith((".py", ".mjs")):
             claimed.append(token)
         elif _IDENTIFIER.match(token) and (
             token.endswith("Test") or token.startswith("test_")
@@ -148,8 +150,8 @@ class FunctionalAcceptanceMatrixTest(unittest.TestCase):
     def test_matrix_lists_every_version_one_acceptance_case_once_in_order(self):
         self.assertEqual(
             [row[0] for row in self.rows],
-            [f"FA-{number:02d}" for number in range(1, 73)],
-            "the Version-1 acceptance matrix must carry FA-01..FA-72 in order",
+            [f"FA-{number:02d}" for number in range(1, 76)],
+            "the Version-1 acceptance matrix must carry FA-01..FA-75 in order",
         )
 
     def test_every_acceptance_case_names_live_boundary_tests(self):

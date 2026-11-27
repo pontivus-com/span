@@ -177,6 +177,10 @@ class StoreProbeTest(unittest.TestCase):
             invalid = probe_functional_pyramid_repository(data, "repo", root)
             self.assertEqual(invalid["declarations"]["status"], "invalid")
             self.assertFalse(invalid["declarations"]["valid"])
+            self.assertEqual(
+                invalid["declarations"]["sources"][0]["locator"],
+                "docs/functional-pyramid.json",
+            )
 
     def test_functional_pyramid_probe_reads_participation_without_activation(self):
         with tempfile.TemporaryDirectory() as tmp:

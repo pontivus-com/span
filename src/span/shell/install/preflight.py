@@ -13,11 +13,28 @@ if _typing.TYPE_CHECKING:
     from span.core import model as m
 
 
+def administrative_failure(
+    exc: BaseException, *, action: str
+) -> SystemExit:
+    """Render the existing typed public rejection; never render raw exceptions."""
+    import logging
+
+    logging.getLogger(__name__).debug("Administrative failure: %s", exc, exc_info=True)
+    from span.core.rejection import Rejection
+
+    if isinstance(exc, Rejection) and exc.public_cause:
+        subject = f"{exc.public_identity}: " if exc.public_identity else ""
+        return SystemExit(subject + exc.public_cause)
+    return SystemExit(action)
+
+
 def _json_object_list(path: str | Path, *, label: str) -> list[dict[str, object]]:
     try:
         data = json.loads(Path(path).read_text())
     except (OSError, ValueError) as exc:
-        raise SystemExit(f"cannot read {label} file {path}: {exc}") from None
+        raise administrative_failure(
+            exc, action=f"Cannot read {label} file {path}; supply a readable JSON list and retry."
+        ) from None
     if not isinstance(data, list):
         raise SystemExit(f"{label} file must hold a JSON list: {path}")
     items: list[dict[str, object]] = []
@@ -41,10 +58,9 @@ def _evidence_refs(
         return ()
     try:
         from span.core import model as m
-    except ImportError as exc:
+    except ImportError:
         raise SystemExit(
-            "cannot validate authority seeds: canonical decoder unavailable "
-            f"({exc}); refusing to install unchecked governance"
+            "Cannot validate authority seeds: canonical decoder unavailable; reinstall Span and retry."
         ) from None
 
     validated: list[m.EvidenceRef] = []
@@ -52,9 +68,9 @@ def _evidence_refs(
         try:
             validated.append(m.from_canonical(m.EvidenceRef, item))
         except m.CanonicalDecodeError as exc:
-            raise SystemExit(
-                f"authority seeds file {path}: authority seeds[{index}]: "
-                f"invalid EvidenceRef arguments: {exc}"
+            raise administrative_failure(
+                exc,
+                action=f"authority seeds file {path}: authority seeds[{index}]: invalid entry; correct the supplied authority seed and retry.",
             ) from None
     return tuple(validated)
 
@@ -69,10 +85,9 @@ def _authority_bindings(
         return ()
     try:
         from span.core import model as m
-    except ImportError as exc:
+    except ImportError:
         raise SystemExit(
-            "cannot validate authority bindings: canonical decoder unavailable "
-            f"({exc}); refusing to install unchecked governance"
+            "Cannot validate authority bindings: canonical decoder unavailable; reinstall Span and retry."
         ) from None
 
     validated: list[m.AuthorityBinding] = []
@@ -80,9 +95,9 @@ def _authority_bindings(
         try:
             validated.append(m.from_canonical(m.AuthorityBinding, item))
         except m.CanonicalDecodeError as exc:
-            raise SystemExit(
-                f"authority bindings file {path}: authority bindings[{index}]: "
-                f"invalid AuthorityBinding arguments: {exc}"
+            raise administrative_failure(
+                exc,
+                action=f"authority bindings file {path}: authority bindings[{index}]: invalid entry; correct the supplied authority binding and retry.",
             ) from None
     return tuple(validated)
 
@@ -128,9 +143,9 @@ def load_authority_files(
     """
     try:
         from span.shell.structural import repository_id_from_config
-    except ImportError as exc:
+    except ImportError:
         raise SystemExit(
-            f"cannot resolve repository identity for authority configuration: {exc}"
+            "Cannot resolve the selected repository; reinstall Span and check the repository location."
         ) from None
 
     selected_repository_ids = {
@@ -206,8 +221,8 @@ def validate_authority_files(
                 )
             )
         except (OSError, ValueError) as exc:
-            raise SystemExit(
-                f"authority preflight rejected for {repository_id!r}: {exc}"
+            raise administrative_failure(
+                exc, action=f"Authority configuration for {repository_id!r} cannot be verified; check the supplied documents and retry."
             ) from None
     return tuple(requests)
 
@@ -221,10 +236,9 @@ def load_seeds(
         return []
     try:
         importlib.import_module("span.core.model")
-    except ImportError as exc:
+    except ImportError:
         raise SystemExit(
-            "cannot validate authority seeds: canonical decoder unavailable "
-            f"({exc}); refusing to install unchecked governance"
+            "Cannot validate authority seeds: canonical decoder unavailable; reinstall Span and retry."
         ) from None
     return list(_evidence_refs(path, dry_run=dry_run))
 

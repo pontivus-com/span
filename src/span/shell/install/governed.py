@@ -118,16 +118,26 @@ def _state(
         yield state
 
 
+def _governance_conflict(root: Path, detail: str) -> ValueError:
+    from span.core.rejection import Rejection
+
+    return Rejection(
+        detail,
+        public_identity=str(root),
+        public_cause="Existing governance content conflicts with the requested classification; preserve it and resolve the installation conflict before retrying.",
+    )
+
+
 def _artifact_path(root: Path, locator: str) -> Path:
     path = root
     for part in locator.split("/"):
         if part in ("", ".", ".."):
-            raise ValueError(f"noncanonical generated locator: {locator}")
+            raise _governance_conflict(root, f"noncanonical generated locator: {locator}")
         path = path / part
         if path.is_symlink():
-            raise ValueError(f"symlink in generated artifact path: {path}")
+            raise _governance_conflict(root, f"symlink in generated artifact path: {path}")
     if path.exists() and not path.is_file():
-        raise ValueError(f"generated artifact is not a regular file: {path}")
+        raise _governance_conflict(root, f"generated artifact is not a regular file: {path}")
     return path
 
 
@@ -144,9 +154,9 @@ def _inspect_artifact(
         return
     actual = _digest(path.read_bytes())
     if known.get(locator) != actual and not (recovering and actual == digest):
-        raise ValueError(f"unowned or modified generated artifact: {path}")
+        raise _governance_conflict(root, f"unowned or modified generated artifact: {path}")
     if locator != BOOTSTRAP and actual != digest:
-        raise ValueError(f"immutable generated declaration collision: {path}")
+        raise _governance_conflict(root, f"immutable generated declaration collision: {path}")
 
 
 def _classify(roots: dict[str, Path], mapped: dict[str, str]) -> tuple[
@@ -160,12 +170,21 @@ def _classify(roots: dict[str, Path], mapped: dict[str, str]) -> tuple[
 
     rows: list[m.FunctionalPyramidClassificationRow] = []
     entries: dict[str, dict[str, object]] = {}
+    from span.core.rejection import Rejection
+
     for repository_id, raw_path in sorted(mapped.items()):
-        path = Path(raw_path).resolve(strict=True)
-        raw = path.read_bytes()
-        classification = fp.decode_functional_pyramid_classification(
-            raw.decode("utf-8"), repository_id=repository_id
-        )
+        try:
+            path = Path(raw_path).resolve(strict=True)
+            raw = path.read_bytes()
+            classification = fp.decode_functional_pyramid_classification(
+                raw.decode("utf-8"), repository_id=repository_id
+            )
+        except (OSError, ValueError) as exc:
+            raise Rejection(
+                f"classification rejected: {exc}",
+                public_identity=f"{repository_id}: {raw_path}",
+                public_cause="The classification is unreadable or invalid; check the supplied document and retry.",
+            ) from exc
         rows.extend(classification.rows)
         entries[repository_id] = {
             "root": str(roots[repository_id]),
@@ -188,7 +207,11 @@ def _classify(roots: dict[str, Path], mapped: dict[str, str]) -> tuple[
                 row.repository_id, m.EvidenceRequest(row.document_ref), None
             )
             if isinstance(result, m.EvidenceSourceFailure):
-                raise ValueError(f"classified document unavailable: {identity}")
+                raise Rejection(
+                    f"classified document unavailable: {identity}",
+                    public_identity=f"{row.repository_id}/{row.document_ref}",
+                    public_cause="The classified document is unavailable; restore it or correct its reference and retry.",
+                )
             fingerprints[identity] = result.content_fingerprint
         if row.scope is not None:
             scope = (roots[row.declaring_repository_id] / row.scope).resolve()
@@ -196,7 +219,11 @@ def _classify(roots: dict[str, Path], mapped: dict[str, str]) -> tuple[
                 not scope.is_relative_to(roots[row.declaring_repository_id])
                 or not scope.is_dir()
             ):
-                raise ValueError(f"declared directory unavailable: {scope}")
+                raise Rejection(
+                    f"declared directory unavailable: {scope}",
+                    public_identity=f"{row.declaring_repository_id}/{row.scope}",
+                    public_cause="The classified directory is unavailable; correct the scope and retry.",
+                )
     return combined, entries, fingerprints
 
 
@@ -571,7 +598,15 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
             if existing is None:
                 validation = service.candidate(candidate)
                 if not validation.activation_ready:
-                    raise ValueError(f"governed candidate rejected: {validation}")
+                    from span.core.rejection import Rejection
+
+                    findings = (*validation.validation_findings, *validation.graph_findings)
+                    raise Rejection(
+                        f"governed candidate rejected: {validation}",
+                        public_cause="Governed installation cannot proceed: " + "; ".join(
+                            f"{finding.detail}. {finding.recovery}" for finding in findings
+                        ),
+                    )
             else:
                 for member in members:
                     status = service.status(
@@ -594,7 +629,7 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
             )
             pyramid_id, version = recorded.pyramid_id, recorded.version
             pending["participation_result"] = m.to_canonical(recorded)
-            print(json.dumps(pending["participation_result"], sort_keys=True))
+            print("Governed participation accepted.")
         else:
             pyramid_id = m.FunctionalPyramidId(_string(pending["prior_pyramid_id"]))
             prior_version = pending["prior_version"]

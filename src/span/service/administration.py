@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from span.core import model as m
+from span.core.rejection import Rejection
 from span.ports.evidence import EvidenceSource
 from span.ports.lifecycle import LifecycleStorePort
 
@@ -34,9 +35,11 @@ def validate_authority_configuration(
     def resolve(reference: m.EvidenceRef, family: str) -> m.EvidenceRef:
         locator = reference.locator
         if reference.repository_id != repository_id:
-            raise ValueError(
+            raise Rejection(
                 f"authority {family} {locator!r} belongs to "
-                f"{reference.repository_id!r}, not {repository_id!r}"
+                f"{reference.repository_id!r}, not {repository_id!r}",
+                public_identity=f"{repository_id}/{locator}",
+                public_cause="the authority document belongs to a different repository; correct the mapping and retry",
             )
         if locator not in observed:
             try:
@@ -44,20 +47,25 @@ def validate_authority_configuration(
                     repository_id, m.EvidenceRequest(locator), None
                 )
             except (OSError, ValueError) as exc:
-                raise ValueError(
-                    f"authority {family} provider failure for "
-                    f"{repository_id!r}/{locator!r}: {exc}"
+                raise Rejection(
+                    f"authority {family} provider failure: {exc}",
+                    public_identity=f"{repository_id}/{locator}",
+                    public_cause="the supplied authority document cannot be read; restore access and retry",
                 ) from exc
             if isinstance(result, m.EvidenceSourceFailure):
-                raise ValueError(
+                raise Rejection(
                     f"authority {family} {result.kind.value.lower()} locator "
-                    f"{repository_id!r}/{locator!r}: {result.reason}"
+                    f"{repository_id!r}/{locator!r}: {result.reason}",
+                    public_identity=f"{repository_id}/{locator}",
+                    public_cause=f"{result.kind.value.lower()} locator {repository_id}/{locator}; correct the authority configuration and retry",
                 )
             found = result.evidence_ref
             if found.repository_id != repository_id or found.locator != locator:
-                raise ValueError(
+                raise Rejection(
                     f"authority {family} provider identity mismatch for "
-                    f"{repository_id!r}/{locator!r}"
+                    f"{repository_id!r}/{locator!r}",
+                    public_identity=f"{repository_id}/{locator}",
+                    public_cause="the authority document could not be verified; check its location and retry",
                 )
             observed[locator] = found
         return observed[locator]
@@ -71,7 +79,11 @@ def validate_authority_configuration(
         resolve(reference, "binding")
         key = reference.evidence_id.value
         if key in ids:
-            raise ValueError(f"duplicate authority binding: {repository_id!r}/{key}")
+            raise Rejection(
+                f"duplicate authority binding: {repository_id!r}/{key}",
+                public_identity=f"{repository_id}/{reference.locator}",
+                public_cause="duplicate authority binding; remove the conflicting entry and retry",
+            )
         ids.add(key)
     return replace(request, authority_seeds=seeds)
 
