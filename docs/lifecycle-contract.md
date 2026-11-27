@@ -271,8 +271,8 @@ route's unresolved governance remains inside the view and is
 not mislabeled as operational failure.
 
 `FunctionalPyramidView` carries the pyramid identity/version, route
-`status: RESOLVED | UNRESOLVED`, the requested directory or selected semantic
-scope, all applicable whole-document placements, the declared/absent layer
+`status: RESOLVED | UNRESOLVED`, the resolved repository/directory or selected
+semantic scope, all applicable whole-document placements, the declared/absent layer
 summary and the unresolved findings. It does not carry governing edges, reverse
 dependencies, per-path provenance or authority-binding payloads; those are
 internal resolution state. A canonical document can be shared by branches

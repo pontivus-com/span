@@ -654,7 +654,8 @@ S-FIELD-04. Preserve original passing obligations, no gate weakening.
 
 ## 4. Execution sequence
 
-Original delivery sequence (historical): S-DOC-01 → S-INIT-01 → S-INIT-02 → S-INIT-03 → S-PUBLIC-01 → S-PUBLIC-02 → S-VERIFY-01 → S-VERIFY-02 → S-VERIFY-03. Field amendment execution sequence: S-FIELD-01 → S-FIELD-02 → S-FIELD-03; S-FIELD-05–07 follow the existing owners and design, then S-FIELD-04 closes all gates. The tests at each task gate must pass before dependent work is accepted. Public boundary tasks may be implemented independently after their canonical design is closed, but final installed acceptance is a single end-to-end gate. Reuse all existing owners; if a governing contradiction is discovered, stop at its owner and amend the design, not a downstream workaround.
+Original delivery sequence (historical): S-DOC-01 → S-INIT-01 → S-INIT-02 → S-INIT-03 → S-PUBLIC-01 → S-PUBLIC-02 → S-VERIFY-01 → S-VERIFY-02 → S-VERIFY-03. Field amendment execution sequence: S-FIELD-01 → S-FIELD-02 → S-FIELD-03; S-FIELD-05–07 follow the existing owners and design, then S-FIELD-04 closes all gates. The PUB-01–10 sequence in §3B is the additional active public-boundary track;
+S-FIELD-04 and release readiness depend on its closure as well. The tests at each task gate must pass before dependent work is accepted. Public boundary tasks may be implemented independently after their canonical design is closed, but final installed acceptance is a single end-to-end gate. Reuse all existing owners; if a governing contradiction is discovered, stop at its owner and amend the design, not a downstream workaround.
 
 ## 5. Explicit non-scope
 

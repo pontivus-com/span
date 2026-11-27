@@ -920,10 +920,14 @@ Directory address resolution precedes `_active_participation` in
 `FunctionalPyramidService.directory`. Reuse the registered repository ID/root
 mapping supplied by the installation/runtime composition and the existing
 filesystem containment owner (`FilesystemFunctionalPyramidDeclarations`); the
-pure segment-containment/unique-root selection belongs in the core. Supply
-canonical roots through the existing root/path capability (extend its contract
-only if needed), without opening every member store, crawling directories or
-creating a second registry. Pass the resolved repository and relative directory
+pure segment-containment/unique-root selection belongs in the core. The existing `registered_locator` callback in `shell/mcp_server.py` reads
+`McpAdapter.repository_locators`; `shell/installation_runtime.py` already
+receives it and the registered IDs. Thread that root lookup through
+`open_functional_pyramid_service` in `shell/functional_pyramid.py` to the
+existing declaration/filesystem capability for the pure selection. Do not use
+`FunctionalPyramidService._repository_paths`: it addresses attached lifecycle
+stores for transactions, not repository roots. Resolve roots without opening
+every member store, crawling directories or creating a second registry. Pass the resolved repository and relative directory
 to the existing `resolve_functional_pyramid_directory_route` and project them
 in the canonical `FunctionalPyramidView` or non-ACTIVE participation result.
 Bind `_directory_page` to both the original address and resolved selection
