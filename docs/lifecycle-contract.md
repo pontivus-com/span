@@ -280,10 +280,12 @@ FunctionalPyramidRecorded, RetrievedFunctionalPyramidReceipt,
 UnderstandingRecorded, VerificationRecorded, SurfaceDeclared, Changed,
 Challenged, AmbiguousSurface, AcceptedDetailUnavailable).
 
-ResultPart is a closed typed collection slice: `collection` identifies one
-public collection below, `parent` identifies the containing public semantic
-item when nested, `start: int` is its zero-based offset, `total: int` its
-full selected count, `items` is a tuple of the named canonical item type.
+ResultPart is a closed typed collection slice. Its variant discriminator
+identifies one public collection below (the collection identity is not a
+second free string discriminator). `parent` identifies the containing public
+semantic item when nested, `start: int` is its zero-based offset, `total: int`
+is its full selected count, and `items` is a tuple of that variant's named
+canonical item type.
 Top-level parent is absent. Nested parent is the ordered chain of public
 coordinates, using tagged surface key, exact question/understanding ID,
 revision ref, run ID, observation ID, challenge ID, member repository ID,
@@ -304,14 +306,13 @@ binds the collection to its item type and allowed parent; no untyped item.
 | descendants | SurfaceStatusSummary |
 | verification, verification_history | VerificationView |
 | observation_qualifications | ObservationQualification |
-| verification_runs, run_observations, limitations | VerificationRun, SourceObservationId, str respectively |
+| verification_runs, limitations | VerificationRun, str respectively |
 | support_findings | SupportFinding |
 | evidence_refs, audit_basis, audit_derivation_inputs | EvidenceRef, SupportBasis, existing ClaimRef/RelationshipRef/EvidenceRef union respectively |
 | admission_outcomes, evidence_deliveries | EvidenceAdmissionOutcome, EvidenceDelivery respectively |
 | placements, unresolved, validation_findings, graph_findings, status_findings | FunctionalPyramidPlacementView, FunctionalPyramidPublicFinding, FunctionalPyramidValidationFinding, FunctionalPyramidPublicFinding, FunctionalPyramidPublicFinding respectively |
-| member_repository_ids, receipt_members, member_declaration_refs | str, FunctionalPyramidMemberView, EvidenceRef respectively |
-| audit_conclusions, challenges, curations, challenge_dispositions | AuditConclusion, Challenge, CurationDisposition, ChallengeDispositionRecord respectively |
-| challenge_targets, resolution_conclusions, resolution_withdrawn | ConclusionRevisionRef |
+| member_repository_ids, receipt_members | str, FunctionalPyramidMemberView respectively |
+| audit_conclusions, challenges, curations | AuditConclusion, Challenge, CurationDisposition respectively |
 | historical_understanding_versions, historical_verification_run_ids, historical_challenge_ids | UnderstandingVersionRef, VerificationRunId, ChallengeId respectively |
 | accepted_revision_effects, recorded_revision_effects, accepted_challenge_dispositions | AcceptedRevisionEffect, RecordedRevisionEffect, AcceptedChallengeDisposition respectively |
 | affected_surfaces, affected_conclusions, dependent_effect_refs, participation_effects, reestablishment_contexts, unaffected | ChangedSurface, ChangedConclusion or EffectDisposition (tagged union), ConclusionRevisionRef, FunctionalPyramidParticipationEffect, InvestigationContextRef, SurfaceKey respectively |
@@ -321,19 +322,31 @@ binds the collection to its item type and allowed parent; no untyped item.
 
 For nested parts, allowed parent coordinates are those of the actual named
 collection in the initial result schema (e.g. support_findings under exact
-revision or run/observation qualification; member_declaration_refs under
-receipt member; affected_conclusions under exact surface); no other parent
-can validate. A field not in this table is indivisible with its containing
-unit, including scalar strings, exact scope and range facts. If it cannot fit,
-FD-57 applies; never strip a required field. Omission metadata is bounded:
+revision or run/observation qualification; affected_conclusions under exact
+surface); no other parent can validate. A nested collection can be paged
+only when its owning public result expressly permits a partial delivery.
+Exact retained VerificationRun, Challenge, CurationDisposition,
+ChallengeDispositionRecord and FunctionalPyramidMemberView values remain
+complete indivisible semantic records (including their own observations,
+targets, dispositions and declaration references). They are not fabricated
+with missing fields or partially populated historical membership. Page the
+collection of these records, not a forged record. A field not in the table
+or inside one of these indivisible records remains part of its containing
+unit. If a single complete required unit cannot fit, FD-57's explicit
+unavailability/recovery applies; never silently strip facts. This is not a
+license to treat an entire public result or independently pageable public
+qualification, status, effects or audit collection as an indivisible record. Omission metadata is bounded:
 name the first remaining collection/parent and total remaining units, not
 an inventory of every later parent. Each part names its exact count and
 position, not a reconstructed internal object.
 
 Initial prefixes and subsequent parts are ordered non-overlapping slices of
-the bound selection. Parent items carry required scalar facts before their
-nested collections are continued; omitted nested collections are explicitly
-named with parent and remaining count. A page with actionable conclusions also carries their owner's usable context;
+the bound selection. Public parent results that permit partial delivery carry their required
+scalar facts and valid initial collection prefixes before nested collections
+are continued. Their completeness is explicit under the enclosing bound
+selection; complete-record invariants remain unchanged. Omitted nested
+collections are identified by the first remaining parent/collection and
+remaining count, not a second full inventory. A page with actionable conclusions also carries their owner's usable context;
 the handle may repeat, not the effect. A complete individual conclusion is
 usable when required evidence and qualification are delivered; if those
 collections are deferred, obtain them before relying on that conclusion.

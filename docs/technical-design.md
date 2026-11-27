@@ -91,6 +91,40 @@ and that statement remains in its owning layer.
 | Descriptions and snippet | `shell/docs` | Layer-4 delivery; no semantic decisions |
 | Tests | `tests` | One rejection case per cause; one surface case per conflict; shared fixtures only |
 
+**Remediation construction ownership (PUB-01–10).** The existing architecture
+and I-01/I-04/I-13/I-15/I-18/I-21/I-28/I-39/I-40–I-48 in the invariant matrix
+remain the design constraints. Apply the following mechanism allocation to
+§§9.2–14 and 17–22; it is the construction contract, not a new product layer.
+
+| Decision or capability | Sole owner / implementation boundary |
+| --- | --- |
+| Root selection, rebasing, canonical identity, containment and request binding decisions | `core/identity.py` / `core/containment.py`; pure rules over supplied typed root/path facts; no filesystem, store or service import |
+| Dependency closure bookkeeping, reason union, status distribution, verification group/selection and effect disposition | existing `core` semantic rule owners; pure functions over typed facts; `service/effects.py`, `service/surface_status.py`, `service/answer.py` acquire facts and orchestrate those decisions |
+| Semantic revision/action acceptance and curation/receipt decisions | existing `core/recording.py` and semantic transition owner; one immutable transition result consumed by lifecycle composition and transaction writer |
+| Qualification and audit composition | existing `service/support.py` obtains exact typed observations/authority/premises; canonical `core/model/support.py` projection consumes those facts and the one evaluator's result; answer/effects/record reuse it |
+| Public result selection, fitting, continuation | existing `service/continuation.py` composes one common delivery path; pure selection/position/fitting rules under `core`, exact encoding under `core/schema`, not an MCP adapter or Functional Pyramid service |
+| Cross-repository capability composition | existing `shell/installation_runtime.py` and `shell/context.py`; mandatory typed capability injection into repository services |
+| Persistence | existing lifecycle/installation SQLite store owners and transaction primitives (§§10,12–14,19); SQL, ATTACH, clocks, IDs and filesystem are shell effects |
+| Host transport and native hooks | existing `shell/mcp` and hook composition; strict ingress/egress and advisory event translation only |
+
+Core never reads ports or invokes effect callbacks; pass immutable typed
+facts in, typed decisions out. For incremental graph discovery the service
+requests adjacency through existing repository-qualified ports and feeds
+pure frontier/reason transitions; no full-graph materialization requirement,
+second evaluator or second walker. Services do not use SQL, filesystem,
+MCP SDK or serialized dicts as domain input. Shell transaction scopes expose
+transaction-bound typed ports to the service, never invoke semantic callbacks
+inside SQL writers. Keep domain and result dataclasses frozen, use nominal
+IDs and closed unions; every field/variant with a semantic meaning belongs
+to the existing canonical owner. No DTO classes, mirrored persistence/wire
+records, generic payload bags, duck-typed `getattr` routing, `Any`, unchecked
+casts or dynamic schema-specific dispatch to evade exhaustive typing. Raw
+JSON exists only at the existing codec or offline migration boundary and is
+validated into canonical types before use. Reuse semantic values/types rather
+than duplicate definitions, not by forcing unlike invariants into one type.
+No generic framework, base-class hierarchy or new service/store façade just
+to share code; extract only the actual common pure rule or typed capability.
+
 Do not add a parallel `ToolError` cause path, a second free-text question
 matcher/projection, or a second surface-declaration path. The exact
 `RecordedQuestionSelector` is part of the one obtain grammar, not another
@@ -133,9 +167,11 @@ that maps a kind to a remedy. `SOURCE_DRIFT`, `CONTEXT_REQUIRED`,
 exist because the prior text
 classifier distinguished them and folding any into `VALIDATION` would misname the
 conflict. `CONTINUATION_INVALID` owns malformed, missing, wrong-binding,
-non-live, expired, exhausted, or out-of-position continuation references; its
-recovery starts a new explicit evidence admission rather than asking the caller
-to inspect internal context state. `OBSERVATION_NOT_ADMITTED` is the remedy gap a flat-create host hit:
+non-live, expired, exhausted, or out-of-position continuation references. The
+single service rejection builder uses the typed bound selection kind to give
+its actual recovery: original exact obtain, source admission, or immutable
+accepted/changed-effect recovery (§13); unknown token has no invented bound
+selection. No text classification or evidence-only default. `OBSERVATION_NOT_ADMITTED` is the remedy gap a flat-create host hit:
 the field was right and the value was an id `ask` never returned, so “correct the
 named field” sent it back to the same call.
 
@@ -551,14 +587,29 @@ understanding, challenge, verification, and curation history are not subject to
 that operational TTL.
 
 **Bound delivery mechanism (FD-29, FD-43/45, FD-54–57).**
-Use the existing service/bounds.py encoded_size (same canonical schema as
-MCP structured/text serialization) and service/continuation.py as the single
-producer-side fitter and continuation service. Implement P2 §4.1 ResultPage
-and discriminated ResultPart in core/model/answers.py, deriving strict
-collection/item/parent rules in the canonical schema generator. No generic
-JSON/dict payload, continued Answer or extra transport DTO. A parent carrier
-contains its scalar facts and a fitting prefix of allowed nested collections;
-page subsequent typed parts by parent coordinate. The part order is stable:
+Consolidate the duplicated JSON serialization in `service/bounds.py::encoded_size`
+and `shell/mcp/wire.py::canonical_result_payload`/`encode_result` into the
+existing `core/schema` canonical encoder: one typed canonical root-to-wire
+projection and exact JSON text encoding. Size is derived from those exact
+bytes; MCP uses the same projection/text, not a second serializer. The
+service owns the shared fitting/delivery composition, pure core rules choose
+prefix/position from supplied typed items, encoded sizes and existing policy.
+Replace the stateless evidence-only cursor and per-result fitting loops with
+`service/continuation.py` as the common composition owner; existing
+`service/bounds.py` remains policy/size access, not another fitter. Implement
+P2 §4.1 ResultPage and ResultPart as canonical result semantics in the existing
+`core/model/answers.py` owner. Each variant is a frozen, concretely annotated
+collection slice of the existing canonical item type and its exact allowed
+parent coordinate type. The existing canonical union tag is the discriminator;
+no duplicate string `collection` tag, broad parent union plus untyped items,
+manual schema registry, reflective field-path traversal, generic JSON envelope
+or result-specific DTO family. Use the existing schema generator for every
+variant and strict round-trip; no second serializer. Only the public result
+collection owners identified by P2 permit prefixes; preserve their initial
+minimum and explicit partial-delivery state. Never `replace()` a persisted
+VerificationRun/Challenge/member/curation/disposition with truncated fields.
+Complete retained record units are fitted as units; FD-57 governs oversize.
+Page subsequent typed parts using existing public semantic coordinates. The part order is stable:
 initial required envelope, primary result, nested required evidence/causes,
 then auxiliary collections, following FD-29/55. Untyped or unknown collection
 and parent/offset pairs reject. Use exact encoded size including the cursor,
@@ -574,13 +625,19 @@ store. Two tables:
   owner_repository_id TEXT NULL, created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL, admission_context_id TEXT NULL UNIQUE,
   canonical_json TEXT NOT NULL).
-  The canonical manifest holds normalized exact selector or accepted receipt
-  coordinate, initial result kind, ordered collection keys/parent coordinates,
-  selected immutable refs, bound context/source outcome/range IDs if present,
-  evaluated state fingerprint and observed_at, and complete affected refs/
-  reasons and canonical context handles for Changed. Pure installation
-  selectors have no repository owner. No source bytes or copied revision
-  statements; resolve retained semantic units from canonical owners.
+  The canonical manifest is an internal closed typed selection union owned by
+  the continuation model, not a serialized public result or copied semantic
+  record. Pure-read branch holds normalized selector, exact selected version/
+  ordered coordinates, evaluated-state fingerprint and observed_at; admission
+  branch holds context ref and original ordered admission outcomes/exact
+  selected observation/ranges not reconstructible from context membership;
+  completed reconsider branch holds exact effect coordinates/reasons and context
+  refs. Accepted-write branch holds only the canonical receipt selector and
+  position binding: accepted effect facts are read from that receipt, never
+  copied into the manifest. All branches share selection identity/lifetime
+  semantics; no nullable superset of incompatible state. Pure installation
+  selectors have no repository owner. No copied evidence bytes, statements,
+  semantic history, current qualification or accepted-effect authority.
 - delivery_cursors(cursor_id TEXT PRIMARY KEY, selection_id TEXT NOT NULL
   REFERENCES delivery_selections ON DELETE CASCADE, position_json TEXT NOT NULL,
   UNIQUE(selection_id, position_json)). The typed position is collection
@@ -623,11 +680,18 @@ Use existing LifecycleRetention policy: pure read manifest expires at
 creation + context_lifetime; evidence at original context expiry;
 changed/accepted effect manifests at creation/commit + replay_retention
 and retain beyond expiry while any pinned required obligation is not
-disposed (FD-43). Existing reaper invokes the service-owned obligation
-qualification predicate before deleting manifests or receipts with dependent
-refs; unavailable qualification means retain. Delete cursor rows with
-manifest; remove addressed request binding only when neither bound context
-nor receipt remains. No new clock, independent reaper or arbitrary TTL.
+disposed (FD-43). Reuse the existing operational cleanup entry point in the
+installation composition. The service reads typed expired candidates, obtains
+qualification through the shared evaluator and computes eligible identities
+using core retention decisions; the SQLite shell deletes only that typed
+approved set in a transaction after exact candidate identity/version/expiry
+recheck. A changed candidate or unavailable qualification is retained. Do not
+call the semantic evaluator from a SQL store/reaper or introduce a second
+retention engine. Delete cursor rows with manifest; remove addressed request
+binding only when neither bound context nor receipt remains. No new clock,
+independent reaper or arbitrary TTL. Hooks/readiness preview are observational:
+use the same complete semantic selection, no context, delivery manifest,
+receipt or cursor write for rendering a bounded advisory notice.
 Repository-portable backups retain receipts, not transient delivery state;
 a restored receipt remains sufficient to reconstruct its exact accepted set.
 No runtime migration or schema fallback. Restore/reconcile the addressed
@@ -1075,13 +1139,17 @@ answer, and no read result carries another read result's data.
 
 **Shared registered-root address capability (FD-1/62; lifecycle §4.1).**
 Use the existing registered locator callback from shell/mcp_server.py and
-installation_runtime.py to compose a single filesystem/root port. Shell
-canonicalizes roots/nearest existing ancestors and extracts existing symbol
-file locators; core containment owns deterministic deepest-root selection
-and relative rebasing. Service composition owns operation-specific scope
-validation. Thread the capability through the existing repository routing
-owner in shell/mcp, answer/evidence/lifecycle/reconsider and hooks; no second
-registry, private filesystem path output or adapter semantic inference.
+installation_runtime.py to compose a mandatory typed registered-root
+capability at the installation runtime, not inside Functional Pyramid
+service/declaration parsing. Extend the existing filesystem evidence/root
+adapter and port owner for canonical root/nearest-existing-ancestor facts;
+core identity/containment owns deepest-root selection and rebasing. Service
+composition owns request normalization/operation scope validation before
+runtime selection. The adapter decodes and hands the typed request to that
+owner; remove path/continuation routing decisions and duck-typed field
+inspection from MCP wire. Ordinary services, FP directory and hooks consume
+the same capability and canonical normalized identities. No second registry,
+private path output, or route normalization in downstream service branches.
 Address requests before selecting the repository runtime; identities/context
 selectors route directly as today. Normalize every local path in a request,
 validate one semantic owner before evidence/context or write; for reconsider
@@ -1101,9 +1169,14 @@ admission/write, reserve the origin key and canonical owner key within the
 existing installation main + attached owning repository BEGIN IMMEDIATE
 transaction; check both origin binding and existing owner receipt/context.
 Conflicting binding rejects; commit the index row and context/receipt effect
-atomically, including no-op and replay. Canonical direct requests retain
-existing owner namespace; origin binding cannot shadow an existing direct
-request of the same origin key. Store original address origin and request
+atomically, including no-op acceptance. Replay reads original accepted state,
+not another write. Canonical direct requests retain existing owner namespace;
+serialize arbitration for direct and addressed requests that contend for the
+same origin key through the same installation transaction reservation before
+opening a repository write. Ordinary pure reads and previews do not acquire
+write locks. The transaction-bound repository port reuses existing canonical
+receipt/context/surface transition writers; do not invoke a second independent
+repository BEGIN IMMEDIATE on another connection while holding ATTACH locks. Store original address origin and request
 payload digest in canonical context/receipt, preserving pretranslation
 content identity and allowing index reconciliation after recovery; no
 second writer or copied digest in index. For migrated pre-addressing
@@ -1117,9 +1190,10 @@ mapping supplied by the installation/runtime composition and the existing
 filesystem containment owner (`FilesystemFunctionalPyramidDeclarations`); the
 pure segment-containment/unique-root selection belongs in the core. The existing `registered_locator` callback in `shell/mcp_server.py` reads
 `McpAdapter.repository_locators`; `shell/installation_runtime.py` already
-receives it and the registered IDs. Thread that root lookup through
-`open_functional_pyramid_service` in `shell/functional_pyramid.py` to the
-existing declaration/filesystem capability for the pure selection. Do not use
+receives it and the registered IDs. Inject that same installation-owned capability through
+`open_functional_pyramid_service` in `shell/functional_pyramid.py`; declaration
+reading consumes resolved canonical repository coordinates only, never owns
+another root resolver. Do not use
 `FunctionalPyramidService._repository_paths`: it addresses attached lifecycle
 stores for transactions, not repository roots. Resolve roots without opening
 every member store, crawling directories or creating a second registry. Pass the resolved repository and relative directory
@@ -1135,9 +1209,8 @@ selection. Construct the public view before encoded-size fitting. Bind
 `_directory_page` to the original address, resolved selection and projected
 root/path bindings (FD-62, FD-88C); no independent route or authority resolver. The status API
 is not a member-root discovery API. Do not expose absolute roots, namespace
-maps or private path-resolution state. Ordinary semantic identity/routing is
-not silently rewritten by this directory-only correction; audit other path
-consumers separately under the active remediation plan.
+maps or private path-resolution state. All path-addressed lifecycle consumers follow the shared resolver above;
+identity-addressed requests retain their exact canonical owner.
 
 The directory answer is exactly (complete page):
 
@@ -2775,7 +2848,19 @@ fixtures but cannot satisfy that installed-candidate gate.
 The existing architecture guards remain binding: one canonical carrier per
 boundary, no shell semantic writer, no duplicate support evaluator, no
 curation-specific Functional Pyramid path and no fallback that treats absence of
-curation data as approval.
+curation data as approval. PUB architecture verification extends the existing
+invariant/architecture guard tests, not a second gate framework: I-01 pure
+imports/effect-free decisions; I-04/I-18 closed typed carriers and generated
+schema/codec equivalence; I-13/I-15 single semantic/data owner; I-21
+reference-safe cleanup; I-28 read-only canonical hook composition; I-39 stable
+request/continuation binding. Exercise real composed runtimes and inspect
+source call graphs/dependency directions, not just matching class names. The
+existing typecheck ratchet and zero-error target remain unchanged; changed
+production functions have complete concrete annotations, no new Any, type
+ignores, casts used to silence errors, schema exceptions or widened unions.
+Add negative tests for impossible states and forbidden bypasses at their
+existing boundary tests. Remove superseded active mechanisms and imports in
+the same task; no retained compatibility implementation or deferred cleanup.
 
 Part D is implementation-complete only when these mechanisms and the extended
 functional acceptance surface pass on the exact Beta-3 candidate.

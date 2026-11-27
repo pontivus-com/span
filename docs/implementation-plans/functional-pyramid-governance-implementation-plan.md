@@ -656,6 +656,18 @@ delegation to implementers. Gate: actual baseline and recursive generated
 schema evidence; discrepancies stop at governing owner before code. All
 nine review corrections are assigned below; no silent extra scope.
 
+**Architecture acceptance applies at each PUB task gate.** TD §9.2's
+remediation construction ownership is binding. PUB-01 records actual
+source owner/call-site inventory, planned replacement/deletion of superseded
+mechanisms, typed port boundaries and I-01/I-04/I-13/I-15/I-18/I-21/I-28/I-39
+and existing architecture-guard evidence baseline. For every task, verify
+implementation against that owning mechanism and P0–P3 before downstream
+integration. A functional pass with a second owner, DTO, unchecked boundary,
+compatibility path or misplaced effect is a failed task. No architecture
+cleanup deferred to PUB-09/10; those integrate/verify, not repair debt.
+Record actual tests and review evidence in the existing invariant/functional
+acceptance matrices, never mark passing from plan text.
+
 **PUB-02 — Public support and immutable audit (API-09/10/15/18).** After
 PUB-01, edit core/model/support.py, understanding.py, answers.py, repository
 exports and service/support.py / service/answer.py / service/effects.py
@@ -675,6 +687,13 @@ Test all five dependency kinds, mixed loss precedence, unavailable basis,
 historical withdrawn content, later curation/challenge, and negative recursive
 schema plus installed wire assertions. No transport stripping or regenerated
 authority. Gate: exact semantic audit equivalence, no private type leakage.
+Architecture gate: replace compact_support/compact_understanding/
+compact_verification at their canonical ownership boundary as applicable;
+all consumers use one typed support projection with service-supplied facts.
+Inspect import direction and actual call sites; pure projection test without
+filesystem/SQL/service fixture, every nested generated variant negative
+schema test, no raw dependency object or parallel stored support model.
+I-01/04/06/15/18/43.
 
 **PUB-03 — Exact complete effects (API-16/20).** After PUB-02, modify
 service/effects.py at _project/_indirect/_changed_conclusion and shared
@@ -697,6 +716,11 @@ and legacy unknown cause. Keep a stable affected_conclusions slot through
 live disposition changes; verify successor support before declaring an effect
 discharged. PUB-03 closes pure traversal/projection first; receipt/manifest
 persistence integration follows PUB-07A and PUB-04. Shared engine, no second traversal.
+Architecture gate: pure frontier/visited/reason decision tests over supplied
+facts, one service-owned repository-qualified traversal and one live-effect
+projector; no shell graph walk, local fallback or new semantic callback.
+Prove same engine used by ordinary/participation/record effects and preview;
+preview writes no contexts or delivery state. I-01/13/15/28/30/48.
 
 **PUB-04 — Bound exact result delivery (API-04/07–09/16/21/22).** After
 PUB-02/03 and PUB-07A, modify service/continuation.py, bounds.py, answer.py, evidence.py,
@@ -724,7 +748,17 @@ encoded size in both MCP channels using existing budget, max-size single
 unit/line, empty page/progress, unbounded metadata, large candidate/status/
 receipt/changed writes, cross-repo scope, exact multi-path orientation,
 order drift and later context extension, restart and postcommit failure.
-Gate: all required selections recoverable without new ceiling or gate edits.
+Gate: all independently pageable selections recoverable without new ceiling
+or gate edits; FD-57 handles a genuinely indivisible oversized record explicitly.
+Architecture gate: TD §13 single canonical encoder and pure fitting decision,
+one service continuation owner, closed typed selection/part variants, no
+runtime reflection or DTOs, no trimmed retained semantic records. Delete
+superseded evidence-only cursor codec, per-family fitters and shell cursor
+routing; retain only domain entry points delegating to shared delivery. Test
+byte parity, strict variant/parent rejection, unchanged immutable record
+round trip, initial valid envelope, no state write in preview, accepted
+manifest stores receipt pointer only and no copied accepted effects.
+I-01/02/04/13/15/16/18/21/28/35/36/39.
 
 **PUB-05 — Select status and relevant verification (API-05/06).** After
 PUB-04, edit service/surface_status.py and service/answer.py (_document,
@@ -740,6 +774,12 @@ environment limitations and live qualification. Test sibling/descendant growth,
 empty exact selection, narrower/wider run coverage, repeated run, conflicting
 ties, later fail and older history. Gate: unrelated corpus growth cannot
 displace selected answer; scoped counts truthful and history recoverable.
+Architecture gate: deterministic population, counts, group/tie selection
+and ordering in core over typed supplied facts; existing service reads once
+and calls one evaluator per distinct candidate. Remove recursive status
+composition and duplicate verification selectors; no SQL or transport-level
+filtering. Unit test pure selection and count invariants, then actual service
+and installed retrieval. I-01/04/12/15/18/42/43.
 
 **PUB-06 — Compact governance and end-to-end root addressing (API-01–04/23).** After
 PUB-04 and API-23 root-registry verification in PUB-01, change core/model/
@@ -773,6 +813,14 @@ participation, stale token after root/selection changes; preserve graph and
 cross-repo effects. Vary member declaration inventory and verify compact
 status/candidate/record independent of unrelated detail. Gate: exact functional
 equivalence and no consumer path translation or internal leakage.
+Architecture gate: §17.1 shared installation capability constructed once,
+core deterministic root resolution/rebasing, filesystem shell supplies facts,
+service normalizes once before owner dispatch. No FP-dependent generic
+routing, shell semantic selection, copied root map, downstream normalization
+or optional reduced runtime. Remove replaced wire routing/FP directory-only
+resolver code. Test pure root selection, port fault handling, installed
+ordinary/FP/hooks parity and original request arbitration across concurrent
+origin/owner operations. I-01/07/13/15/17/18/28/39/48.
 
 **PUB-07 — Accurate write outcomes and surface receipts (API-11–14/19).**
 PUB-07A follows PUB-02/03; PUB-07B follows PUB-04. For PUB-07B, change core/model/{outcomes,recording,commands,
@@ -800,6 +848,16 @@ unresolved, curation independent of currency, surface create/update/replay/
 conflict/concurrency/interrupted transaction, postcommit unavailable support,
 legacy receipt and history migration. Gate: exact accepted facts and stable
 replay, no fabricated historical acceptance, one transaction owner.
+Architecture gate PUB-07A: schema conversion is offline-only; typed ports and
+one existing transaction scope reuse existing context/surface/receipt writers
+for attached and ordinary stores. No SQL in service, no shell semantic
+callback, no second receipt table, no new implicit migration. Verify
+rollback on every failure and lock-order/concurrent origin-key arbitration;
+assert no nested independent writer connection. PUB-07B: one core semantic
+transition returns immutable exact action effects, service projects them,
+store persists them unchanged; no full snapshot inference, duplicate receipt
+facts in delivery, or legacy runtime shape fallback. Compare canonical row
+facts to receipt/public accepted projection; I-01/04/07/08/11/13/15/18/21/39/41/44.
 
 **PUB-08 — Exact challenge opening (API-17).** After PUB-02/04/07, change
 service/reconsider.py and existing challenge receipt/qualification owner;
@@ -810,6 +868,10 @@ named disposition semantics. Test multiple targets, older version, replay
 after subsequent correction/settlement, unavailable historical basis and
 context recovery. Gate: reviewer can investigate dispute without reconstructing
 prior statements or performing unrelated lookup.
+Architecture gate: same core challenge transition, existing receipt writer and
+PUB-02 audit projection; no second challenge store, evaluator, DTO or
+historical reconstruction in adapter. Verify one transaction and immutable
+exact target lookup under replay. I-04/08/11/15/18/39.
 
 **PUB-09 — Public contract integration.** After PUB-02–08, regenerate the
 single schema from canonical model; update docs/mcp.md, glossary, installer/
@@ -822,7 +884,10 @@ results. Map actual tests to amended existing FA cases in
 docs/functional-acceptance.md (no invented passing evidence or duplicate
 matrix). Reconcile migration/versioned schema and public examples; no
 compatibility aliases or fourth tool. Gate: strict schema/round-trip and
-installed guidance agreement.
+installed guidance agreement. Confirm no generated artefacts edited by hand,
+no extra grammar, and all obsolete helpers/exports/call sites removed by
+owning tasks; verify existing invariant matrix names actual tests, no new
+parallel compliance checklist. I-02/03/04/18/23–25/28/34/39.
 
 **PUB-10 — Full exact-candidate verification.** Run focused failure-before/
 fix-after, complete unit/integration/acceptance, non-editable installed-MCP
@@ -832,7 +897,14 @@ full CI per existing release procedure. Assert schema recursively and actual
 wire/free text with distinctive private sentinels; preserve no-leak,
 containment, curation, atomicity/CAS/replay, graph/support and existing field
 remediation checks. Record sanitized exact-revision results, measured
-ratchets only; no gate weakening. Independent review and release owner
+ratchets only; no gate weakening. Run existing `scripts/typecheck.py` and
+invariant/architecture guards, review changed annotations and dependency
+edges; zero-error typing, no new suppressions or baseline increases. Verify
+source ownership, canonical model/schema round-trip, no duplicate codec,
+writer, registry, evaluator or dependency engine, and no shell-side semantic
+logic. Existing architecture guard and invariant suites are extended at
+their real owners, not replaced with string-matching-only assertions.
+Independent review and release owner
 authorization remain separate. No live adopter mutation/publication.
 
 Sequence: PUB-01 → PUB-02 → PUB-03 → PUB-07 persistence/migration subtask

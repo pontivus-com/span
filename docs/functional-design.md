@@ -1513,9 +1513,12 @@ evaluation and commitment. *(F7)*
 **FD-55 — Truncation is explicit and recoverable.**
 For lifecycle §4.1 ResultPage, evaluate full selection once, order via FD-29
 and domain ordering, bind exact immutable semantic keys plus live-state
-signature (excluding clock-only variation). Select maximum fitting prefix of
-the first remaining collection, advance by exact offset or evidence range;
-visit nested collections immediately after their parent before later siblings.
+signature (excluding clock-only variation). Select maximum fitting prefix of the first remaining pageable collection,
+advance by exact offset or evidence range; visit independently pageable
+public nested collections immediately after their parent before later
+siblings. A canonical immutable semantic record is a complete unit under
+lifecycle §4.1; FD-57 applies to an oversized single unit. Never manufacture
+a partial retained record to satisfy delivery.
 Always include required parent/owner and context coordinates. Initial Answer
 must contain usable conclusion content, not merely an auxiliary collection;
 continuation never returns Answer. If primary unit cannot fit, apply FD-57.
