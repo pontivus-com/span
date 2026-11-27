@@ -52,12 +52,24 @@ class ReconsiderService:
         self._new_context_id = new_context_id or (lambda: "ctx-" + _uuid.uuid4().hex)
         self._effects = effects
 
-    def reconsider(self, request: m.ReconsiderRequest) -> m.Changed | m.Challenged:
+    def reconsider(
+        self, request: m.ReconsiderRequest
+    ) -> m.Changed | m.Challenged | m.Unavailable:
         if request.challenge is not None:
             repository_id = request.bound_repository_id
             self._store.require_repository(repository_id)
             return self._raise_challenge(repository_id, request.challenge)
-        return self._effects.repository_change(request)
+        try:
+            return self._effects.repository_change(request)
+        except (OSError,) + self._store.operational_errors:
+            return m.Unavailable(
+                operation="reconsider",
+                failure="changed-scope analysis could not be completed",
+                recovery=(
+                    "restore repository availability and retry reconsider with the "
+                    "original repository_id, changed_paths and changed_surfaces"
+                ),
+            )
 
     def preview_changed_scope(self, request: m.ReconsiderRequest) -> m.Changed:
         """Return the canonical changed-scope projection without context writes."""

@@ -189,6 +189,7 @@ class McpAdapter:
                 exc.required_action,
             )
         except (
+            OSError,
             SchemaVersionError,
             FunctionalPyramidInstallationSchemaError,
             FunctionalPyramidInstallationStoreError,

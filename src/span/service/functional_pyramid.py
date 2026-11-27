@@ -1357,17 +1357,13 @@ class FunctionalPyramidService:
                             or dependency.pyramid_id != pyramid_id
                         ):
                             continue
-                        try:
-                            resolution = self.resolve(
-                                pyramid_id=pyramid_id,
-                                version=proposed_version,
-                                members=new_members,
-                                surface=understanding.surface,
-                                semantic_scope=dependency.semantic_scope,
-                            )
-                        except (OSError, ValueError):
-                            changed.add(dependency.route_identity)
-                            continue
+                        resolution = self.resolve(
+                            pyramid_id=pyramid_id,
+                            version=proposed_version,
+                            members=new_members,
+                            surface=understanding.surface,
+                            semantic_scope=dependency.semantic_scope,
+                        )
                         if (
                             resolution.view.status
                             is not m.FunctionalPyramidRouteStatus.RESOLVED

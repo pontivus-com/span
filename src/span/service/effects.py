@@ -684,10 +684,12 @@ class DependencyEffectService:
         self,
         ref: m.ConclusionRevisionRef,
     ) -> m.SupportQualification | m.SupportUnavailable:
-        support = self._support_for_repository(self._repository_for_ref(ref))
+        repository_id = self._repository_for_ref(ref)
+        support = self._support_for_repository(repository_id)
+        store = self._store_for_repository(repository_id)
         try:
             return support.qualify_support(support.evaluate_revision(ref))
-        except (OSError, ValueError):
+        except (OSError,) + store.operational_errors:
             return m.SupportUnavailable("conclusion support evaluation is unavailable")
 
     def _surface_of(self, ref: m.ConclusionRevisionRef) -> m.SurfaceKey:

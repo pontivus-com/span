@@ -706,6 +706,31 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertEqual(self.state.versions, {})
         self.assertIsNone(self.state.receipt(m.RequestId("activate-invalid")))
 
+    def test_activation_interrupted_effect_discovery_commits_nothing(self) -> None:
+        intent = self._install_v3("repo-a")
+        store = self.runtime_stores["repo-a"]
+        request_id = m.RequestId("activate-interrupted")
+        store.list_understandings.side_effect = OSError("retained state unavailable")
+        with self.assertRaises(OSError):
+            self.admin_service.record(
+                request_id=request_id,
+                action=m.FunctionalPyramidAction.ACTIVATE,
+                members=(intent,),
+            )
+        self.assertEqual(self.state.active, {})
+        self.assertEqual(self.state.versions, {})
+        self.assertEqual(self.state.members, {})
+        self.assertIsNone(self.state.receipt(request_id))
+
+        store.list_understandings.side_effect = None
+        accepted = self.admin_service.record(
+            request_id=request_id,
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(intent,),
+        )
+        self.assertEqual(accepted.version, m.FunctionalPyramidVersion(1))
+        self.assertIsNotNone(self.state.receipt(request_id))
+
     def test_activation_commits_members_effects_and_receipt(self) -> None:
         result = self.admin_service.record(
             request_id=m.RequestId("activate-1"),

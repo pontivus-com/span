@@ -290,6 +290,42 @@ class ReconsiderServiceTest(unittest.TestCase):
             ),
         )
 
+    def test_interrupted_discovery_returns_no_partial_effect_or_context(self) -> None:
+        request = m.ReconsiderRequest(
+            repository_id="repo-1",
+            changed_paths=("src/a.py",),
+        )
+        reverse_lookup = self.store.support_dependents
+
+        def interrupted(kind, ref):
+            if kind == "PREMISE":
+                raise OSError("reverse index unavailable")
+            return reverse_lookup(kind, ref)
+
+        for lookup, fault in (
+            ("source_observation_ids_for_locator", OSError("source index unavailable")),
+            ("support_dependents", interrupted),
+        ):
+            with (
+                self.subTest(lookup=lookup),
+                mock.patch.object(self.store, lookup, side_effect=fault),
+                mock.patch.object(self.store, "put_context") as write_context,
+            ):
+                result = self.service.reconsider(request)
+                self.assertIsInstance(result, m.Unavailable)
+                assert isinstance(result, m.Unavailable)
+                self.assertEqual(result.operation, "reconsider")
+                self.assertIn("original repository_id", result.recovery)
+                self.assertIn("changed_paths and changed_surfaces", result.recovery)
+                write_context.assert_not_called()
+
+        retried = self.service.reconsider(request)
+        assert isinstance(retried, m.Changed)
+        self.assertEqual(
+            {item.surface.locator for item in retried.surfaces},
+            {"src/a.py", "src/b.py", "svc"},
+        )
+
     def test_reasons_are_specific_to_the_revision_not_its_surface(self) -> None:
         self._create(
             "u-b-direct",
