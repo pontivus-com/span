@@ -418,7 +418,9 @@ class AnswerService:
             tuple(
                 self._support.support_basis(dependency)
                 for dependency in dependencies
-                if isinstance(dependency, (m.SourceSupport, m.AuthoritySupportDependency))
+                if isinstance(
+                    dependency, (m.SourceSupport, m.AuthoritySupportDependency)
+                )
             )
         )
 
