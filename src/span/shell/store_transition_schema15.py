@@ -171,7 +171,9 @@ def _restore_disposition(value: object) -> dict[str, object]:
 
 
 def _restore_challenge(value: object) -> dict[str, object]:
-    payload = _unfactor(value, "Challenge", "facts", "ChallengeFacts", _CHALLENGE_FIELDS)
+    payload = _unfactor(
+        value, "Challenge", "facts", "ChallengeFacts", _CHALLENGE_FIELDS
+    )
     if payload.get("resolution") is not None:
         payload["resolution"] = _restore_resolution(payload["resolution"])
     payload["dispositions"] = [

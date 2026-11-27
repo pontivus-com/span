@@ -1957,8 +1957,13 @@ class PubSchemaTransitionTest(unittest.TestCase):
         run = m.VerificationRun(
             run_id=m.VerificationRunId("run"),
             repository_id="demo",
-            scope=m.VerificationScope("exact run", m.EvidenceScope(paths=("src/a.py",))),
-            observations=(m.SourceObservationId("obs-2"), m.SourceObservationId("obs-1")),
+            scope=m.VerificationScope(
+                "exact run", m.EvidenceScope(paths=("src/a.py",))
+            ),
+            observations=(
+                m.SourceObservationId("obs-2"),
+                m.SourceObservationId("obs-1"),
+            ),
             command="pytest -q",
             scenario="regression",
             outcome=m.VerificationOutcome.FAIL,
