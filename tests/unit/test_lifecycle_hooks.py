@@ -109,19 +109,8 @@ class LifecycleHooksTest(unittest.TestCase):
             self.assertIn("span-functional-pyramid", output)
 
     def test_session_entry_composes_four_participation_health_branches_once(self):
-        active_member = m.FunctionalPyramidMemberView(
-            repository_id=REPO,
-            declaration_refs=(
-                m.EvidenceRef(
-                    evidence_id=m.EvidenceId("fp-declaration"),
-                    repository_id=REPO,
-                    source_kind=m.EvidenceSourceKind.DOCUMENTATION,
-                    locator="docs/functional-pyramid.json",
-                ),
-            ),
-        )
-        degraded_finding = m.FunctionalPyramidFinding(
-            reason=m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+        degraded_finding = m.FunctionalPyramidPublicFinding(
+            reason=m.FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE,
             repository_id=REPO,
             detail="repository unavailable",
             recovery="restore repository availability",
@@ -152,7 +141,7 @@ class LifecycleHooksTest(unittest.TestCase):
                     health=m.FunctionalPyramidHealth.VALID,
                     pyramid_id=m.FunctionalPyramidId("fp-hooks"),
                     version=m.FunctionalPyramidVersion(1),
-                    members=(active_member,),
+                    member_repository_ids=(REPO,),
                 ),
                 ("ACTIVE/VALID", "no separate Pyramid action", "governed semantic"),
             ),
@@ -163,7 +152,7 @@ class LifecycleHooksTest(unittest.TestCase):
                     health=m.FunctionalPyramidHealth.DEGRADED,
                     pyramid_id=m.FunctionalPyramidId("fp-hooks"),
                     version=m.FunctionalPyramidVersion(1),
-                    members=(active_member,),
+                    member_repository_ids=(REPO,),
                     findings=(degraded_finding,),
                 ),
                 (
@@ -572,19 +561,7 @@ class LifecycleHooksTest(unittest.TestCase):
             health=m.FunctionalPyramidHealth.VALID,
             pyramid_id=m.FunctionalPyramidId("fp-hooks"),
             version=m.FunctionalPyramidVersion(1),
-            members=(
-                m.FunctionalPyramidMemberView(
-                    repository_id=REPO,
-                    declaration_refs=(
-                        m.EvidenceRef(
-                            evidence_id=m.EvidenceId("fp-declaration"),
-                            repository_id=REPO,
-                            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
-                            locator="docs/functional-pyramid.json",
-                        ),
-                    ),
-                ),
-            ),
+            member_repository_ids=(REPO,),
         )
         with mock.patch.object(
             hooks, "_functional_pyramid_status", return_value=status
@@ -597,8 +574,8 @@ class LifecycleHooksTest(unittest.TestCase):
         self.assertIsNone(notice)
 
     def test_functional_pyramid_active_degraded_notice_routes_to_lifecycle(self):
-        finding = m.FunctionalPyramidFinding(
-            reason=m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+        finding = m.FunctionalPyramidPublicFinding(
+            reason=m.FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE,
             repository_id=REPO,
             detail="repository unavailable",
             recovery="restore repository availability",
@@ -608,19 +585,7 @@ class LifecycleHooksTest(unittest.TestCase):
             health=m.FunctionalPyramidHealth.DEGRADED,
             pyramid_id=m.FunctionalPyramidId("fp-hooks"),
             version=m.FunctionalPyramidVersion(1),
-            members=(
-                m.FunctionalPyramidMemberView(
-                    repository_id=REPO,
-                    declaration_refs=(
-                        m.EvidenceRef(
-                            evidence_id=m.EvidenceId("fp-declaration"),
-                            repository_id=REPO,
-                            source_kind=m.EvidenceSourceKind.DOCUMENTATION,
-                            locator="docs/functional-pyramid.json",
-                        ),
-                    ),
-                ),
-            ),
+            member_repository_ids=(REPO,),
             findings=(finding,),
         )
         with mock.patch.object(

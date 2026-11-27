@@ -283,7 +283,6 @@ class StartupRegistrationTest(unittest.TestCase):
             action=m.FunctionalPyramidAction.EXCLUDE,
             pyramid_id=None,
             version=None,
-            members=(),
             participation_effects=(
                 m.FunctionalPyramidParticipationEffect(
                     repository_id=REPO,

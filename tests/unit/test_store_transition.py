@@ -946,6 +946,7 @@ class Schema13To15Test(unittest.TestCase):
         from span.service.answer import AnswerService
         from span.service.evidence import EvidenceService
         from span.service.support import SupportService
+        from span.service.understand import UnderstandService
         from span.shell.filesystem_evidence import FilesystemEvidenceSource
         from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
         from span.shell.sqlite_store.lifecycle import LifecycleStore
@@ -975,6 +976,7 @@ class Schema13To15Test(unittest.TestCase):
             answer = AnswerService(
                 store=store,
                 support=support,
+                understand=UnderstandService(store=store, support=support),
                 evidence=EvidenceService(
                     store=store,
                     evidence=evidence,
