@@ -111,7 +111,8 @@ exact candidates. Ordinary surface/reference obtain accepts no free `question`
 field. Recorded questions remain metadata grouped in the document view, and F3's
 targeted question reachability is the explicit
 `RecordedQuestionSelector{repository_id, surface, question}`. The `surface` input in both ordinary obtain and this selector uses
-`SurfaceReference`. In each form `repository_id: str` is the sole namespace; the surface
+`SurfaceReference`. In each form `repository_id: str` is the addressing origin for path-based
+requests and canonical namespace for identity-based requests; the surface
 carries `kind` and `locator`; its optional nested `repository_id` must be absent
 (including no explicit null). A nested repository input is a structural rejection,
 not an override or a second matching rule. `question: str` is non-empty. The selector
@@ -123,6 +124,32 @@ not a separate
 binding; a separate repository override is forbidden. Unknown exact identities
 have an explicit lookup rejection and public recovery, not an invented surface
 or generated answer.
+
+**Registered-root addressing (F6, F7, F9–F12).** The existing enclosing
+repository plus path is one public location address. For path-based surface/
+reference obtain, source admission, direct record evidence/scope, verification
+scope and changed paths, Span resolves the registered owning repository and
+canonical owner-relative locator before semantic evaluation. FILE/SYMBOL paths
+are addresses; SERVICE/DOMAIN names, understanding/revision IDs, contexts,
+receipts, declaration references and retained EvidenceRefs are canonical
+identities, not paths to reinterpret. A returned FunctionalPyramidPath
+supplies the enclosing repository and path directly to ordinary obtain/
+admission. For a semantic write or explicit admission, target and local
+path-based scope/evidence must resolve to one repository; reject mixed-owner
+requests before admitting or mutating anything, naming offending paths and
+owners. Explicit repository-qualified authority/premise references retain
+their existing semantics. No cross-repository context or split semantic write.
+For changed_scope, partition path roots by owner within one analysis; exact
+surfaces retain identity. The result is the existing Changed family.
+Path ownership does not imply governance or broaden scope.
+
+Path-addressed request identity binds the original addressing repository and
+request_id to the resolved canonical owner at first acceptance/admission.
+Retry resolves that original binding before current routing; no duplicate
+write after registry change. Canonical owner/request identity remains unique.
+A different payload using either bound key conflicts. Original content
+replays the decision at its original owner. Pure read has no request binding
+write except delivery state. Identity-addressed operations retain exact owners.
 
 **Functional Pyramid obtain and candidate validation.** A
 `FunctionalPyramidSelector` identifies exactly one registered repository or one
@@ -200,7 +227,7 @@ as an observed file. No source bodies are delivered unsolicited.
 
 **Explicit evidence.** `evidence` is a non-empty selection of exact source
 locators and ranges. Admission is restricted to the resolved surface and issued
-scope. Whole-file requests are explicit. A valid selection returns the same
+scope after registered-root addressing. The context names the canonical owner. Whole-file requests are explicit. A valid selection returns the same
 Answer/Gap classification plus one canonical `EvidenceAdmissionView` shared by
 both result kinds. Its fields are `context: InvestigationContextRef`,
 `outcomes: tuple[EvidenceAdmissionOutcome, ...]`,
@@ -219,9 +246,8 @@ and selection carrier; after observation, `EvidenceRef` remains the canonical
 observed/cited source identity inside `SourceObservation`. Each admission
 outcome is tied to its request, and admitted/already-admitted outcomes name the
 observation addressed by each delivery. Admission outcomes collectively cover every requested item in request order.
-`EvidencePage` carries `outcomes: tuple[EvidenceAdmissionOutcome, ...]`,
-`deliveries: tuple[EvidenceDelivery, ...]` and the result-page fields below;
-only the next portion is returned. An omitted admission is an explicit
+ResultPage carries admission_outcomes and evidence_deliveries collection
+parts as specified below; only the next portion is returned. An omitted admission is an explicit
 per-request outcome, distinct from admitted content deferred to another page.
 Source identities/ranges remain exact on every page. Missing, unreadable and
 omitted sources remain explicit. Source or store failure is not semantic absence.
@@ -237,50 +263,94 @@ routing from that reference and reject independent repository overrides. The
 reference grants no authority; liveness, scope and membership are checked at the
 owner. Pure obtains have no context. Context inspection remains internal/admin.
 
-**Continuation and delivery completeness.** The existing `ask.continuation`
-recovers the next page of the exact bound public selection, including ordinary
-Answer/Gap, embedded governance, exact audit, status/candidate findings,
-evidence admission and accepted/reconsidered effects. It never executes a write.
-Variable result collections carry `continuation: str | None`,
-`omitted: tuple[str, ...]` and `truncated: bool`. Preserve existing directory
-`after`/`next_after` and pending-curation keyset entry points; no additional
-MCP tool. A continued result returns the same canonical result family and
-subject, with the next portion of its ordered collections and the mandatory
-classification, qualification and immutable acceptance coordinates. The ask
-result union admits existing continued write/reconsider result families only
-on continuation. Counts describe the complete selected population, not the page.
-Omission names the collection and remaining count, not every omitted item.
-Incomplete obligations/findings never appear as a complete empty result.
+**Continuation and delivery completeness (L1–L4, L10, L12, L15).**
+The initial result retains its semantic family. Subsequent collection delivery
+through existing `ask.continuation` returns
+`ResultPage{selection_id: str, result_kind: ResultKind, parts: tuple[ResultPart, ...],
+continuation: str | None, omitted: tuple[str, ...], truncated: bool}`.
+Selection IDs/tokens are opaque. Initial results with more data carry
+selection_id, continuation, omitted, truncated; directory lookup retains
+after/next_after (after also returns ResultPage). Pending curation retains
+exact keyset PendingCuration pages. EvidencePage is retired; the initial
+admission retains its context. No continued write, empty Answer or second
+copy of an initial result. ResultKind is the initial result discriminator
+(Answer, Gap, RetrievedUnderstanding, RetrievedReceipt,
+FunctionalPyramidView/Status/Candidate/Recorded/RetrievedFunctionalPyramidReceipt,
+UnderstandingRecorded, VerificationRecorded, SurfaceDeclared, Changed,
+Challenged, AmbiguousSurface).
 
-Evidence continuation binds the original request/context, ordered admission
-outcomes and exact admitted observation/range selection and next position.
-Later context additions cannot change it. Each page advances by an outcome,
-unit or exact line range; split oversized units at line boundaries. Source
-drift invalidates the selected delivery rather than substituting later bytes.
-Pure reads bind subject, version/selection and evaluated state; changes
-invalidate the token with explicit restart recovery. Reconsider/accepted-effect
-continuation retains the complete affected set; later change must not silently
-lose outstanding obligations. Re-evaluate only pinned refs, explicitly mark
-superseded/disposed refs, or recover the exact changed-scope/receipt selection.
-Identical replay against unchanged binding returns the same page across restart.
-Invalid/expired/unavailable tokens have typed public recovery, not raw diagnostics.
+ResultPart is a closed typed collection slice: `collection` identifies one
+public collection below, `parent` identifies the containing public semantic
+item when nested, `start: int` is its zero-based offset, `total: int` its
+full selected count, `items` is a tuple of the named canonical item type.
+Top-level parent is absent. Nested parent is the ordered chain of public
+coordinates, using tagged surface key, exact question/understanding ID,
+revision ref, run ID, observation ID, challenge ID, member repository ID,
+placement identity/address, receipt selector or ordinal within its parent's
+canonical ordered collection where no semantic ID exists. These are public
+selection coordinates, not internal storage/JSON paths. The discriminator
+binds the collection to its item type and allowed parent; no untyped item.
 
-Directory view paging uses `next_after`; embedded view paging is owned by the
-enclosing Answer/Gap continuation, not a second directory selector or duplicate
-omission inventory. Status/activation_ready/route state is derived from the
-full selection; incomplete findings are explicitly marked and recoverable.
-No empty page overrides a non-empty complete finding set. A post-commit
-detail failure may have `truncated=true`, no live continuation and explicit
-receipt recovery; the accepted receipt is the recovery address.
+| Collection | Item type |
+| --- | --- |
+| conclusions, group_conclusions | ConclusionView |
+| gaps | RecordedQuestionGap |
+| historical | HistoricalConclusion |
+| references, missing | str |
+| source_pointers | EvidenceRequest |
+| pending_refs, stale_refs | PendingConclusionRef, StaleConclusionRef respectively |
+| descendants | SurfaceStatusSummary |
+| verification, verification_history | VerificationView |
+| observation_qualifications | ObservationQualification |
+| support_findings | SupportFinding |
+| evidence_refs, audit_basis, audit_derivation_inputs | EvidenceRef, SupportBasis, existing ClaimRef/RelationshipRef/EvidenceRef union respectively |
+| admission_outcomes, evidence_deliveries | EvidenceAdmissionOutcome, EvidenceDelivery respectively |
+| placements, unresolved, validation_findings, graph_findings, status_findings | FunctionalPyramidPlacementView, FunctionalPyramidPublicFinding, FunctionalPyramidValidationFinding, FunctionalPyramidPublicFinding, FunctionalPyramidPublicFinding respectively |
+| member_repository_ids, receipt_members, member_declaration_refs | str, FunctionalPyramidMemberView, EvidenceRef respectively |
+| audit_conclusions, challenges, curations, challenge_dispositions | AuditConclusion, Challenge, CurationDisposition, ChallengeDispositionRecord respectively |
+| accepted_revision_effects, recorded_revision_effects, accepted_challenge_dispositions | AcceptedRevisionEffect, RecordedRevisionEffect, AcceptedChallengeDisposition respectively |
+| affected_surfaces, affected_conclusions, dependent_effect_refs, participation_effects, reestablishment_contexts, unaffected | ChangedSurface, ChangedConclusion, ConclusionRevisionRef, FunctionalPyramidParticipationEffect, InvestigationContextRef, SurfaceKey respectively |
+| ambiguous_candidates | existing AmbiguousSurface candidate carrier |
+| prior_conclusions | AuditConclusion |
 
-Every result fits its minimum safe envelope. An accepted write always returns
-its receipt selector and committed identity even if further delivery or live
-qualification is unavailable; recover via exact receipt. If the acceptance
-envelope cannot fit, refuse before executing a new write. Never turn an
-accepted write into rejection or an incomplete analysis into completion.
+Initial prefixes and subsequent parts are ordered non-overlapping slices of
+the bound selection. Parent items carry required scalar facts before their
+nested collections are continued; omitted nested collections are explicitly
+named with parent and remaining count. A page with actionable conclusions
+also carries their owner's usable context; the handle may repeat, not the
+effect. Counts are totals, not page lengths. Each page advances by an item or
+exact evidence line range; an empty page with next token is invalid. Final
+page has no token and truncated=false. Original classification never changes
+because of delivery. Nonpageable minimum fields remain complete.
 
-**The agent receives** exactly one of (continued record/reconsider results
-and VerificationHistory are additionally valid only for bound continuation):
+Pure and audit reads bind original selection/version and evaluated public
+qualification state; identical replay against unchanged binding returns the
+same page across restart. Changed state rejects stale continuation with the
+original exact obtain recovery. Evidence admission binds ordered outcomes and
+observation/range delivery; later context additions cannot alter it. Source
+drift invalidates delivery. Complete affected sets are fixed before Changed
+or accepted-write delivery; recovery re-qualifies only pinned refs, names
+superseded/disposed refs explicitly, refreshes expired contexts for remaining
+actionable refs. No new write, silent rescan or lost obligation.
+
+Pure reads expire after existing context lifetime; evidence admission expires
+with its context. Accepted-effect and completed reconsider selections remain
+recoverable for the existing replay period and beyond it while any identified
+obligation remains undisposed. Expiry of live qualification does not discard
+immutable acceptance/obligation coordinates. Receipts with outstanding
+effects cannot be reaped until disposed, even after the replay window.
+No new duration or authority grant.
+
+Reserve the minimum safe initial envelope before a write. After commit
+return exact accepted identity and receipt even if further delivery fails;
+receipt lookup recovers accepted detail. If a required indivisible unit
+cannot fit even on an otherwise empty page, return explicit unavailability
+identifying the exact public unit and real recovery (narrower existing
+selector where it actually helps); otherwise a named blocker remains.
+No omission discharges an obligation; no raised budget, stale substitution,
+or misleading fragment. Evidence lines are indivisible.
+
+**The agent receives** exactly one of (ResultPage is valid only for bound continuation):
 
 | Result | Meaning |
 | --- | --- |
@@ -291,9 +361,7 @@ and VerificationHistory are additionally valid only for bound continuation):
 | `RetrievedUnderstanding` | Exact historical/audit understanding retrieval |
 | `RetrievedReceipt` | Exact immutable repository-scoped ordinary receipt retrieval |
 | `RetrievedFunctionalPyramidReceipt` | Exact immutable installation-scoped Functional Pyramid receipt retrieval |
-| `EvidencePage` | A continuation page for previously selected evidence outcomes and deliveries |
-| `VerificationHistory` | Older applicable verification, accessible only by bound history continuation |
-| Continued record/reconsider result | Next page of exact accepted or affected selection, never a new write |
+| `ResultPage` | Exact typed collection slices of a bound initial selection; no new semantic decision or write |
 | `FunctionalPyramidStatus` | Exact durable participation/instance state and live health for a Functional Pyramid selector |
 | `FunctionalPyramidView` | Applicable document placements and the declared/absent layer summary for a directory or semantic-scope lookup |
 | `FunctionalPyramidParticipation` | UNCONFIGURED or EXCLUDED participation for a directory lookup |
@@ -570,7 +638,10 @@ summaries separately. Exact question/current-understanding obtain reports only
 the selected membership's distribution and pending/stale refs, not unrelated
 surface/descendant status. For exact membership `unexamined` and descendants
 are absent: boundary coverage is not a question property. Each child summary carries its exact surface key and distribution, obtainable
-through ordinary ask. `SurfaceStatus` carries `surface: SurfaceKey`,
+through ordinary ask. `SurfaceStatus` carries `subject: StatusSubject`, exactly one of
+SURFACE{surface: SurfaceKey}, QUESTION{surface: SurfaceKey, question: str},
+UNDERSTANDING{surface: SurfaceKey, understanding_id: UnderstandingId,
+version: UnderstandingVersionNumber}. It carries
 `current`, `pending`, `stale`, `unassessed` (non-negative counts),
 `pending_refs: tuple[PendingConclusionRef, ...]`,
 `stale_refs: tuple[StaleConclusionRef, ...]`, and, on ordinary surface obtain,
@@ -578,7 +649,9 @@ through ordinary ask. `SurfaceStatus` carries `surface: SurfaceKey`,
 `descendants: tuple[SurfaceStatusSummary, ...]`. `SurfaceStatusSummary` carries
 `surface`, `current`, `pending`, `stale`, `unassessed`, `unexamined`,
 `unexamined_limited` and no nested refs or descendants. The enclosing result
-page owns omission and continuation. A count is never the length of a page.
+page owns omission and continuation. A count is never the length of a page. L1/L9 refer to this explicitly
+selected population, not a broader surface when a question/understanding
+was requested.
 
 `pending_refs` names each CURRENT-support, current-membership CAPTURED
 conclusion by exact revision identity and owning understanding version.
@@ -916,14 +989,14 @@ observation from a preceding answer. There is no separate discovery admission
 call.
 
 **Verification scope.** A recorded run applies to the selected semantic scope **within** its declared
-scope. Routine Answer returns the most recent observation(s) for each distinct
-applicable declared scope, description, command, scenario and environment-
-limitation group, with outcome, time, provenance and live qualification. Tied
-conflicting latest outcomes remain explicit. Older applicable runs are recoverable by `Answer.verification_history:
-str | None` (opaque continuation; absent when there are none);
-its history-only result is `VerificationHistory` with `verification: tuple[VerificationView, ...]`
-and result-page fields, bound to the original exact selection. Historical runs
-never masquerade as the latest outcome. A narrow run does not verify a broader
+scope. Routine Answer returns a relevant set per distinct applicable declared scope,
+description, command, scenario and environment-limitation group. Include
+latest recorded run(s) and latest still-CURRENT run(s) of each distinct
+outcome, with all ties and explicit live qualification. A later stale or
+unavailable PASS must not hide a still-supported FAIL. Remaining runs are
+recoverable by Answer.verification_history (opaque ResultPage continuation,
+absent when none); history never masquerades as current verification.
+FD-28 determines selection and ordering. A narrow run does not verify a broader
 service or unrelated question.
 Record the run against the surface it actually verifies. A run requires
 at least one observation or evidence item; both may coexist. Observations require
@@ -988,10 +1061,15 @@ Never serialize AuthorityBinding, private dependency union, route identity,
 discovery fingerprint or evaluator diagnostics. All non-current findings are
 recoverable. The same projection describes all retained dependencies in exact audit,
 without another evaluator or stored support representation. SOURCE empty
-ranges mean whole file. AUTHORITY also carries recorded authority_kind and
-status as semantic audit facts, not the AuthorityBinding carrier; declared
-applicability and precedence remain internal unless an exact cited semantic
-conclusion states them.
+ranges mean whole file. DISCOVERY additionally names repository_id and
+captured_at; SOURCE also names captured_at and whole_file, preserving the
+actual observation boundary. AUTHORITY carries recorded authority_kind,
+status, applicability (existing AuthorityApplicability) and declared_precedence
+(existing DeclaredPrecedence or absent). These are semantic facts, not a raw
+AuthorityBinding or private evaluator. GOVERNANCE includes repository_id;
+PREMISE identifies the exact canonical revision. Discovery membership and
+route fingerprints are private. UNAVAILABLE includes exact public reference
+when known; never invent one.
 
 `ObservationQualification` carries `observation_id` and `evaluation: SupportQualification`.
 `VerificationQualification` carries `state`, `observed_at`, `limitations`,
@@ -1013,8 +1091,12 @@ closed supported/withdrawn content union: supported statement, nature, scope
 and evidence, or withdrawal reason. Both carry complete projected
 `basis: tuple[SupportBasis, ...]`; supported carries maturity at the selected
 version and live qualification or SupportUnavailable. Withdrawal has neither
-reusable maturity nor live support verdict. Retain semantic provenance but not
-mechanical SemanticBasis or stored dependency/content carriers. Include only
+reusable maturity nor live support verdict. Retain the existing semantic derivation facts `derivation: DerivationKind`,
+`summary: str` and `input_refs: tuple[ClaimRef | RelationshipRef | EvidenceRef, ...]`
+from SemanticBasis for supported and withdrawn revisions. Reuse canonical
+semantic types; no private stored revision/dependency carrier. Retain version
+and revision provenance, exact predecessor/version membership and recorded
+support facts; never reconstruct them from live state. Include only
 challenges targeting the selected version, explicitly presenting their current
 state and disposition history as live history, not state at the selected
 version. Curations are applicable as of that version, never later dispositions
@@ -1114,6 +1196,9 @@ independent repository override. Direct challenge evidence derives its context
 internally. This write branch is distinct from pure change-scope reconsider.
 
 Results are a closed union: `Changed`, `Challenged`, `Rejected`, `Unavailable`.
+Changed is emitted only after complete traversal; interrupted discovery returns
+Unavailable with the exact original changed-scope retry action, no partial
+success or actionable subset. An interrupted precommit write commits nothing.
 `Changed` is keyed by surface; each entry carries its reasons (`containment`,
 `direct`, `indirect`) and its affected conclusions with per-conclusion support
 state. The result also carries the bounded
@@ -1183,7 +1268,7 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 
 | Law | Statement | From |
 | --- | --- | --- |
-| **L1** | Every `Answer` carries per-conclusion support, evidence, and the surface status. | F1, F2, F9 |
+| **L1** | Every `Answer` carries per-conclusion support, evidence, and status of its explicitly selected population. | F1, F2, F9 |
 | **L2** | Unsupported or uncurated content is never in Answer `conclusions`; non-current content appears as history/stale references and current CAPTURED content appears as pending-curation references/status. | F2, F13, A7 |
 | **L3** | Every `Gap` carries cause, status, changed evidence, missing items and public recovery; explicit evidence admission also carries its bound context and source outcomes. | F4, A8 |
 | **L4** | Every write is atomic, receipted, retry-safe, and compare-and-set on update. | A2, A3 |
@@ -1191,7 +1276,7 @@ bookkeeping, which is the specific failure this layer exists to prevent.
 | **L6** | Evidence identity is computed by Span from source, never accepted from a description. | A5 |
 | **L7** | The agent supplies semantic or curation intent; Span derives identity, context and mechanical support qualification. Span never infers the curation judgment. | F5, F7, F13 |
 | **L8** | The public operations are exactly `ask`, `record`, and `reconsider`. | F6 |
-| **L9** | A surface's status is always reported as a distribution, never a single stamp. | F9 |
+| **L9** | Obtain reports the explicitly selected population's status as a distribution, never a single stamp or a misleading wider scope. Write acceptance reports its own effects. | F9 |
 | **L10** | `reconsider` returns every containing surface for a changed path, reports direct and premise-dependent support loss separately, and supplies the bounded re-establishment context F4 requires. | F4, F9 |
 | **L11** | A surface's supported and curated current conclusions are readable as that surface's shared documentation; captured-only revisions remain retained pending knowledge, not a second document artifact. | G2, G6, F2, F3, F13 |
 | **L12** | For an ACTIVE repository, directory lookup and current surface obtain through `ask` return the applicable Functional Pyramid document branches or explicit operational unavailability. Normative understanding automatically depends on the route for its semantic scope and its applicable authorities. A semantically valid normative record whose derived governance support is non-current may be retained but is qualified non-current and never served as CURRENT Answer content. No separate authority operation exists. | G1, G3, G7, F2, F6, F7, F11 |
@@ -1420,12 +1505,11 @@ three-tool public surface remain the same semantic contract. Public delivery
 and accepted-effect corrections are governed by §§4–5, not historical
 result shapes.
 
-When one logical task directly edits more than one repository, the caller keeps
-the existing repository-scoped change grammar and calls
-`reconsider(changed_scope)` once for each directly edited repository. Each call
-may traverse the complete Functional Pyramid instance to report dependent
-understanding in other members. Version 1 does not add a multi-repository
-changed-scope request shape.
+When a task edits paths in one registered root tree, one changed_scope
+request may address them from the root; Span resolves and partitions owners
+as in §4.1. For disjoint root trees use one request per addressing tree.
+Each analysis follows the complete dependency relationships; no new request
+shape or agent namespace mapping.
 
 ### Required agent completion
 

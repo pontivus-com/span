@@ -279,7 +279,7 @@ Understanding is always bound to a surface with a boundary and a kind — either
 declared surface or a path surface. Currency is per conclusion; a surface's
 status is a distribution over its conclusions and its boundary, never a single
 stamp. A larger surface may contain both current and stale understanding, and
-that is expected rather than a defect. Span always reports a surface's status.
+that is expected rather than a defect. Span reports the status of the selected semantic population; surface obtains describe the whole surface, narrower obtains identify their narrower population. Acceptance of a write reports its own effects, not an unrelated surface distribution.
 
 Functional Pyramid applicability is reported separately from semantic ownership.
 A path can match several document placements without causing surface ambiguity,
@@ -313,8 +313,7 @@ document references, their places in the pyramid and the relationships between
 them. Each declared document placement carries an explicit repository-relative
 directory scope; the repository root is the widest scope. Span resolves every
 placement whose scope contains the requested directory or the effective
-semantic scope, follows the declared relationships between documents, and
-returns the resulting branches with provenance. A directory lookup includes
+semantic scope, follows the declared relationships between documents, and retains the basis of each resolved branch. A directory lookup includes
 documents that apply to that directory through their own declared scope or a
 declared ancestor scope. A placement confined to a descendant directory does
 not, by that fact alone, apply to its parent.
@@ -327,8 +326,7 @@ exist; Span reports declared and absent layers but never invents a placement,
 and documentation completeness remains the declaring owner's responsibility.
 
 The Functional Pyramid view is the governing projection of that semantic scope:
-it exposes canonical document references, their applicable layers and
-relationships, provenance and unresolved state. A relevant document can
+it exposes canonical document locations, applicable scopes/layers and unresolved state. Declared relationships and per-path provenance determine the complete selection; their internal graph and traversal representations are not consumer outputs. The consumer can locate the canonical sources without knowing repository namespaces. A relevant document can
 participate without enumerating its statements or assigning identities to
 individual rules. When the agent needs substantive content, it follows the
 canonical reference and reads that source through the ordinary evidence

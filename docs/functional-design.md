@@ -86,6 +86,42 @@ request identity. *(A2, D-3, L4, L14)*
 A receipt is retrievable by submission identity after its context has expired and
 after a process restart, for the retention period defined in FD-42–FD-45. *(A1, A2)*
 
+**Registered-root address resolution (FD-1, FD-62; lifecycle §4.1).**
+Resolve every new public path against its supplied registered origin. Use
+canonical absolute roots internally, segment containment and unique deepest
+registered root. Reject duplicate deepest roots, path escape and a symlink
+alias that crosses a registered boundary; unrelated unresolvable roots do
+not block unless they could own the addressed path. For deleted/changed
+paths resolve the nearest existing ancestor and validate remaining normalized
+segments without requiring the leaf to exist. For SYMBOL use the existing
+canonical file-locator extraction, preserve the symbol suffix. Reference
+matching resolves a declared exact name in the supplied repository or path
+owner; if both distinct candidates match, return AmbiguousSurface, never
+guess. Explicit SERVICE/DOMAIN and identity/context selectors do not rebase.
+A declared boundary may contain a nested registered root physically, but
+that subtree is excluded from the parent's semantic path ownership; do not
+re-key historical surfaces or evidence. Validate new boundaries and scope
+against the owning repository; a boundary at an ancestor describes its own
+repository portion, not independently registered descendants.
+
+For direct create derive owner from explicit FILE/SYMBOL or path scope/
+locator, otherwise declared surface or repository-wide origin. Normalize
+all local source, scope and discovery paths to that owner before containment
+checks. Identity-based update/challenge and context-bound operations keep
+their canonical owner; translate local paths only if they resolve there.
+Declaration source paths stay bound to the declared member, not rerouted.
+Path-based verification uses the same scope ownership. Mixed-owner
+admission/writes reject atomically before context or evidence creation;
+existing qualified cross-repo authority and premise support stays explicit.
+For change roots partition resolved owner/path pairs, deduplicate canonical
+roots and union direct/containment roots before the one premise closure
+(FD-17–22); identity references are never translated. Map hook paths through
+this same rule before determining which lifecycle request to issue.
+Resolve persisted request binding before new-write routing (FD-3), so even
+a moved root cannot create a second accepted effect; never replay from an
+inferred owner. These rules preserve standalone behavior and do not infer
+participation.
+
 ## 3. Surface containment
 
 **FD-5 — Membership is deterministic.**
@@ -135,18 +171,10 @@ layer, one explicit repository-relative directory `scope` in its declaring
 repository, and its declared governing placements. The repository root is the
 explicit `.` scope and the widest scope.
 
-For an exact directory lookup, normalize the requested address and establish
-its owning registered repository before looking up participation. Resolve the
-address against the supplied repository's canonical root; validate containment
-and directory existence. Select the unique deepest registered canonical root
-containing the directory, using path segments, not string prefixes. Strictly
-nested roots are valid; multiple identities for the same deepest root are
-ambiguous and rejected. Reject escaping paths and symlink aliases that would
-change the addressed repository boundary; do not infer unregistered roots or
-participation. If registry/root availability prevents a definitive selection,
-return operational unavailability rather than selecting the enclosing root.
-Translate the selected directory relative to that root (`.` for the root)
-for the internal applicability computation.
+For exact directory lookup apply the registered-root address procedure in §2,
+require an existing directory, then use the resolved owner-relative directory
+(`.` for its root). Inability to establish ownership is explicit operational
+unavailability, not parent fallback.
 Determine that repository's own participation and instance, including explicit
 UNCONFIGURED/EXCLUDED or operational unavailability; never substitute the
 addressing repository's governance. For an ACTIVE owner, select every placement
@@ -993,9 +1021,9 @@ not established (F1, A6). See §14. *(F2, A7)*
 The combined evaluation lists every non-current dependency with its state and
 reason, so a definite finding is not lost inside an `UNVERIFIABLE` summary.
 Project each finding from its typed dependency, not its diagnostic string:
-source → admitted evidence identity/ranges; discovery → declared scope;
-authority → canonical evidence and recorded classification; premise → exact revision; route → pyramid and
-semantic scope. Audit projects all retained dependencies by the same rule.
+source → admitted evidence identity/ranges and captured time; discovery →
+recorded repository/scope/time; authority → all recorded semantic binding
+facts; premise → exact revision; route → recorded repository/pyramid/scope. Audit projects all retained dependencies by the same rule.
 If required historical coordinates cannot be recovered, retain the typed
 unavailable basis and reason; do not infer authority or invent evidence.
 Qualification and audit preserve dependency multiplicity and order where
@@ -1054,8 +1082,11 @@ may have no affected revisions. Aggregate causes plus containment separately
 at surface level. Traverse every reachable current and historical dependency
 to a fixed point with cycle detection before limiting delivery. Retain the full
 affected current-revision set and per-owner context requirements; processing
-interruption is explicit incomplete analysis with recoverable work, never a
-successful truncated closure. Inclusion is not a verdict:
+interruption returns Unavailable with exact original changed-scope retry;
+no partial Changed, no cursor for an undiscovered set, no contexts from a
+failed traversal. Participation precommit failure aborts atomically. Retry
+is a new complete analysis; previously delivered completed selections remain
+recoverable independently. Inclusion is not a verdict:
 each affected conclusion carries its own support state, so a considered
 conclusion may remain `CURRENT`. *(F4, L10)*
 
@@ -1065,8 +1096,8 @@ surface are ordered by their recorded sequence. The same change produces the sam
 order. *(A2, L10)*
 
 **FD-22 — Unaffected is bounded and explicit.**
-A surface may be reported unaffected only within the examined boundary. An interrupted walk that cannot complete reports incomplete analysis and
-recoverable work; it does not report "unaffected" or discharge obligations.
+A surface may be reported unaffected only within the examined boundary. An interrupted walk follows FD-20; it reports neither unaffected nor
+discharged obligations.
 Delivery paging never sets dependency traversal depth/node limits.
 *(F4, A8)*
 
@@ -1159,15 +1190,21 @@ curation.
 `RecordedQuestionSelector` restricts membership to one exact recorded question
 on one exact surface; current identity selectors restrict membership to one
 returned understanding identity. All three reuse forms use the same composition,
-issue no context and require no request identity. Calculate status from exactly
-that membership, not unrelated full surface traversal. Only ordinary surface
-obtain computes boundary coverage and immediate child distributions; no
-recursive status trees. Select verification from runs covering the complete
-selected semantic scope. Group by normalized declared scope, scope description,
-command, scenario and environment limitations; select max observed_at per group,
-retain tied distinct outcomes and order by run ID for ties. Older applicable runs
-are recoverable in separate history continuation. A later unrelated or narrower
-run does not supersede an applicable result. For exact audit resolve the pinned
+issue no context and require no request identity. Construct StatusSubject from
+resolved selector and exact version, then calculate its membership only.
+Ordinary surface obtain computes own boundary coverage and immediate contained
+surface distributions; choose immediate by strict containment with no
+intervening declared surface, not parent pointer; stable order by SurfaceKey.
+Select verification runs whose declared scope covers every path/reference of
+selected semantic scope; repository-wide scope requires repository-wide run.
+Group by normalized declared scope, exact description, command, scenario and
+ordered normalized environment limitations. Evaluate candidates once using
+existing evaluator. Union max observed_at among all runs in each group and
+max observed_at among CURRENT runs for each outcome in that group; keep all
+ties, dedup by run ID. Sort group keys then descending observed_at and run ID.
+All other applicable runs ordered identically form history. Never infer a
+later PASS resolves an earlier still-CURRENT FAIL; retain both. Distinguish
+non-current/unavailable latest runs from supported outcomes. For exact audit resolve the pinned
 version's exact revisions and curation as of that version; select only challenges
 targeting that version and label present challenge disposition and live support.
 Retrieve receipt effects by accepted identity, never current snapshot membership.
@@ -1334,7 +1371,11 @@ remove accepted understanding, challenge history, verification runs, or receipts
 
 **FD-43 — The replay window is derived, not invented.**
 A receipt is retained at least as long as the longest supported session
-suspension, so a caller that can resume can recover its identity. That lower
+suspension, so a caller that can resume can recover its identity. Completed
+change selections and receipts with outstanding actionable effects also
+retain their exact immutable obligation coordinates until disposed. Reaping
+requires both elapsed replay retention and no outstanding obligation; if
+qualification cannot be established, do not reap. No new arbitrary duration. That lower
 bound follows from A1 and A2 and applies equally to repository-scoped ordinary
 receipts and installation-scoped Functional Pyramid receipts. The concrete
 window is a deployment measurement recorded in layer 4, not a product choice.
@@ -1358,7 +1399,10 @@ context reference binds repository and context identity at issuance.
 Context-bound routing derives from that reference with no separate override;
 lookup still validates actual liveness and membership. No cross-store search or
 context replacement is implicit. Change-scope issuance follows FD-2 and its contexts use the same retention
-owner. *(A1, A2, F4, L7, L10)*
+owner. Pure-read and evidence delivery use the context lifetime as specified
+by lifecycle §4.1; completed change/accepted effect selections follow FD-43.
+Delivery recovery is by issued selection/position, not caller reconstruction.
+*(A1, A2, F4, L7, L10)*
 
 ## 11. Concurrency
 
@@ -1466,18 +1510,24 @@ including installation operations and writes, independently of semantic
 evaluation and commitment. *(F7)*
 
 **FD-55 — Truncation is explicit and recoverable.**
-Use the exact bound continuation in lifecycle §4.1. Build the complete semantic
-selection or retained effect set before fitting, then page ordered collections
-with deterministic progress. Bind original subject/version, selection and
-collection position; do not rebuild from unrelated or mutable membership.
-Evidence uses original ordered request outcomes and admitted ranges, not all
-context observations. Emit outcome metadata and content through the same page
-owner; do not repeat the full batch or list every deferred item. A page advances
-by at least one deliverable semantic unit; split evidence at exact line
-boundaries. All required findings, references and obligations are accessible,
-including embedded multi-path governance and installed-state results. On live
-change refuse stale read pages with exact recovery; accepted effects stay
-pinned to receipt, reconsider effects to affected selection. *(A8)*
+For lifecycle §4.1 ResultPage, evaluate full selection once, order via FD-29
+and domain ordering, bind exact immutable semantic keys plus live-state
+signature (excluding clock-only variation). Select maximum fitting prefix of
+the first remaining collection, advance by exact offset or evidence range;
+visit nested collections immediately after their parent before later siblings.
+Always include required parent/owner and context coordinates. Initial Answer
+must contain usable conclusion content, not merely an auxiliary collection;
+continuation never returns Answer. If primary unit cannot fit, apply FD-57.
+Every delivered item belongs exactly once to the selected ordered sequence
+except required scalar parent/context references. Keep selection and issued
+positions immutable; repeat cursor yields same slice under unchanged binding.
+For pure read changes reject stale binding; for accepted/completed effects
+retain immutable keys and re-evaluate only those refs, report disposed/
+superseded ones without erasing their position. Recreate expired contexts
+only for still-actionable owners. Evidence page uses original outcome order,
+and deduplicates delivery only by exact observation/range, not by locator;
+later context additions do not change order or membership. Retention follows
+FD-43/45; no new semantic evaluation or write on continuation. *(A8)*
 
 **FD-56 — Truncation never substitutes stale content.**
 A budget limit never promotes historical content into answer content and never
