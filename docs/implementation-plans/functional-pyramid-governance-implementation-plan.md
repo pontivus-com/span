@@ -687,7 +687,10 @@ Test all five dependency kinds, mixed loss precedence, unavailable basis,
 historical withdrawn content, later curation/challenge, and negative recursive
 schema plus installed wire assertions. No transport stripping or regenerated
 authority. Gate: exact semantic audit equivalence, no private type leakage.
-Architecture gate: replace compact_support/compact_understanding/
+Architecture gate: establish TD §13's shared immutable verification and
+challenge fact components at their existing canonical model owners, before
+delivery; retain complete stored records and build the single public audit
+projection reused by PUB-05/08. Replace compact_support/compact_understanding/
 compact_verification at their canonical ownership boundary as applicable;
 all consumers use one typed support projection with service-supplied facts.
 Inspect import direction and actual call sites; pure projection test without
@@ -738,7 +741,7 @@ expiry with undisposed effects, receipt recovery after manifest loss.
 Test repeated admission retry against the same durable manifest, successor
 becoming non-current, and primary-complete Answer with history cursor. No
 second evidence selection or semantic writer. Fit mandatory subject/state/
-receipt envelope first, primary content then aux, page all variable
+receipt envelope first, primary content then aux, page all P2 variable
 collections (including nested findings, evidence metadata, exact receipts
 and contexts), constant omission description, no lost commit. Preflight
 minimum acceptance envelope before write; postcommit delivery failure returns
@@ -749,7 +752,13 @@ unit/line, empty page/progress, unbounded metadata, large candidate/status/
 receipt/changed writes, cross-repo scope, exact multi-path orientation,
 order drift and later context extension, restart and postcommit failure.
 Gate: all independently pageable selections recoverable without new ceiling
-or gate edits; FD-57 handles a genuinely indivisible oversized record explicitly.
+or gate edits; FD-57 handles a genuinely indivisible oversized fact explicitly.
+Use PUB-02's shared recorded-fact components and P2's nested slices; never
+avoid delivery by making a whole retained run, challenge or member atomic.
+Test single run with large observations/limitations, single challenge with
+large target/disposition/resolution evidence collections, and one member with
+large declaration inventory. Reassemble exact ordered semantic facts across
+pages without partial stored records or mirrored DTOs.
 Architecture gate: TD §13 single canonical encoder and pure fitting decision,
 one service continuation owner, closed typed selection/part variants, no
 runtime reflection or DTOs, no trimmed retained semantic records. Delete
@@ -840,6 +849,9 @@ PUB-07A before PUB-04 (shared schema/transaction infrastructure). PUB-07B
 is accepted-outcome composition after PUB-04. No circular gate. Map old receipts offline to
 exact accepted effect or HistoricalAcceptanceDetailUnavailable; preserve every
 receipt key/digest, history and curation; original origin canonical owner.
+Apply TD §14's shared semantic component factoring in the offline mapping;
+compare reconstructed exact recorded facts to the input, no runtime dual
+shape. Preserve challenge disposition coordinates and retained history.
 Use existing boundary history rows and atomic addressed-request index owner.
 Verify all source schemas, installation 1→2, full staged/verified activation,
 interruption recovery and rollback, no mixed-version runtime.

@@ -1516,9 +1516,9 @@ and domain ordering, bind exact immutable semantic keys plus live-state
 signature (excluding clock-only variation). Select maximum fitting prefix of the first remaining pageable collection,
 advance by exact offset or evidence range; visit independently pageable
 public nested collections immediately after their parent before later
-siblings. A canonical immutable semantic record is a complete unit under
-lifecycle §4.1; FD-57 applies to an oversized single unit. Never manufacture
-a partial retained record to satisfy delivery.
+siblings. Use lifecycle §4.1's recorded-fact and nested-collection boundaries;
+never manufacture a partial retained record, or classify a variable collection
+as one indivisible fact to avoid recoverable delivery.
 Always include required parent/owner and context coordinates. Initial Answer
 must contain usable conclusion content, not merely an auxiliary collection;
 continuation never returns Answer. If primary unit cannot fit, apply FD-57.

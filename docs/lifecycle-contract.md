@@ -306,13 +306,17 @@ binds the collection to its item type and allowed parent; no untyped item.
 | descendants | SurfaceStatusSummary |
 | verification, verification_history | VerificationView |
 | observation_qualifications | ObservationQualification |
-| verification_runs, limitations | VerificationRun, str respectively |
+| verification_runs | VerificationView (receipt audit, no live qualification) |
+| run_observations, environment_limitations, limitations | SourceObservationId, str, str respectively |
 | support_findings | SupportFinding |
 | evidence_refs, audit_basis, audit_derivation_inputs | EvidenceRef, SupportBasis, existing ClaimRef/RelationshipRef/EvidenceRef union respectively |
 | admission_outcomes, evidence_deliveries | EvidenceAdmissionOutcome, EvidenceDelivery respectively |
 | placements, unresolved, validation_findings, graph_findings, status_findings | FunctionalPyramidPlacementView, FunctionalPyramidPublicFinding, FunctionalPyramidValidationFinding, FunctionalPyramidPublicFinding, FunctionalPyramidPublicFinding respectively |
-| member_repository_ids, receipt_members | str, FunctionalPyramidMemberView respectively |
-| audit_conclusions, challenges, curations | AuditConclusion, Challenge, CurationDisposition respectively |
+| member_repository_ids, member_declaration_refs | str, EvidenceRef respectively |
+| audit_conclusions, challenges, curations | AuditConclusion, ChallengeView, CurationDisposition respectively |
+| challenge_dispositions | AcceptedChallengeDisposition |
+| challenge_targets, resolution_conclusions, resolution_withdrawn | ConclusionRevisionRef |
+| challenge_evidence, resolution_evidence | EvidenceRef |
 | historical_understanding_versions, historical_verification_run_ids, historical_challenge_ids | UnderstandingVersionRef, VerificationRunId, ChallengeId respectively |
 | accepted_revision_effects, recorded_revision_effects, accepted_challenge_dispositions | AcceptedRevisionEffect, RecordedRevisionEffect, AcceptedChallengeDisposition respectively |
 | affected_surfaces, affected_conclusions, dependent_effect_refs, participation_effects, reestablishment_contexts, unaffected | ChangedSurface, ChangedConclusion or EffectDisposition (tagged union), ConclusionRevisionRef, FunctionalPyramidParticipationEffect, InvestigationContextRef, SurfaceKey respectively |
@@ -325,17 +329,15 @@ collection in the initial result schema (e.g. support_findings under exact
 revision or run/observation qualification; affected_conclusions under exact
 surface); no other parent can validate. A nested collection can be paged
 only when its owning public result expressly permits a partial delivery.
-Exact retained VerificationRun, Challenge, CurationDisposition,
-ChallengeDispositionRecord and FunctionalPyramidMemberView values remain
-complete indivisible semantic records (including their own observations,
-targets, dispositions and declaration references). They are not fabricated
-with missing fields or partially populated historical membership. Page the
-collection of these records, not a forged record. A field not in the table
-or inside one of these indivisible records remains part of its containing
-unit. If a single complete required unit cannot fit, FD-57's explicit
-unavailability/recovery applies; never silently strip facts. This is not a
-license to treat an entire public result or independently pageable public
-qualification, status, effects or audit collection as an indivisible record. Omission metadata is bounded:
+Retained records are complete; never emit a fabricated partial retained
+VerificationRun, Challenge, ChallengeDispositionRecord or member record.
+Their public semantic results below use canonical recorded facts and their
+independently pageable observation, target, disposition and declaration-ref
+collections. A field not in the table remains indivisible with its containing
+semantic fact, including a CurationDisposition. FD-57 applies only when a
+required individual fact or evidence line and its minimum envelope cannot
+fit, not because an entire record contains many pageable facts. No omitted
+recorded fact is silently discarded. Omission metadata is bounded:
 name the first remaining collection/parent and total remaining units, not
 an inventory of every later parent. Each part names its exact count and
 position, not a reconstructed internal object.
@@ -507,15 +509,13 @@ be evaluated is not CURRENT because route support is independently
 `UNVERIFIABLE`.
 
 **Functional Pyramid public carriers.** The lifecycle uses one canonical member
-intent/view shape and one Functional Pyramid scope carrier; it does not add
-parallel setup DTOs.
+intent and the public semantic projections below; no parallel setup grammar.
 
 - `FunctionalPyramidMemberIntent` carries
   `repository_id: str` and
   `declaration_sources: tuple[EvidenceRequest, ...]` (non-empty).
-- `FunctionalPyramidMemberView` carries
-  `repository_id: str` and
-  `declaration_refs: tuple[EvidenceRef, ...]`.
+- The retained member's declaration evidence is retrieved through exact
+  receipt audit; routine results do not carry a member-record projection.
 - `FunctionalPyramidParticipation` carries `state: UNCONFIGURED | EXCLUDED`.
   For directory lookup it also carries `resolved_repository_id: str` and
   `directory: FunctionalPyramidPath`; for ordinary surface obtain those
@@ -576,7 +576,9 @@ parallel setup DTOs.
   `action: ACTIVATE | REVISE | DEACTIVATE | EXCLUDE`,
   `pyramid_id: FunctionalPyramidId | None`,
   `version: FunctionalPyramidVersion | None`,
-  `members: tuple[FunctionalPyramidMemberView, ...]`,
+  `member_repository_ids: tuple[str, ...]`,
+  `member_declaration_refs: tuple[EvidenceRef, ...]` (each exact accepted
+  source reference identifies its member through `EvidenceRef.repository_id`),
   `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`,
   and `dependency_effects: AcceptedDependencyEffects | HistoricalAcceptanceDetailUnavailable`,
   plus result-page fields. `AcceptedDependencyEffects` contains exactly
@@ -584,8 +586,9 @@ parallel setup DTOs.
   is used only for migrated receipts with missing original causes (§4.2). Member declaration references are exact accepted audit evidence,
   not live configuration; replay digest remains private.
   It has no investigation-context binding or repository receipt owner. For
-  ACTIVATE/REVISE, `members` is the resulting ACTIVE member set. For
-  DEACTIVATE/EXCLUDE it is empty. The effects tuple records every repository
+  ACTIVATE/REVISE, member_repository_ids is the resulting ACTIVE member set
+  and member_declaration_refs is its exact repository-qualified source set.
+  For DEACTIVATE/EXCLUDE both are empty. The effects tuple records every repository
   whose durable participation changed.
 
 **Beta-3 curation carriers.** The public curation grammar is exact:
@@ -1075,13 +1078,17 @@ projection, with owner/version, causes, support and context; no follow-up
 namespace reconstruction. Owner-wide status and full membership are not
 acceptance content.
 
-`AcceptedChallengeDisposition` carries `challenge_id: ChallengeId` and the
-accepted `disposition: ChallengeDispositionRecord` (closed resolved/unresolved
-alternatives containing exact challenge_revision and disposition details).
-The discriminator states the accepted disposition; no duplicate revision/state
-fields.
-The resulting version, exact resulting/withdrawn refs, or remaining question
-and basis are the accepted disposition, not later live challenge state.
+`AcceptedChallengeDisposition` is the closed public disposition result:
+UNRESOLVED carries `challenge_id: ChallengeId` and the complete existing
+`UnresolvedChallengeRecord`; RESOLVED carries `challenge_id`,
+`decision: ChallengeDispositionDecision` (exact challenge_revision and
+recorded_at), and `resolution: ChallengeResolutionView`.
+`ChallengeResolutionView` carries `facts: ChallengeResolutionFacts`
+(reasoning, resulting_understanding_id, resulting_version) and independently
+pageable `conclusions: tuple[ConclusionRevisionRef, ...]`, `withdrawn:
+tuple[ConclusionRevisionRef, ...]`, `evidence: tuple[EvidenceRef, ...]`.
+The discriminator states the accepted disposition. The complete recorded
+facts are those of the exact accepted challenge revision, not later state.
 
 **Public qualification and audit basis.** Preserve the one support evaluator.
 `SupportQualification` contains `state: SupportState`, `observed_at: datetime`,
@@ -1112,8 +1119,15 @@ when known; never invent one.
 `ObservationQualification` carries `observation_id` and `evaluation: SupportQualification`.
 `VerificationQualification` carries `state`, `observed_at`, `limitations`,
 `observations: tuple[ObservationQualification, ...]`.
-`VerificationView` carries `run: VerificationRun` and
-`qualification: VerificationQualification | SupportUnavailable`.
+`VerificationView` carries `facts: VerificationRunFacts` (run_id,
+repository_id, scope: VerificationScope, command, scenario, outcome,
+observed_at, observer, provenance), `observations: tuple[SourceObservationId, ...]`,
+`environment_limitations: tuple[str, ...]` and `qualification:
+VerificationQualification | SupportUnavailable | None`. Qualification is
+absent only for exact immutable receipt audit; routine verification always
+has its live qualification or explicit unavailability. The observation and
+environment-limitation collections are independently pageable. These are
+exact recorded execution facts, not a partially populated VerificationRun.
 Do not duplicate run facts inside qualification. `ConclusionView` carries
 exact ref, statement, assertion nature, scope, evidence and support; CURRENT
 + CURATED eligibility is implicit. Missing evaluation is SupportUnavailable,
@@ -1122,7 +1136,7 @@ not a manufactured verdict.
 **Historical snapshot.** `RetrievedUnderstanding` carries repository and
 surface, understanding_id, selected version, question, scope, selected
 version created_at/provenance, previous_version, surface_boundary_version,
-gaps, `conclusions: tuple[AuditConclusion, ...]`, `challenges: tuple[Challenge, ...]`,
+gaps, `conclusions: tuple[AuditConclusion, ...]`, `challenges: tuple[ChallengeView, ...]`,
 `curations: tuple[CurationDisposition, ...]` and result-page fields.
 `AuditConclusion` carries exact revision ref, originating_version, and a
 closed supported/withdrawn content union: supported statement, nature, scope
@@ -1137,14 +1151,26 @@ and revision provenance, exact predecessor/version membership and recorded
 support facts; never reconstruct them from live state. Include only
 challenges targeting the selected version, explicitly presenting their current
 state and disposition history as live history, not state at the selected
-version. Curations are applicable as of that version, never later dispositions
-attached retroactively. Live qualification does not rewrite the snapshot.
+version. `ChallengeView` carries `facts: ChallengeFacts` (challenge_id,
+understanding_id, target_version, reason, provenance, challenge_revision,
+state, created_at), exact `target_conclusions: tuple[ConclusionRevisionRef, ...]`,
+`evidence: tuple[EvidenceRef, ...]`, `dispositions: tuple[AcceptedChallengeDisposition, ...]`
+and `resolution: ChallengeResolutionView | None`. The latter is present for
+recorded RESOLVED state only when its exact resolution is not already present
+as a matching disposition in the retained history; otherwise the exact
+current challenge_revision selects that disposition. Historical missing
+history remains explicit and the existing resolution is preserved, never
+fabricated. All variable collections are pageable; retain separately recorded
+facts where they differ rather than infer correction. Curations are applicable
+as of that version, never later dispositions attached retroactively. Live
+qualification does not rewrite the snapshot.
 
 **Receipt audit.** `RetrievedReceipt` carries receipt_selector, committed_at,
 a closed accepted-effect branch and result-page fields: understanding
 ID/version, `revision_effects: tuple[AcceptedRevisionEffect, ...]` (no live
-qualification), accepted challenge dispositions and AcceptedDependencyEffects; verification runs
-exactly named by the receipt; surface action and accepted boundary; or accepted
+qualification), accepted challenge dispositions and AcceptedDependencyEffects;
+`verification_runs: tuple[VerificationView, ...]` exactly named by the
+receipt, qualification absent; surface action and accepted boundary; or accepted
 challenge opening identity and target refs. Use the existing canonical accepted
 facts, not raw RecordReceipt. A usable context reference may accompany challenge
 opening handoff. Private digest, recording identity internals, context binding
@@ -1291,7 +1317,8 @@ Do not repeat the whole installation's context list on each page. If context
 expires, recover the pinned affected selection with a fresh usable context
 for still-actionable refs, not a newly guessed effect set.
 `Challenged` carries `receipt_selector: ReceiptRetrievalSelector`,
-`committed_at: datetime`, the challenge, derived context, and
+`committed_at: datetime`, `challenge: ChallengeView` at accepted opening,
+derived context, and
 `prior_conclusions: tuple[AuditConclusion, ...]` for exactly the disputed refs,
 plus result-page fields. Prior content and basis are retained facts; live
 qualification is labeled as such. Opening identity/context remain recoverable

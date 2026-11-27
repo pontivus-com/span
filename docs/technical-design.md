@@ -553,7 +553,7 @@ uses RecordingKey as canonical owner, original_addressing_repository_id,
 original content_digest, committed_at, replay_expires_at, optional canonical
 InvestigationContextRef (absent for surface), and a closed accepted-effect
 union: understanding (id/version, AcceptedRevisionEffect tuple, accepted
-challenge dispositions, accepted dependency coordinates); verification (accepted run ID);
+challenge ID/revision coordinates, accepted dependency coordinates); verification (accepted run ID);
 surface (action, SurfaceKey, accepted boundary_version); challenge opening
 (exact accepted challenge identity/revision, target version/refs). Use the
 existing immutable surface_boundary_versions row for audit/replay, never
@@ -608,8 +608,28 @@ variant and strict round-trip; no second serializer. Only the public result
 collection owners identified by P2 permit prefixes; preserve their initial
 minimum and explicit partial-delivery state. Never `replace()` a persisted
 VerificationRun/Challenge/member/curation/disposition with truncated fields.
-Complete retained record units are fitted as units; FD-57 governs oversize.
-Page subsequent typed parts using existing public semantic coordinates. The part order is stable:
+For verification, challenge and member audit, factor the actual canonical
+recorded fact components at their existing core/model owners, not new DTOs.
+`core/model/verification.py` owns VerificationRunFacts (the fixed recorded
+execution facts in lifecycle §4.2); complete VerificationRun composes those
+facts with observations and environment limitations. Existing VerificationView
+uses the very same facts and its public pageable collections. Command grammar
+and the existing semantic execution validation remain singular. In
+`core/model/understanding.py`, complete Challenge composes ChallengeFacts plus
+target/evidence/history; complete ChallengeResolution composes
+ChallengeResolutionFacts plus resulting/withdrawn/evidence refs;
+ResolvedChallengeRecord composes ChallengeDispositionDecision plus its
+complete resolution. Share these actual immutable fact types with
+ChallengeView, AcceptedChallengeDisposition and ChallengeResolutionView;
+those public results carry delivery, not stored-record validity. Reuse the
+existing UnresolvedChallengeRecord unchanged. The receipt stores the accepted
+challenge ID/revision coordinate and resolves the exact retained disposition,
+not a copied disposition body. In FP receipt audit, project member IDs and
+repository-qualified declaration refs from existing retained member records;
+no second member-record type or modified retained member payload. No
+indivisible retained aggregate is used to hide a pageable collection.
+Page subsequent typed parts using exact run/observation, challenge/revision,
+receipt or other existing public semantic coordinates. The part order is stable:
 initial required envelope, primary result, nested required evidence/causes,
 then auxiliary collections, following FD-29/55. Untyped or unknown collection
 and parent/offset pairs reject. Use exact encoded size including the cursor,
@@ -703,7 +723,7 @@ fallback for an already bound request.
 Budget fitting does not constrain semantic traversal or administrative
 authority validation (§20). Preflight minimum acceptance envelope before
 commit; preserve committed receipt on postcommit detail failure. A single
-oversize indivisible unit yields FD-57 unavailable with exact public
+oversize indivisible semantic fact yields FD-57 unavailable with exact public
 coordinate; do not fabricate a progress token or raise the ceiling.
 
 ## 14. Offline schema transition
@@ -716,7 +736,16 @@ produce schema-16 receipts; add store_transition_schema15.py for lossless
 15→16 mapping. No legacy decoder or migration on runtime open. Existing
 schema-15 curation rows and all semantic/support/authority/verification/
 surface boundary history, IDs, contexts and exact canonical evidence are
-copied without changes. Preserve every legacy receipt key, original digest,
+preserved without semantic change. In the schema-15 offline mapping, factor
+VerificationRun's fixed execution fields into VerificationRunFacts, Challenge's
+fixed fields into ChallengeFacts, ChallengeResolution's reasoning/result
+identity into ChallengeResolutionFacts and ResolvedChallengeRecord's revision/
+recorded_at into ChallengeDispositionDecision. Preserve all original ordered
+observation, limitation, target, evidence, resulting/withdrawn and disposition
+collections and exact state; reconstruct the source facts for migration
+comparison, not a runtime compatibility reader. Existing IDs, timestamps and
+historical missing/contradictory detail remain exact. Preserve every legacy
+receipt key, original digest,
 commit/expiry and recorded context/effect identities. Use one current
 closed accepted-effect union; if old action/target details are absent and
 not uniquely evidenced, map to HistoricalAcceptanceDetailUnavailable
