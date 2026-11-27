@@ -106,7 +106,7 @@ class ReconsiderService:
             if existing.context is None:
                 raise RecordingConflict(
                     "the request already committed a surface effect",
-                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
+                    cause_kind=m.RejectionCauseKind.REPLAY_CONFLICT,
                 )
             command = self._challenge_command(
                 repository_id, challenge, existing.context.context_id
