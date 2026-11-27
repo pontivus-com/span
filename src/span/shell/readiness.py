@@ -813,17 +813,33 @@ def _initialization_provenance(
             actual = _hashlib.sha256(path.read_bytes()).hexdigest()
         except OSError:
             _log.debug("Governed input unavailable: %s", locator, exc_info=True)
-            mismatches.append({
-                "locator": classification if locator == classification else repository_id,
-                "reason": "classification cannot be read" if locator == classification else "installed governance is unavailable",
-            })
+            mismatches.append(
+                {
+                    "locator": (
+                        classification if locator == classification else repository_id
+                    ),
+                    "reason": (
+                        "classification cannot be read"
+                        if locator == classification
+                        else "installed governance is unavailable"
+                    ),
+                }
+            )
             continue
         if actual != expected:
             _log.debug("Governed input differs: %s", locator)
-            mismatches.append({
-                "locator": classification if locator == classification else repository_id,
-                "reason": "classification has changed" if locator == classification else "installed governance differs from the accepted classification",
-            })
+            mismatches.append(
+                {
+                    "locator": (
+                        classification if locator == classification else repository_id
+                    ),
+                    "reason": (
+                        "classification has changed"
+                        if locator == classification
+                        else "installed governance differs from the accepted classification"
+                    ),
+                }
+            )
     refs = _active_member_declaration_refs(data_dir, repository_id)
     expected_refs = {
         key: value
@@ -837,11 +853,17 @@ def _initialization_provenance(
     )
     if actual_refs != expected_refs:
         mismatches.append(
-            {"locator": repository_id, "reason": "installed governance differs from the accepted classification"}
+            {
+                "locator": repository_id,
+                "reason": "installed governance differs from the accepted classification",
+            }
         )
     if installed_authority_bindings(data_dir, repository_id) != entry.get("bindings"):
         mismatches.append(
-            {"locator": repository_id, "reason": "installed authority differs from the supplied configuration"}
+            {
+                "locator": repository_id,
+                "reason": "installed authority differs from the supplied configuration",
+            }
         )
     participation = _functional_pyramid_participation(data_dir, repository_id)
     if (
@@ -850,11 +872,17 @@ def _initialization_provenance(
         or participation.get("version") != version
     ):
         mismatches.append(
-            {"locator": repository_id, "reason": "participation differs from the accepted installation"}
+            {
+                "locator": repository_id,
+                "reason": "participation differs from the accepted installation",
+            }
         )
     if str(_pathlib.Path(root).resolve()) != entry.get("root"):
         mismatches.append(
-            {"locator": repository_id, "reason": "registered repository location differs"}
+            {
+                "locator": repository_id,
+                "reason": "registered repository location differs",
+            }
         )
     return {
         "state": "PROVENANCE_MISMATCH" if mismatches else "PROVENANCE_MATCH",
@@ -913,6 +941,16 @@ def probe_governed_provenance(
             pyramid_id=recorded.get("pyramid_id"),
             version=recorded.get("version"),
         )
+    return _recorded_input_provenance(data_dir, repository_id, root, receipt)
+
+
+def _recorded_input_provenance(
+    data_dir: str | _pathlib.Path,
+    repository_id: str,
+    root: str | _pathlib.Path,
+    receipt: dict[str, object],
+) -> dict[str, object]:
+    """Verify the existing ordinary-input record without exposing private sources."""
     facts = receipt.get("preflight_facts")
     entry: dict[str, object] | None = None
     if isinstance(facts, dict):
@@ -936,8 +974,11 @@ def probe_governed_provenance(
         role = item.get("role")
         expected = item.get("digest")
         if not isinstance(locator, str) or not isinstance(expected, str):
-            mismatches.append({"locator": locator, "reason": "governance input could not be verified"})
+            mismatches.append(
+                {"locator": repository_id, "reason": "governance input could not be verified"}
+            )
             continue
+        public_locator = locator if role == "authority_binding" else repository_id
         path = _pathlib.Path(locator)
         if not path.is_absolute():
             path = canonical_root / locator
@@ -948,10 +989,20 @@ def probe_governed_provenance(
         try:
             actual = _hashlib.sha256(path.read_bytes()).hexdigest()
         except OSError:
-            mismatches.append({"locator": locator, "reason": "configured governance input cannot be read"})
+            mismatches.append(
+                {
+                    "locator": public_locator,
+                    "reason": "configured governance input cannot be read",
+                }
+            )
             continue
         if actual != expected:
-            mismatches.append({"locator": locator, "reason": "configured governance input has changed"})
+            mismatches.append(
+                {
+                    "locator": public_locator,
+                    "reason": "configured governance input has changed",
+                }
+            )
 
     active_refs = _active_member_declaration_refs(data_dir, repository_id)
     if active_refs is not None and recorded_declarations:
@@ -968,7 +1019,10 @@ def probe_governed_provenance(
         installed = installed_authority_bindings(data_dir, repository_id)
         if installed is None:
             mismatches.append(
-                {"locator": repository_id, "reason": "installed authority is unavailable"}
+                {
+                    "locator": repository_id,
+                    "reason": "installed authority is unavailable",
+                }
             )
         else:
             installed_json = _json.dumps(

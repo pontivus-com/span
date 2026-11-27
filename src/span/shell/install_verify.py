@@ -69,11 +69,17 @@ def _verified_identity(
         return False
     prior = receipt.get("verify")
     recorded = prior.get("build_identity") if isinstance(prior, dict) else None
-    if not pending_setup and isinstance(recorded, dict) and any(
-        recorded.get(key) != identity.get(key)
-        for key in ("package_version", "source_revision", "source_digest")
+    if (
+        not pending_setup
+        and isinstance(recorded, dict)
+        and any(
+            recorded.get(key) != identity.get(key)
+            for key in ("package_version", "source_revision", "source_digest")
+        )
     ):
-        identity["action"] = "reinstall the previously verified Span build or explicitly install the intended revision"
+        identity["action"] = (
+            "reinstall the previously verified Span build or explicitly install the intended revision"
+        )
         return False
     identity["action"] = None
     return True
@@ -187,7 +193,9 @@ def main(argv=None):
         set(roots_by_repository),
         pending_setup=args.pending_setup,
     )
-    identity_ok = _verified_identity(identity, receipt, pending_setup=args.pending_setup)
+    identity_ok = _verified_identity(
+        identity, receipt, pending_setup=args.pending_setup
+    )
     acceptance_ok = acceptance_ok and identity_ok
     print(
         json.dumps(

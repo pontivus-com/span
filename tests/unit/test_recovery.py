@@ -594,8 +594,12 @@ class GovernedRecoveryTests(unittest.TestCase):
                     (repo / locator).write_text("independent modification")
                 receipt = (data / "install.json").read_bytes()
                 pointer = (data / "structural-indexer.json").read_bytes()
-                with self.assertRaisesRegex(SystemExit, "governed recovery conflict"):
+                with self.assertRaisesRegex(
+                    SystemExit, "governed recovery conflict"
+                ) as error:
                     self._restore(fixture)
+                self.assertNotIn(str(data), str(error.exception))
+                self.assertNotIn(".span/functional-pyramid/", str(error.exception))
                 self.assertEqual((data / "install.json").read_bytes(), receipt)
                 self.assertEqual(
                     (data / "structural-indexer.json").read_bytes(), pointer

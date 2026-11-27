@@ -75,13 +75,19 @@ def verify_installation(
             "Span verification could not complete; reinstall the requested build and verify again."
         ) from None
     if not isinstance(report, dict):
-        raise SystemExit("Span verification could not complete; verify the installation again.")
+        raise SystemExit(
+            "Span verification could not complete; verify the installation again."
+        )
     if result.returncode:
         log.debug("Runtime verification failed: %s", result.stderr)
         if strict and result.returncode == 1 and report.get("acceptance_ok") is False:
             print(json.dumps(report, sort_keys=True))
-            raise SystemExit("Span verification found an unresolved installation problem. Follow the reported action.")
-        raise SystemExit("Span verification could not complete; verify the installation again.")
+            raise SystemExit(
+                "Span verification found an unresolved installation problem. Follow the reported action."
+            )
+        raise SystemExit(
+            "Span verification could not complete; verify the installation again."
+        )
     return report
 
 

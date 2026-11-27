@@ -40,8 +40,15 @@ _POINTER = "structural-indexer.json"
 _RECEIPT = "install.json"
 
 
-def _conflict(message: str) -> NoReturn:
-    raise SystemExit(f"governed recovery conflict: {message}")
+def _conflict(message: str, diagnostic: object | None = None) -> NoReturn:
+    import logging
+
+    if diagnostic is not None:
+        logging.getLogger(__name__).debug("Governed recovery conflict: %s", diagnostic)
+    raise SystemExit(
+        f"governed recovery conflict: {message}. "
+        "Preserve the current installation and resolve the conflict before retrying."
+    )
 
 
 def _identity(path: Path) -> list[int]:
@@ -53,12 +60,12 @@ def _safe_file(root: Path, relative: str) -> Path:
     try:
         return governed._artifact_path(root, relative)
     except ValueError as exc:
-        raise SystemExit(f"governed recovery conflict: {exc}") from None
+        _conflict("a protected installation file cannot be accessed safely", exc)
 
 
 def _file_digest(path: Path) -> str | None:
     if path.is_symlink() or (path.exists() and not path.is_file()):
-        _conflict(f"not a regular owned file: {path}")
+        _conflict("protected installation content is not a regular file", path)
     return sha256_file(path) if path.is_file() else None
 
 
@@ -110,7 +117,7 @@ def _generated_files(pending: dict[str, object]) -> dict[str, Path]:
                 locator != governed.BOOTSTRAP
                 and locator != f".span/functional-pyramid/{digest}.json"
             ):
-                _conflict(f"unexpected generated path: {repository_id}/{locator}")
+                _conflict(f"unexpected governance content for {repository_id}", locator)
             key = f"governed-targets/{repository_id}/{locator}"
             result[key] = _safe_file(root, locator)
     return result
@@ -143,7 +150,7 @@ def _verified_manifest(
         _conflict(f"manifest digest differs: {backup}")
     report = verify_backup(backup)
     if not report.ok:
-        _conflict(f"unverified backup: {backup}: {report.failures}")
+        _conflict(f"the selected backup could not be verified: {backup}", report.failures)
     manifest = _load_manifest(backup)
     entries = _manifest_entries(manifest)
     if (
@@ -160,7 +167,7 @@ def _backup_digest(backup: str | None) -> str:
         raise SystemExit("governed recovery conflict: required backup was not created")
     report = verify_backup(backup)
     if not report.ok:
-        _conflict(f"backup verification failed: {report.failures}")
+        _conflict("the required backup could not be verified", report.failures)
     return sha256_file(Path(backup) / BACKUP_MANIFEST)
 
 
@@ -185,7 +192,7 @@ def protect_setup(
             pending["setup_requests"] != canonical
             or pending["pointer_digest"] != pointer_digest
         ):
-            _conflict("selected authority configuration or indexer pointer changed")
+            _conflict("the requested installation configuration has changed")
         saved = pending.get("backup")
         if "backup_manifest_digest" in pending:
             required_names = set(_database_names(pending)) | set(
@@ -233,7 +240,7 @@ def _stage_path(data_dir: Path, pending: dict[str, object], name: str) -> Path:
 def _retire_stage(stage: Path, identity: object) -> None:
     if stage.exists():
         if _identity(stage) != identity:
-            _conflict(f"staged store identity differs: {stage}")
+            _conflict("installation state created during setup has changed", stage)
         durable_unlink(stage)
     # Only remove the operation's empty staging directories, never other files.
     parent = stage.parent
@@ -290,7 +297,7 @@ def prepare_store(
         started = governed._array(pending["staging_started"])
         if name not in started:
             if stage.exists():
-                _conflict(f"unverified staged store: {stage}")
+                _conflict("installation state created during setup cannot be verified", stage)
             pending["staging_started"] = [*started, name]
             _save_pending(data_dir, pending)
         stage.parent.mkdir(parents=True, exist_ok=True)
@@ -299,7 +306,7 @@ def prepare_store(
         if stage.stat().st_size == 0:
             create(stage)
         if _database_digest(stage) != _empty_store_digest(create):
-            _conflict(f"staged store is not the canonical empty state: {stage}")
+            _conflict("new installation state contains unexpected data", stage)
         with stage.open("rb") as handle:
             os.fsync(handle.fileno())
         fsync_directory(stage.parent)
@@ -307,7 +314,7 @@ def prepare_store(
         pending["created_stores"] = created
         _save_pending(data_dir, pending)
     if not stage.is_file() or _identity(stage) != created[name]:
-        _conflict(f"reserved staged store unavailable: {stage}")
+        _conflict("installation state created during setup is unavailable", stage)
     destination.parent.mkdir(parents=True, exist_ok=True)
     os.link(stage, destination)
     fsync_directory(destination.parent)
@@ -452,7 +459,7 @@ def _database_preconditions(
                     and _database_digest(stage) != _empty_database_digest(name)
                 )
             ):
-                _conflict(f"unverified staged store: {stage}")
+                _conflict("installation state created during setup cannot be verified", stage)
             created[name] = _identity(stage)
             pending["created_stores"] = created
         if before is None and connection is not None:
@@ -476,7 +483,7 @@ def _file_preconditions(
         before = None if old is None else old.sha256
         current = _file_digest(path)
         if current not in (before, planned[name]):
-            _conflict(f"unexpected generated/support bytes: {path}")
+            _conflict("protected governance or installation content has changed independently", path)
         result[name] = current
     return result
 
@@ -529,7 +536,7 @@ def _restore_snapshot(
         observed = _snapshot_states(snapshot, entries, names, files)
         for name, state in current.items():
             if state not in (observed[name], baseline[name]):
-                _conflict(f"state changed after restore intent: {name}")
+                _conflict("installation state changed during the interrupted recovery", name)
         return snapshot
 
     snapshot_name = create_backup(
@@ -562,7 +569,7 @@ def _restore_file(path: Path, backup: Path, item: BackupArtifact | None) -> None
     else:
         publish_install_bytes(path, (backup / item.path).read_bytes(), replace=True)
     if _file_digest(path) != expected:
-        _conflict(f"restored bytes differ: {path}")
+        _conflict("restored installation content could not be verified", path)
 
 
 def _restore_database(
@@ -575,10 +582,10 @@ def _restore_database(
         if connection is not None:
             durable_unlink(path)
         if path.exists():
-            _conflict(f"retired database remains present: {path}")
+            _conflict("new installation state could not be retired", path)
         return
     if connection is None:
-        _conflict(f"prior database is absent: {path}")
+        _conflict("previous installation state is missing", path)
         return
     source = backup / item.path
     expected = _database_digest(source)
@@ -588,7 +595,7 @@ def _restore_database(
         ) as src:
             src.backup(connection)
     if logical_database_digest(connection) != expected:
-        _conflict(f"restored database differs: {path}")
+        _conflict("restored repository or installation state could not be verified", path)
 
 
 def _restore_effects(
@@ -605,7 +612,7 @@ def _restore_effects(
     restored = []
     for name, path in sorted(files.items()):
         if _file_digest(path) != current[name]:
-            _conflict(f"file changed after restore verification: {path}")
+            _conflict("protected installation content changed during verification", path)
         _restore_file(path, backup, entries[name])
         restored.append(str(path))
     for name in names:
@@ -623,17 +630,17 @@ def _restore_effects(
     for name, path in files.items():
         item = entries[name]
         if _file_digest(path) != (None if item is None else item.sha256):
-            _conflict(f"restored file state changed: {path}")
+            _conflict("restored installation content changed during recovery", path)
     for name in names:
         item = entries[name]
         path = _safe_file(data_dir, name)
         if item is None:
             if path.exists():
-                _conflict(f"retired database reappeared: {name}")
+                _conflict("retired installation state reappeared", name)
         elif not path.is_file() or logical_database_digest(
             connections[name]
         ) != _database_digest(backup / name):
-            _conflict(f"restored database state changed: {name}")
+            _conflict("restored repository or installation state changed", name)
     # Receipt is the final publication; it cannot hide incomplete reconciliation.
     _restore_file(data_dir / _RECEIPT, backup, entries[_RECEIPT])
     restored.append(str(data_dir / _RECEIPT))
@@ -730,5 +737,10 @@ def pending_restore(
                 for path in databases
             }
             return _restore_pending(backup, data_dir, backup_root, receipt, connections)
-    except (StoreHeldError, OSError, sqlite3.Error, ValueError, KeyError) as exc:
-        raise SystemExit(f"governed recovery conflict: {exc}") from None
+    except StoreHeldError as exc:
+        _conflict(
+            "exclusive recovery ownership is unavailable; stop every Span server and hook",
+            exc,
+        )
+    except (OSError, sqlite3.Error, ValueError, KeyError) as exc:
+        _conflict("the current installation or selected backup cannot be verified", exc)
