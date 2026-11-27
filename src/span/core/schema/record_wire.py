@@ -31,7 +31,8 @@ from span.core.model.investigation import (
     InvestigationContextRef as _InvestigationContextRef,
     SourceRange as _SourceRange,
 )
-from span.core.model.recording import ContentDigest
+from span.core.model.primitives import ContentDigest
+from span.core.model.surfaces import SurfaceAction
 from span.core.model.claims import AssertionNature
 from span.core.model.understanding import (
     ConclusionRevision as _ConclusionRevision,
@@ -977,7 +978,7 @@ class RecordRequestWire:
             maximum=1,
             when=(
                 _constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),
-                _constraints.EqualsCondition("action", _c.SurfaceAction.UPDATE),
+                _constraints.EqualsCondition("action", SurfaceAction.UPDATE),
             ),
             label="surface update boundary version",
         ),
@@ -987,7 +988,7 @@ class RecordRequestWire:
             maximum=0,
             when=(
                 _constraints.EqualsCondition("kind", _c.RecordKind.SURFACE),
-                _constraints.EqualsCondition("action", _c.SurfaceAction.CREATE),
+                _constraints.EqualsCondition("action", SurfaceAction.CREATE),
             ),
             label="surface create boundary version",
         ),
@@ -1022,7 +1023,7 @@ class RecordRequestWire:
         },
     )
     run: VerificationRunWire | None = None
-    action: _c.SurfaceAction | _fp.FunctionalPyramidAction | None = _field(
+    action: SurfaceAction | _fp.FunctionalPyramidAction | None = _field(
         default=None,
         metadata={
             "description": "For kind=surface use create/update. For "
@@ -1443,7 +1444,7 @@ def surface_declaration(value: RecordRequestWire) -> _surfaces.Surface:
     )
     version = (
         1
-        if value.action is _c.SurfaceAction.CREATE
+        if value.action is SurfaceAction.CREATE
         else _typing.cast(int, value.expected_boundary_version) + 1
     )
     return _surfaces.Surface(

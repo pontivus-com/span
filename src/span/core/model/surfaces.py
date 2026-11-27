@@ -21,6 +21,13 @@ from span.core.model.primitives import (
 from span.core.model.support import SupportState
 
 
+class SurfaceAction(_enum.Enum):
+    """A surface declaration is either created or boundary-updated."""
+
+    CREATE = "create"
+    UPDATE = "update"
+
+
 class SurfaceKind(_enum.Enum):
     """The granularity a surface is declared or derived at (FD-1)."""
 

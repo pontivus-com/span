@@ -338,6 +338,16 @@ class VerificationRunId:
 
 
 @_dataclass(frozen=True)
+class ContentDigest:
+    """Canonical content digest; the server owns its derivation."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("ContentDigest", self.value)
+
+
+@_dataclass(frozen=True)
 class RequestId:
     """Caller-owned identity for one initial investigation request."""
 

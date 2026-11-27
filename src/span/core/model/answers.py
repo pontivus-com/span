@@ -27,8 +27,8 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidUnavailable,
     FunctionalPyramidVersion,
     FunctionalPyramidView,
-    RetrievedFunctionalPyramidReceipt,
 )
+from span.core.model.recording import ChangeReason, RetrievedFunctionalPyramidReceipt
 from span.core.model.investigation import (
     EvidenceAdmissionView,
     EvidenceDelivery,
@@ -74,14 +74,6 @@ class GapReason(_enum.Enum):
     UNVERIFIABLE = "unverifiable"
     PENDING_CURATION = "pending_curation"
     UNASSESSED = "unassessed"
-
-
-class ChangeReason(_enum.Enum):
-    """Why a surface appears in a reconsideration result (FD-20)."""
-
-    CONTAINMENT = "containment"
-    DIRECT = "direct"
-    INDIRECT = "indirect"
 
 
 @_dataclass(frozen=True)

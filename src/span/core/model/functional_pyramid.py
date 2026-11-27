@@ -16,14 +16,12 @@ from dataclasses import dataclass as _dataclass
 from span.core.model.investigation import EvidenceRequest
 from span.core.model.primitives import (
     AuthorityBinding,
-    ConclusionRevisionRef,
     EvidenceRef,
     EvidenceScope,
     RequestId,
     _require_non_empty,
     _require_positive_int,
 )
-from span.core.model.recording import ContentDigest
 
 
 class FunctionalPyramidParticipationState(_enum.Enum):
@@ -791,49 +789,6 @@ class FunctionalPyramidUnavailable:
 @_dataclass(frozen=True)
 class FunctionalPyramidReceiptSelector:
     request_id: RequestId
-
-
-@_dataclass(frozen=True)
-class RetrievedFunctionalPyramidReceipt:
-    request_id: RequestId
-    content_digest: ContentDigest
-    committed_at: _datetime.datetime
-    action: FunctionalPyramidAction
-    pyramid_id: FunctionalPyramidId | None
-    version: FunctionalPyramidVersion | None
-    members: tuple[FunctionalPyramidMemberView, ...]
-    participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]
-    dependent_effect_refs: tuple[ConclusionRevisionRef, ...]
-
-    def __post_init__(self) -> None:
-        if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
-            raise ValueError(
-                "RetrievedFunctionalPyramidReceipt.committed_at must be aware"
-            )
-        if len({effect.repository_id for effect in self.participation_effects}) != len(
-            self.participation_effects
-        ):
-            raise ValueError("participation effects must be unique per repository")
-        if len(set(self.dependent_effect_refs)) != len(self.dependent_effect_refs):
-            raise ValueError("dependent effect refs must be distinct")
-        if self.action in (
-            FunctionalPyramidAction.ACTIVATE,
-            FunctionalPyramidAction.REVISE,
-        ):
-            if self.pyramid_id is None or self.version is None or not self.members:
-                raise ValueError(
-                    "activate/revise receipt requires live instance members"
-                )
-            return
-        if self.members:
-            raise ValueError("deactivate/exclude receipt has no active members")
-        if self.action is FunctionalPyramidAction.DEACTIVATE:
-            if self.pyramid_id is None or self.version is None:
-                raise ValueError("deactivate receipt requires pyramid identity/version")
-            return
-        if self.action is FunctionalPyramidAction.EXCLUDE:
-            if self.pyramid_id is not None or self.version is not None:
-                raise ValueError("exclude receipt has no pyramid identity/version")
 
 
 @_dataclass(frozen=True)

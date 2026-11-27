@@ -13,6 +13,7 @@ from dataclasses import dataclass as _dataclass
 
 from span.core.schema import constraints as _constraints
 from span.core.model.primitives import (
+    ContentDigest,
     DiscoveryObservationId,
     EvidenceRef,
     EvidenceScope,
@@ -22,7 +23,6 @@ from span.core.model.primitives import (
     _require_non_empty,
     _require_positive_int,
 )
-from span.core.model.recording import ContentDigest
 from span.core.model.repository import EvidenceUnit
 
 
