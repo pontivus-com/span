@@ -15,6 +15,7 @@ from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.effects import DependencyEffectService
 from span.service.reconsider import ReconsiderService
 from span.service.support import SupportService
+from span.service.understand import UnderstandService
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.shell.sqlite_store.lifecycle import LifecycleStore
 
@@ -197,6 +198,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             )
         return ReconsiderService(
             store=self.store,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=evidence,
             policy=selected_policy,
             clock=selected_clock,
@@ -858,6 +860,7 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         service = ReconsiderService(
             store=store_auth,
+            understand=UnderstandService(store=store_auth, support=support),
             effects=effects,
             clock=lambda: NOW,
         )
@@ -1097,6 +1100,12 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(result.challenge.understanding_id.value, "u-a")
         self.assertEqual(result.challenge.target_conclusions, (target,))
         self.assertEqual(result.challenge.state, m.ChallengeState.OPEN)
+        self.assertEqual(result.receipt_selector.request_id, "req-challenge")
+        self.assertEqual(result.committed_at, NOW)
+        self.assertEqual(tuple(item.ref for item in result.prior_conclusions), (target,))
+        content = result.prior_conclusions[0].content
+        assert isinstance(content, m.SupportedAuditContent)
+        self.assertEqual(content.statement, "It does something.")
 
     def test_challenge_rejects_unadmitted_evidence(self) -> None:
         with self.assertRaisesRegex(RecordingValidationError, "not admitted"):

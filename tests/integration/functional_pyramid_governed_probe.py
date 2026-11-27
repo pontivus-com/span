@@ -49,7 +49,10 @@ def _dicts(value):
 
 def _has_route_support(value) -> bool:
     return any(
-        "route_identity" in item and "semantic_scope" in item and "pyramid_id" in item
+        item.get("$type") == "GovernanceSupportBasis"
+        and "scope" in item
+        and "pyramid_id" in item
+        and "route_identity" not in item
         for item in _dicts(value)
     )
 
@@ -57,7 +60,9 @@ def _has_route_support(value) -> bool:
 def _authority_locators(value, repository_id):
     found = set()
     for item in _dicts(value):
-        evidence = item.get("evidence_ref")
+        if item.get("$type") != "AuthoritySupportBasis":
+            continue
+        evidence = item.get("evidence")
         if not isinstance(evidence, dict):
             continue
         if evidence.get("repository_id") != repository_id:

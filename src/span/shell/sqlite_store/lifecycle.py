@@ -1536,20 +1536,15 @@ class LifecycleStore:
         understanding = self._get_understanding_in(
             connection, challenge.understanding_id.value
         )
-        self._get_version_in(
+        version = self._get_version_in(
             connection,
             challenge.understanding_id.value,
             challenge.target_version.value,
         )
         for ref in challenge.target_conclusions:
-            if not self._has_conclusion_revision_in(
-                connection,
-                ref.understanding_id.value,
-                ref.conclusion_id.value,
-                ref.revision.value,
-            ):
+            if ref not in version.conclusions:
                 raise RecordingValidationError(
-                    "challenge target revision does not exist: "
+                    "challenge target revision does not belong to the selected version: "
                     f"{ref.conclusion_id.value}@{ref.revision.value}"
                 )
         for evidence_ref in challenge.evidence:

@@ -345,11 +345,18 @@ class ChangeCarrierTest(unittest.TestCase):
                 m.VerificationRecorded,
                 m.SurfaceDeclared,
                 m.FunctionalPyramidRecorded,
+                m.AcceptedDetailUnavailable,
                 m.Rejected,
                 m.Unavailable,
             },
         )
         self.assertEqual(
             reconsider,
-            {m.Changed, m.Challenged, m.Rejected, m.Unavailable},
+            {
+                m.Changed,
+                m.Challenged,
+                m.AcceptedDetailUnavailable,
+                m.Rejected,
+                m.Unavailable,
+            },
         )

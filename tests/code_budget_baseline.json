@@ -2,7 +2,7 @@
   "any_count": 6,
   "bare_generics": 34,
   "broad_excepts": 14,
-  "concrete_carriers": 244,
+  "concrete_carriers": 245,
   "core_layer_violations": 0,
   "duplicate_helper_bodies": 0,
   "duplicate_source_groups": 0,
@@ -10,7 +10,7 @@
   "getattr": 9,
   "inline_addendum_refs": 0,
   "longest_function": 141,
-  "longest_module": 1913,
+  "longest_module": 1919,
   "mapping_symbols": 0,
   "max_carrier_fields": 14,
   "most_branches": 36,
@@ -22,7 +22,7 @@
   "test_doubles_in_src": 0,
   "test_files": 60,
   "test_helper_definitions": 3,
-  "test_lines": 35899,
+  "test_lines": 35934,
   "type_ignore": 22,
   "untyped_defs": 103
 }

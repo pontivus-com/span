@@ -55,8 +55,11 @@ from span.core.model.surfaces import (
     SurfaceStatus,
 )
 from span.core.model.understanding import (
+    AuditConclusion,
     Challenge,
+    HistoricalAcceptanceDetailUnavailable,
     PendingCuration,
+    ReceiptRetrievalSelector,
     RecordedQuestionGap,
     RetrievedReceipt,
     RetrievedUnderstanding,
@@ -387,8 +390,32 @@ class Changed:
 class Challenged:
     """A challenge opened by reconsideration, with its derived context."""
 
+    receipt_selector: ReceiptRetrievalSelector
+    committed_at: _datetime.datetime
     challenge: Challenge
     context: InvestigationContextRef
+    prior_conclusions: tuple[AuditConclusion, ...]
+
+    def __post_init__(self) -> None:
+        if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
+            raise ValueError("challenge commitment timestamp must be aware")
+        if tuple(item.ref for item in self.prior_conclusions) != (
+            self.challenge.target_conclusions
+        ):
+            raise ValueError("challenge prior conclusions must match exact targets")
+
+
+@_dataclass(frozen=True)
+class AcceptedDetailUnavailable:
+    """A committed write whose required historical detail cannot be served."""
+
+    receipt_selector: ReceiptRetrievalSelector | FunctionalPyramidReceiptSelector
+    committed_at: _datetime.datetime
+    detail: HistoricalAcceptanceDetailUnavailable
+
+    def __post_init__(self) -> None:
+        if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
+            raise ValueError("acceptance commitment timestamp must be aware")
 
 
 AskResult = _typing.Union[
@@ -413,7 +440,10 @@ RecordResult = _typing.Union[
     VerificationRecorded,
     SurfaceDeclared,
     FunctionalPyramidRecorded,
+    AcceptedDetailUnavailable,
     Rejected,
     Unavailable,
 ]
-ReconsiderResult = _typing.Union[Changed, Challenged, Rejected, Unavailable]
+ReconsiderResult = _typing.Union[
+    Changed, Challenged, AcceptedDetailUnavailable, Rejected, Unavailable
+]

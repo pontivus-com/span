@@ -14,12 +14,17 @@ import uuid as _uuid
 
 from span.core import model as m
 from span.core.identity import record_content_digest
-from span.core.recording import RecordingValidationError
+from span.core.recording import (
+    RecordingConflict,
+    RecordingValidationError,
+    receipt_decision,
+)
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
 from span.service.effects import DependencyEffectService
+from span.service.understand import UnderstandService
 
 __all__ = ["ReconsiderService"]
 
@@ -40,6 +45,7 @@ class ReconsiderService:
         *,
         store: LifecycleStorePort,
         effects: DependencyEffectService,
+        understand: UnderstandService,
         evidence: EvidenceService | None = None,
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
@@ -51,10 +57,11 @@ class ReconsiderService:
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or (lambda: "ctx-" + _uuid.uuid4().hex)
         self._effects = effects
+        self._understand = understand
 
     def reconsider(
         self, request: m.ReconsiderRequest
-    ) -> m.Changed | m.Challenged | m.Unavailable:
+    ) -> m.Changed | m.Challenged | m.AcceptedDetailUnavailable | m.Unavailable:
         if request.challenge is not None:
             repository_id = request.bound_repository_id
             self._store.require_repository(repository_id)
@@ -79,11 +86,29 @@ class ReconsiderService:
 
     def _raise_challenge(
         self, repository_id: str, challenge: m.ChallengeRaise
-    ) -> m.Challenged:
-        """Raise one explicit dispute through reconsider (L2 §4.3)."""
+    ) -> m.Challenged | m.AcceptedDetailUnavailable:
+        """Accept or replay one explicit dispute through reconsider (L2 §4.3)."""
+        key = m.RecordingKey(repository_id, m.RequestId(challenge.request_id))
+        existing = self._store.get_receipt(key)
+        if existing is not None:
+            command = self._challenge_command(
+                repository_id, challenge, existing.identity.context_id
+            )
+            decision = receipt_decision(existing, key, record_content_digest(command))
+            if decision.kind is m.ReceiptDecisionKind.CONFLICT:
+                raise RecordingConflict(
+                    decision.reason,
+                    cause_kind=m.RejectionCauseKind.REPLAY_CONFLICT,
+                )
+            return self._understand.challenge_opening(existing)
+
         understanding = self._store.find_understanding(challenge.understanding_id)
         if understanding is None:
             raise _unknown_exact("understanding", challenge.understanding_id)
+        if understanding.repository_id != repository_id:
+            raise RecordingValidationError(
+                "challenge target belongs to another repository"
+            )
         version = self._store.find_version(
             challenge.understanding_id, challenge.target_version
         )
@@ -111,7 +136,19 @@ class ReconsiderService:
                     f"challenge evidence {reference.evidence_id.value!r} is not "
                     f"admitted in context {context_id.value}"
                 )
-        command = m.CreateChallengeCommand(
+        command = self._challenge_command(repository_id, challenge, context_id)
+        receipt = self._store.record_challenge(
+            command, content_digest=record_content_digest(command)
+        )
+        return self._understand.challenge_opening(receipt)
+
+    @staticmethod
+    def _challenge_command(
+        repository_id: str,
+        challenge: m.ChallengeRaise,
+        context_id: m.InvestigationContextId,
+    ) -> m.CreateChallengeCommand:
+        return m.CreateChallengeCommand(
             identity=m.RecordingIdentity(
                 repository_id=repository_id,
                 request_id=m.RequestId(challenge.request_id),
@@ -129,22 +166,6 @@ class ReconsiderService:
             ),
             reason=challenge.reason,
             evidence=challenge.evidence,
-        )
-        receipt = self._store.record_challenge(
-            command, content_digest=record_content_digest(command)
-        )
-        if not receipt.accepted_challenge_ids:
-            raise RecordingValidationError(
-                "a challenge receipt has no accepted challenge"
-            )
-        return m.Challenged(
-            challenge=self._store.get_challenge(
-                receipt.accepted_challenge_ids[0].value
-            ),
-            context=m.InvestigationContextRef(
-                repository_id=repository_id,
-                context_id=context_id,
-            ),
         )
 
     def _challenge_context(

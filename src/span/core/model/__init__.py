@@ -325,6 +325,7 @@ from span.core.model.surfaces import (  # noqa: F401
 )
 from span.core.model.answers import (  # noqa: F401
     AmbiguousSurface,
+    AcceptedDetailUnavailable,
     Answer,
     AnswerGroup,
     AskResult,
@@ -632,6 +633,7 @@ __all__ = [
     "PendingConclusionRef",
     "StaleConclusionRef",
     "AmbiguousSurface",
+    "AcceptedDetailUnavailable",
     "Answer",
     "AnswerGroup",
     "AskResult",

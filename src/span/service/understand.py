@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from span.core import model as m
-from span.core.recording import RecordingValidationError
+from span.core.recording import RecordingValidationError, create_challenge
 from span.ports.lifecycle import LifecycleStorePort
 from span.service.support import SupportService
 
@@ -114,39 +114,109 @@ class UnderstandService:
         ):
             accepted_effect = m.AcceptedVerificationReceipt(verification_runs)
         else:
-            accepted_effect = m.HistoricalAcceptanceDetailUnavailable(
-                understanding_versions=tuple(
-                    m.UnderstandingVersionRef(identity, version)
-                    for identity, version in zip(
-                        receipt.accepted_understanding_ids,
-                        receipt.accepted_understanding_versions,
-                        strict=True,
-                    )
-                ),
-                verification_run_ids=receipt.accepted_verification_run_ids,
-                challenge_ids=receipt.accepted_challenge_ids,
-                dependent_effect_refs=receipt.dependent_effects,
-                reason="the retained receipt does not contain exact accepted effects",
-                recovery="retrieve the named historical records; do not repeat the write",
-            )
+            accepted_effect = self.unavailable_acceptance(receipt)
         return m.RetrievedReceipt(
             receipt_selector=request,
             committed_at=receipt.committed_at,
             accepted_effect=accepted_effect,
         )
 
+    @staticmethod
+    def unavailable_acceptance(
+        receipt: m.RecordReceipt,
+    ) -> m.HistoricalAcceptanceDetailUnavailable:
+        return m.HistoricalAcceptanceDetailUnavailable(
+            understanding_versions=tuple(
+                m.UnderstandingVersionRef(identity, version)
+                for identity, version in zip(
+                    receipt.accepted_understanding_ids,
+                    receipt.accepted_understanding_versions,
+                    strict=True,
+                )
+            ),
+            verification_run_ids=receipt.accepted_verification_run_ids,
+            challenge_ids=receipt.accepted_challenge_ids,
+            dependent_effect_refs=receipt.dependent_effects,
+            reason="exact accepted detail is unavailable",
+            recovery="retrieve the named historical records; do not repeat the write",
+        )
+
+    def challenge_opening(
+        self, receipt: m.RecordReceipt
+    ) -> m.Challenged | m.AcceptedDetailUnavailable:
+        selector = m.ReceiptRetrievalSelector(
+            repository_id=receipt.identity.repository_id,
+            request_id=receipt.identity.request_id.value,
+        )
+        try:
+            if len(receipt.accepted_challenge_ids) != 1:
+                raise RecordingValidationError("receipt has no exact challenge opening")
+            retained = self._store.get_challenge(
+                receipt.accepted_challenge_ids[0].value
+            )
+            opening = create_challenge(
+                challenge_id=retained.challenge_id,
+                understanding_id=retained.understanding_id,
+                target_version=retained.target_version,
+                target_conclusions=retained.target_conclusions,
+                reason=retained.reason,
+                evidence=retained.evidence,
+                provenance=retained.provenance,
+                now=retained.created_at,
+            )
+            version = self._store.get_version(
+                opening.understanding_id.value, opening.target_version.value
+            )
+            curations = self._store.get_curations(
+                opening.understanding_id.value, as_of_version=version.version
+            )
+            conclusions = self._audit_membership(
+                version, curations, selected=opening.target_conclusions
+            )
+        except (OSError, RecordingValidationError) + self._store.operational_errors:
+            return m.AcceptedDetailUnavailable(
+                receipt_selector=selector,
+                committed_at=receipt.committed_at,
+                detail=self.unavailable_acceptance(receipt),
+            )
+        return m.Challenged(
+            receipt_selector=selector,
+            committed_at=receipt.committed_at,
+            challenge=opening,
+            context=m.InvestigationContextRef(
+                repository_id=receipt.identity.repository_id,
+                context_id=receipt.identity.context_id,
+            ),
+            prior_conclusions=conclusions,
+        )
+
+    def _audit_membership(
+        self,
+        version: m.UnderstandingVersion,
+        curations: tuple[m.CurationDisposition, ...],
+        *,
+        selected: tuple[m.ConclusionRevisionRef, ...] | None = None,
+    ) -> tuple[m.AuditConclusion, ...]:
+        curated = {item.ref for item in curations}
+        refs = version.conclusions if selected is None else selected
+        revisions = {
+            m.ConclusionRevisionRef(
+                revision.understanding_id, revision.conclusion_id, revision.revision
+            ): revision
+            for revision in self._store.get_version_conclusions(
+                version.understanding_id.value, version.version.value
+            )
+        }
+        if any(ref not in revisions for ref in refs):
+            raise RecordingValidationError("selected historical revision is unavailable")
+        return tuple(self._audit_revision(revisions[ref], curated) for ref in refs)
+
     def _snapshot(
         self, understanding: m.Understanding, version: m.UnderstandingVersion
     ) -> m.RetrievedUnderstanding:
         identity = understanding.understanding_id.value
         curations = self._store.get_curations(identity, as_of_version=version.version)
-        curated = {item.ref for item in curations}
-        conclusions = tuple(
-            self._audit_revision(revision, curated)
-            for revision in self._store.get_version_conclusions(
-                identity, version.version.value
-            )
-        )
+        conclusions = self._audit_membership(version, curations)
         return m.RetrievedUnderstanding(
             repository_id=understanding.repository_id,
             surface=understanding.surface,

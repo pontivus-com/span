@@ -333,7 +333,11 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(result, m.Answer)
         self.assertEqual(result.status.unexamined, 1)
         self.assertTrue(result.status.unexamined_limited)
-        self.assertEqual(result.status.descendants, ())
+        self.assertEqual(
+            tuple(item.surface.locator for item in result.status.descendants),
+            ("src/a.py",),
+        )
+        self.assertEqual(result.status.descendants[0].current, 1)
 
     def test_descendant_status_is_reported_separately(self) -> None:
         parent = m.SurfaceKey(
@@ -396,7 +400,17 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(result.status.descendants[0].surface, child)
         self.assertEqual(result.status.current, 1)
         self.assertEqual(result.status.descendants[0].current, 1)
-        exact = self._ask("domain", "What does domain do?")
+        exact = self.service.ask(
+            m.AskRequest(
+                selector=m.RecordedQuestionSelector(
+                    repository_id="repo-1",
+                    surface=m.SurfaceReference(
+                        kind=m.SurfaceKind.DOMAIN, locator="domain"
+                    ),
+                    question="What does domain do?",
+                )
+            )
+        )
         assert isinstance(exact, m.Answer)
         self.assertEqual(exact.status.current, 1)
         self.assertEqual(exact.status.descendants, ())

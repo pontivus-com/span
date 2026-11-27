@@ -179,13 +179,14 @@ def compose_context(
         support_for_repository=support_for,
         functional_route_impacts=functional_pyramid.changed_route_identities,
     )
+    understand = UnderstandService(store=store, support=support)
     reconsider = ReconsiderService(
         store=store,
         effects=effects,
+        understand=understand,
         evidence=evidence_service,
         policy=policy,
     )
-    understand = UnderstandService(store=store, support=support)
     answer = AnswerService(
         store=store,
         support=support,
