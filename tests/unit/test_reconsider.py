@@ -266,9 +266,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             item.ref for surface in projection.surfaces for item in surface.conclusions
         ]
         self.assertEqual(len(refs), len(set(refs)))
-        self.assertEqual(
-            {ref.understanding_id.value for ref in refs}, {"u-a", "u-b"}
-        )
+        self.assertEqual({ref.understanding_id.value for ref in refs}, {"u-a", "u-b"})
 
     def test_changed_path_maps_containment_direct_and_indirect(self) -> None:
         result = self.service.reconsider(

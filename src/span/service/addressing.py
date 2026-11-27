@@ -79,8 +79,8 @@ class AddressingService:
         return tuple(
             m.ReconsiderRequest(
                 repository_id=owner,
-                changed_paths=tuple(dict.fromkeys(paths.get(owner, ()))),
-                changed_surfaces=tuple(dict.fromkeys(surfaces.get(owner, ()))),
+                changed_paths=tuple(dict.fromkeys(paths.get(owner, []))),
+                changed_surfaces=tuple(dict.fromkeys(surfaces.get(owner, []))),
             )
             for owner in sorted(set(paths) | set(surfaces))
         )
