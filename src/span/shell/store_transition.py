@@ -771,9 +771,9 @@ def _verify_archive(paths: TransitionPaths, manifest: TransitionManifest) -> Non
         raise TransitionError("verified source archive is missing or changed")
 
 
-def _database_facts(connection: _sqlite3.Connection) -> tuple[
-    frozenset[tuple[str, str, str, str | None]], tuple[TableInventory, ...]
-]:
+def _database_facts(
+    connection: _sqlite3.Connection,
+) -> tuple[frozenset[tuple[str, str, str, str | None]], tuple[TableInventory, ...]]:
     return (
         _catalog(connection),
         tuple(_scan_table(connection, table)[0] for table in _table_names(connection)),
@@ -1445,9 +1445,7 @@ def _activate(
     return tuple(effects)
 
 
-def _prepare_replacement(
-    source: _sqlite3.Connection, path: _pathlib.Path
-) -> None:
+def _prepare_replacement(source: _sqlite3.Connection, path: _pathlib.Path) -> None:
     # No journal from the former inode may accompany the published database.
     mode = str(source.execute("PRAGMA journal_mode=DELETE").fetchone()[0])
     if mode.lower() != "delete" or any(
