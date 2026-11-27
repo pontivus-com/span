@@ -366,9 +366,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
         )
         source = FixtureEvidenceSource("repo-a", files)
         request = m.InitializeRepositoryRequest("repo-a", refs, bindings)
-        with mock.patch.object(
-            source, "read_exact", wraps=source.read_exact
-        ) as read:
+        with mock.patch.object(source, "read_exact", wraps=source.read_exact) as read:
             validated = validate_authority_configuration(
                 request, repository_id="repo-a", evidence=source
             )
@@ -379,9 +377,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
             tuple(files),
         )
         self.assertTrue(
-            all(
-                ref.revision_or_fingerprint for ref in validated.authority_seeds or ()
-            )
+            all(ref.revision_or_fingerprint for ref in validated.authority_seeds or ())
         )
 
     def test_late_invalid_authority_rejected_before_pending_or_runtime(self):

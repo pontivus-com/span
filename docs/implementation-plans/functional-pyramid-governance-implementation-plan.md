@@ -183,7 +183,7 @@ CI or a successful count-only installation.
 `service/administration.py` and installer preflight/provisioning composition,
 existing EvidenceSource port. The exact-locator validator and installer
 preflight are implemented; unit and installed field-scale regressions added.
-Test-line ratchet records the measured added regression lines (193); no
+Test-line ratchet records the measured added regression lines (189); no
 delivery or semantic budget changed. Do not accept this gate until focused
 and exact-candidate CI evidence is available; S-FIELD-02–04 remain open.
 
