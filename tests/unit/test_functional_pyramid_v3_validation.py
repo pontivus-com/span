@@ -632,12 +632,8 @@ class FunctionalPyramidWorkedExampleTest(unittest.TestCase):
             },
         ).view
         self.assertEqual(shared_view.status, m.FunctionalPyramidRouteStatus.RESOLVED)
-        self.assertIn(
-            m.public_pyramid_placement(shared, roots), shared_view.placements
-        )
-        self.assertIn(
-            m.public_pyramid_placement(goals, roots), shared_view.placements
-        )
+        self.assertIn(m.public_pyramid_placement(shared, roots), shared_view.placements)
+        self.assertIn(m.public_pyramid_placement(goals, roots), shared_view.placements)
 
         narrowless = fp.resolve_functional_pyramid_directory_route(
             roots=roots,
