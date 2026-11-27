@@ -309,7 +309,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             with (
                 self.subTest(lookup=lookup),
                 mock.patch.object(self.store, lookup, side_effect=fault),
-                mock.patch.object(self.store, "put_context") as write_context,
+                mock.patch.object(self.store, "resolve_context") as write_context,
             ):
                 result = self.service.reconsider(request)
                 self.assertIsInstance(result, m.Unavailable)
@@ -974,7 +974,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             functional_route_impacts=lambda repository_id, paths, surfaces: (
                 (route_id,)
                 if repository_id == "repo-1"
-                and paths == ("docs/functional-pyramid.json",)
+                and "docs/functional-pyramid.json" in paths
                 and not surfaces
                 else ()
             ),
@@ -991,6 +991,28 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         before_one = tuple(self.store._connection.iterdump())
         before_two = tuple(store_two._connection.iterdump())
+
+        # A second owner's context requirements can fail after the first
+        # owner's have been gathered. No owner may have a context yet.
+        exact_revision = effects._conclusion_revision
+
+        def interrupted_context_basis(ref):
+            if ref.understanding_id.value == "u-repo-2":
+                raise OSError("remote retained basis unavailable")
+            return exact_revision(ref)
+
+        with mock.patch.object(
+            effects, "_conclusion_revision", side_effect=interrupted_context_basis
+        ):
+            interrupted = service.reconsider(
+                m.ReconsiderRequest(
+                    repository_id="repo-1",
+                    changed_paths=("src/a.py", "docs/functional-pyramid.json"),
+                )
+            )
+        self.assertIsInstance(interrupted, m.Unavailable)
+        self.assertEqual(tuple(self.store._connection.iterdump()), before_one)
+        self.assertEqual(tuple(store_two._connection.iterdump()), before_two)
 
         preview = service.preview_changed_scope(request)
 

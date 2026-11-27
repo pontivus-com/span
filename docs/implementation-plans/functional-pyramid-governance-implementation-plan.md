@@ -1,6 +1,6 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Public lifecycle boundary remediation API-01–23 design amended; PUB-01 generated-schema/provider audit and PUB-02–10 implementation/verification OPEN (§3B). Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 implemented in candidate; full CI, native host delivery and operator-output boundary acceptance remain open.
+**Status:** Public lifecycle boundary remediation API-01–23 design amended; PUB-01 owner-confirmed complete; PUB-02–10 implementation/verification OPEN (§3B). Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-01–03 candidate CI green at `8d6548d71f49`; exhaustive recovery/acceptance closeout remains open. Follow-up S-FIELD-05–07 implemented in candidate; full CI, native host delivery and operator-output boundary acceptance remain open.
 **Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
@@ -634,7 +634,7 @@ claims of already passing tests.
 
 ### Ordered implementation tasks (all OPEN)
 
-**PUB-01 — Executable baseline and conformance preflight (IN PROGRESS).** Before production
+**PUB-01 — Executable baseline and conformance preflight (OWNER-CONFIRMED COMPLETE).** Before production
 changes, generate the actual three tool request/result schemas at the pinned
 source baseline and recursively enumerate every reachable public carrier,
 including nested unions, optional fields, errors and actual free-text
@@ -691,6 +691,12 @@ without issuing contexts. Preserve all real delivery-bound checks in their
 existing owner tests. New probes await execution; do not claim PUB-01 closure.
 Remaining full provider/consumer/schema audit and all dependent gates stay
 OPEN. Existing intentional red assertions are not waived or xfailed.
+
+**PUB-01 owner direction (2026-11-27).** The release owner confirmed that
+PUB-01 is complete and directed implementation to continue across the remaining
+PUB tasks without repeating baseline work. Earlier OPEN statements above are
+historical execution records; this owner direction does not invent additional
+baseline evidence or waive task-specific conformance/architecture acceptance.
 
 **Architecture acceptance applies at each PUB task gate.** TD §9.2's
 remediation construction ownership is binding. PUB-01 records actual
@@ -811,6 +817,21 @@ facts, one service-owned repository-qualified traversal and one live-effect
 projector; no shell graph walk, local fallback or new semantic callback.
 Prove same engine used by ordinary/participation/record effects and preview;
 preview writes no contexts or delivery state. I-01/13/15/28/30/48.
+
+**PUB-02/03 candidate development update (OPEN).** Commits
+`eb37ba4`, `32bf2a7`, `fa4ff73`, and `da429da` reconcile stale
+test compositions, preserve unavailable recorded basis coordinates and
+distinguish operational errors from invalid model state. Reconsider returns
+Unavailable for interrupted discovery and requires the original changed scope
+on retry. Participation route-provider failures propagate before commitment.
+The shared context owner gathers every actionable repository's complete
+binding before issuing any context. Failure-before/after probes cover all five
+support basis kinds, discovery interruption, precommit activation failure and
+cross-repository context gathering. No storage version is changed; shared
+immutable verification/challenge components, receipt audit, accepted causes,
+migration, bounded delivery and acceptance remain OPEN. Actions is the only
+test execution owner; do not claim acceptance before the exact candidate's
+checks complete.
 
 **PUB-04 — Bound exact result delivery (API-04/07–09/16/21/22).** After
 PUB-02/03 and PUB-07A, modify service/continuation.py, bounds.py, answer.py, evidence.py,
@@ -1034,7 +1055,8 @@ integrated code cutover before PUB-04: intermediate incompatible schemas are
 not valid committed runtime states. No task may introduce temporary parallel
 carriers or postpone removal of a superseded active path. The §3B order
 supersedes earlier independent-task wording for this track.
-All PUB tasks remain OPEN pending executable evidence. The documented
+PUB-02–10 remain OPEN pending executable acceptance evidence. PUB-01 is
+owner-confirmed complete. The documented
 contracts are design targets; the source baseline still contains the defects.
 
 **Review closure trace (F01–F09).** F01: G7/F9/F11 and L1/L9 reconciled

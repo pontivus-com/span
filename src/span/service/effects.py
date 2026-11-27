@@ -549,7 +549,9 @@ class DependencyEffectService:
                 if self._is_actionable(conclusion):
                     actionable.setdefault(repository_id, []).append(conclusion)
 
-        contexts: list[m.InvestigationContextRef] = []
+        pending: list[
+            tuple[str, ContextBinding, tuple[str, ...], tuple[str, ...]]
+        ] = []
         for repository_id in sorted(actionable):
             store = self._store_for_repository(repository_id)
             scopes = list(root_scopes.get(repository_id, ()))
@@ -613,11 +615,9 @@ class DependencyEffectService:
             if not scopes:
                 scopes.append(m.EvidenceScope())
 
-            context_id = self._new_context_id()
-            contexts.append(
-                self._context_issuer(
+            pending.append(
+                (
                     repository_id,
-                    context_id,
                     context_binding(
                         scope=m.evidence_scope_union(scopes),
                         origin=m.ContextOrigin.CHANGED_SUPPORT,
@@ -626,7 +626,19 @@ class DependencyEffectService:
                     tuple(sorted(discovery_observations)),
                 )
             )
-        return tuple(contexts)
+
+        # All owner scopes and retained observation identities must be known
+        # before issuing any context. An interrupted discovery writes nothing.
+        return tuple(
+            self._context_issuer(
+                repository_id,
+                self._new_context_id(),
+                binding,
+                source_ids,
+                discovery_ids,
+            )
+            for repository_id, binding, source_ids, discovery_ids in pending
+        )
 
     def _issue_reestablishment_context(
         self,
