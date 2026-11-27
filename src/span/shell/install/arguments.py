@@ -8,6 +8,11 @@ import argparse
 def _add_transition_arguments(parser) -> None:
     """The one offline transition command surface (§8.5)."""
     parser.add_argument(
+        "--transition-installation",
+        action="store_true",
+        help="Transition the complete installation and every registered repository offline.",
+    )
+    parser.add_argument(
         "--transition-store",
         default=None,
         metavar="REPOSITORY_ID",
@@ -204,6 +209,7 @@ def _validate_classification_options(
         "verify_backup",
         "verify_repository_backup",
         "transition_store",
+        "transition_installation",
         "transition_phase",
         "transition_root",
         "uninstall",

@@ -168,14 +168,16 @@ class TransitionPaths:
 
     data_dir: _pathlib.Path
     repository_id: str
+    active_override: _pathlib.Path | None = None
+    workspace: _pathlib.Path | None = None
 
     @property
     def active(self) -> _pathlib.Path:
-        return self.data_dir / f"{self.repository_id}.db"
+        return self.active_override or self.data_dir / f"{self.repository_id}.db"
 
     @property
     def transition_dir(self) -> _pathlib.Path:
-        return self.data_dir / _TRANSITIONS_DIR / self.repository_id
+        return self.workspace or self.data_dir / _TRANSITIONS_DIR / self.repository_id
 
     @property
     def manifest(self) -> _pathlib.Path:

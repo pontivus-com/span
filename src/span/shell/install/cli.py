@@ -253,6 +253,20 @@ def _run_one_shot(env: _Environment) -> bool:
         return True
     if _run_recovery_command(env):
         return True
+    if args.transition_installation:
+        if args.transition_store is not None or args.transition_root is not None:
+            raise SystemExit("installation transition cannot select a single store or root")
+        if args.transition_phase is None:
+            raise SystemExit("installation transition requires --transition-phase")
+        from span.shell.store_transition_installation import dispatch_installation
+
+        phase = "inspect" if env.dry else args.transition_phase
+        try:
+            result = dispatch_installation(env.data_dir, phase)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from None
+        print(json.dumps(result, sort_keys=True))
+        return True
     if args.transition_phase is not None or args.transition_root is not None:
         if args.transition_store is None:
             raise SystemExit(
@@ -1037,7 +1051,7 @@ def main(argv=None):
 
     try:
         with administrative_ownership(env.data_dir):
-            if env.args.restore_backup is not None:
+            if env.args.restore_backup is not None or env.args.transition_installation:
                 _execute(env)
             else:
                 with store_use_ownership(env.data_dir):

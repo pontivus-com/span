@@ -641,6 +641,8 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
                 expected_version=candidate.expected_version,
                 changed_authority_refs=_changed_authorities(pending),
             )
+            if isinstance(recorded, m.AcceptedDetailUnavailable):
+                raise ValueError("accepted participation detail is unavailable; retrieve the retained receipt")
             pyramid_id, version = recorded.pyramid_id, recorded.version
             pending["participation_result"] = m.to_canonical(recorded)
             print("Governed participation accepted.")
