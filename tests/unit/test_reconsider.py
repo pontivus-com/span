@@ -445,8 +445,8 @@ class ReconsiderServiceTest(unittest.TestCase):
 
     def test_changed_scope_context_does_not_admit_current_support(self) -> None:
         support = mock.Mock(spec=SupportService)
-        support.qualify_support.side_effect = (
-            lambda evaluation: m.compact_support(evaluation, ())
+        support.qualify_support.side_effect = lambda evaluation: m.compact_support(
+            evaluation, ()
         )
         support.evaluate_revision.return_value = support_rules.evaluation(
             m.SupportState.CURRENT,
@@ -791,8 +791,8 @@ class ReconsiderServiceTest(unittest.TestCase):
             store=store_auth,
         )
         support = mock.Mock(spec=SupportService)
-        support.qualify_support.side_effect = (
-            lambda evaluation: m.compact_support(evaluation, ())
+        support.qualify_support.side_effect = lambda evaluation: m.compact_support(
+            evaluation, ()
         )
         support.evaluate_revision.return_value = support_rules.evaluation(
             m.SupportState.CURRENT,
@@ -910,8 +910,8 @@ class ReconsiderServiceTest(unittest.TestCase):
             store=store_two,
         )
         support = mock.Mock(spec=SupportService)
-        support.qualify_support.side_effect = (
-            lambda evaluation: m.compact_support(evaluation, ())
+        support.qualify_support.side_effect = lambda evaluation: m.compact_support(
+            evaluation, ()
         )
         support.evaluate_revision.return_value = support_rules.evaluation(
             m.SupportState.REASSESSMENT_REQUIRED,

@@ -318,6 +318,17 @@ class VerificationQualification:
             raise ValueError("VerificationQualification.observed_at must be aware")
 
 
+def basis_evidence(bases: tuple[SupportBasis, ...]) -> tuple[EvidenceRef, ...]:
+    """The exact source and governing citations named by semantic bases."""
+    return tuple(
+        dict.fromkeys(
+            basis.evidence
+            for basis in bases
+            if isinstance(basis, (SourceSupportBasis, AuthoritySupportBasis))
+        )
+    )
+
+
 def compact_support(
     value: SupportEvaluation, bases: tuple[SupportBasis, ...]
 ) -> SupportQualification:

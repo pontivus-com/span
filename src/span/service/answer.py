@@ -414,17 +414,13 @@ class AnswerService:
     def _evidence_refs(
         self, dependencies: tuple[m.SupportDependency, ...]
     ) -> tuple[m.EvidenceRef, ...]:
-        refs: list[m.EvidenceRef] = []
-        for dependency in dependencies:
-            if isinstance(dependency, m.SourceSupport):
-                record = self._store.find_source_observation(
-                    dependency.observation_id.value
-                )
-                if record is not None:
-                    refs.append(record.evidence)
-            elif isinstance(dependency, m.AuthoritySupportDependency):
-                refs.append(dependency.authority.evidence_ref)
-        return tuple({ref.evidence_id.value: ref for ref in refs}.values())
+        return m.basis_evidence(
+            tuple(
+                self._support.support_basis(dependency)
+                for dependency in dependencies
+                if isinstance(dependency, (m.SourceSupport, m.AuthoritySupportDependency))
+            )
+        )
 
     def _cold_gap(
         self,
@@ -649,29 +645,11 @@ class AnswerService:
                         ),
                     )
                 version = selected_version
-            try:
-                support: m.UnderstandingSupport | m.SupportUnavailable = (
-                    self._support.evaluate_version(
-                        selector.understanding_id, version_number
-                    )
+            if understanding.repository_id != selector.repository_id:
+                raise RecordingValidationError(
+                    "selected understanding belongs to another repository"
                 )
-            except (OSError, ValueError):
-                support = m.SupportUnavailable(
-                    "understanding support evaluation is unavailable"
-                )
-            return m.RetrievedUnderstanding(
-                understanding=understanding,
-                version=version,
-                conclusions=self._store.get_version_conclusions(
-                    selector.understanding_id, version_number
-                ),
-                support=support,
-                challenges=self._store.get_challenges(selector.understanding_id),
-                curations=self._store.get_curations(
-                    selector.understanding_id,
-                    as_of_version=m.UnderstandingVersionNumber(version_number),
-                ),
-            )
+            return self._snapshot(understanding, version)
         key = m.RecordingKey(
             repository_id=selector.repository_id,
             request_id=m.RequestId(selector.request_id),
@@ -698,6 +676,69 @@ class AnswerService:
         return m.RetrievedReceipt(
             receipt=receipt,
             verification_runs=verification_runs,
+        )
+
+    def _snapshot(
+        self, understanding: m.Understanding, version: m.UnderstandingVersion
+    ) -> m.RetrievedUnderstanding:
+        identity = understanding.understanding_id.value
+        curations = self._store.get_curations(identity, as_of_version=version.version)
+        curated = {item.ref for item in curations}
+        conclusions = tuple(
+            self._audit_revision(revision, curated)
+            for revision in self._store.get_version_conclusions(
+                identity, version.version.value
+            )
+        )
+        return m.RetrievedUnderstanding(
+            repository_id=understanding.repository_id,
+            surface=understanding.surface,
+            understanding_id=version.understanding_id,
+            version=version.version,
+            question=version.question,
+            scope=version.scope,
+            created_at=version.created_at,
+            provenance=version.provenance,
+            previous_version=version.previous_version,
+            surface_boundary_version=version.surface_boundary_version,
+            gaps=version.gaps,
+            conclusions=conclusions,
+            challenges=tuple(
+                challenge
+                for challenge in self._store.get_challenges(identity)
+                if challenge.target_version == version.version
+            ),
+            curations=curations,
+        )
+
+    def _audit_revision(
+        self,
+        revision: m.ConclusionRevision,
+        curated: set[m.ConclusionRevisionRef],
+    ) -> m.AuditConclusion:
+        ref = m.ConclusionRevisionRef(
+            understanding_id=revision.understanding_id,
+            conclusion_id=revision.conclusion_id,
+            revision=revision.revision,
+        )
+        bases = tuple(
+            self._support.support_basis(item) for item in revision.content.support
+        )
+        qualification: m.SupportQualification | m.SupportUnavailable | None = None
+        if isinstance(revision.content, m.SupportedConclusion):
+            try:
+                qualification = self._support.qualify_support(
+                    self._support.evaluate_revision(ref)
+                )
+            except (OSError, ValueError) + self._store.operational_errors:
+                qualification = m.SupportUnavailable(
+                    "live support evaluation is unavailable"
+                )
+        maturity = (
+            m.CurationState.CURATED if ref in curated else m.CurationState.CAPTURED
+        )
+        return m.audit_conclusion(
+            revision, bases, maturity=maturity, qualification=qualification
         )
 
     def _pending_curation(

@@ -781,6 +781,19 @@ class AnswerServiceTest(unittest.TestCase):
         assert isinstance(before, m.RetrievedUnderstanding)
         assert isinstance(after, m.RetrievedUnderstanding)
         self.assertEqual(before.curations, ())
+        before_content = before.conclusions[0].content
+        after_content = after.conclusions[0].content
+        assert isinstance(before_content, m.SupportedAuditContent)
+        assert isinstance(after_content, m.SupportedAuditContent)
+        self.assertEqual(before_content.maturity, m.CurationState.CAPTURED)
+        self.assertEqual(after_content.maturity, m.CurationState.CURATED)
+        self.assertEqual(before.version.value, 1)
+        self.assertEqual(after.version.value, 2)
+        self.assertEqual(before.conclusions[0].basis, after.conclusions[0].basis)
+        self.assertEqual(
+            before.conclusions[0].derivation, m.DerivationKind.EXPLICIT_EVIDENCE
+        )
+        self.assertEqual(before.conclusions[0].summary, "read")
         self.assertEqual(len(after.curations), 1)
         self.assertEqual(after.curations[0].ref.revision.value, 1)
         self.assertEqual(after.curations[0].accepted_in_version.value, 2)

@@ -21,11 +21,14 @@ from span.core.model.investigation import (
 from span.core.model.primitives import (
     ChallengeId,
     ChallengeRevision,
+    ClaimRef,
     ConclusionId,
     ConclusionRevisionNumber,
     ConclusionRevisionRef,
+    DerivationKind,
     EvidenceRef,
     EvidenceScope,
+    RelationshipRef,
     SemanticBasis,
     UnderstandingId,
     UnderstandingVersionNumber,
@@ -34,9 +37,11 @@ from span.core.model.primitives import (
 from span.core.model.recording import RecordReceipt
 from span.core.model.surfaces import SurfaceKey, SurfaceReference
 from span.core.model.support import (
+    SupportBasis,
     SupportDependency,
+    SupportQualification,
     SupportUnavailable,
-    UnderstandingSupport,
+    basis_evidence,
 )
 from span.core.model.verification import VerificationRun
 
@@ -296,13 +301,90 @@ class Challenge:
 
 
 @_dataclass(frozen=True)
-class RetrievedUnderstanding:
-    """One exact understanding snapshot with its bodies and live support."""
+class SupportedAuditContent:
+    statement: str
+    assertion_nature: AssertionNature
+    scope: EvidenceScope
+    evidence: tuple[EvidenceRef, ...]
+    maturity: CurationState
+    qualification: SupportQualification | SupportUnavailable
 
-    understanding: Understanding
-    version: UnderstandingVersion
-    conclusions: tuple[ConclusionRevision, ...]
-    support: UnderstandingSupport | SupportUnavailable
+
+@_dataclass(frozen=True)
+class WithdrawnAuditContent:
+    reason: str
+
+
+@_dataclass(frozen=True)
+class AuditConclusion:
+    """Exact recorded content and derivation, with separately live qualification."""
+
+    ref: ConclusionRevisionRef
+    originating_version: UnderstandingVersionNumber
+    content: SupportedAuditContent | WithdrawnAuditContent
+    basis: tuple[SupportBasis, ...]
+    derivation: DerivationKind
+    summary: str
+    input_refs: tuple[ClaimRef | RelationshipRef | EvidenceRef, ...]
+
+
+def audit_conclusion(
+    revision: ConclusionRevision,
+    basis: tuple[SupportBasis, ...],
+    *,
+    maturity: CurationState,
+    qualification: SupportQualification | SupportUnavailable | None,
+) -> AuditConclusion:
+    """Project immutable recorded facts without reevaluating their meaning."""
+    if len(basis) != len(revision.content.support):
+        raise ValueError("audit must preserve each recorded support basis")
+    content: SupportedAuditContent | WithdrawnAuditContent
+    if isinstance(revision.content, SupportedConclusion):
+        if qualification is None:
+            raise ValueError("supported audit content requires live qualification")
+        content = SupportedAuditContent(
+            statement=revision.content.statement,
+            assertion_nature=revision.content.assertion_nature,
+            scope=revision.content.scope,
+            evidence=basis_evidence(basis),
+            maturity=maturity,
+            qualification=qualification,
+        )
+    else:
+        if qualification is not None:
+            raise ValueError("withdrawn audit content has no live qualification")
+        content = WithdrawnAuditContent(reason=revision.content.reason)
+    return AuditConclusion(
+        ref=ConclusionRevisionRef(
+            understanding_id=revision.understanding_id,
+            conclusion_id=revision.conclusion_id,
+            revision=revision.revision,
+        ),
+        originating_version=revision.originating_version,
+        content=content,
+        basis=basis,
+        derivation=revision.basis.derivation,
+        summary=revision.basis.summary,
+        input_refs=revision.basis.input_refs,
+    )
+
+
+@_dataclass(frozen=True)
+class RetrievedUnderstanding:
+    """One exact version's recorded facts, never the mutable current pointer."""
+
+    repository_id: str
+    surface: SurfaceKey
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+    question: str
+    scope: EvidenceScope
+    created_at: _datetime.datetime
+    provenance: str
+    previous_version: UnderstandingVersionNumber | None
+    surface_boundary_version: int
+    gaps: tuple[RecordedQuestionGap, ...]
+    conclusions: tuple[AuditConclusion, ...]
     challenges: tuple[Challenge, ...] = ()
     curations: tuple[CurationDisposition, ...] = ()
 

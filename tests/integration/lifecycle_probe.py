@@ -187,7 +187,7 @@ async def _run(exe, repo, data_dir, repository_id):
                 "understanding_id": understanding_id,
                 "found_kind": warm.get("$type"),
                 "statement": warm["groups"][0]["conclusions"][0]["statement"],
-                "version": retrieved["version"]["version"]["value"],
+                "version": retrieved["version"]["value"],
                 "fp_status_before_error": fp_status_before_error,
                 "fp_status_before_kind": fp_status_before.get("$type"),
                 "fp_status_before_state": fp_status_before.get("state"),

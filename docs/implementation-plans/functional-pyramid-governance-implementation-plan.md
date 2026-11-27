@@ -718,6 +718,18 @@ audit and receipt projection, full PUB-01 audit, schema transition, and
 all acceptance evidence remain open. This candidate is not permission
 to close PUB-01, PUB-02 or proceed to deployment.
 
+**PUB-02 snapshot increment (OPEN).** Replace raw conclusion revisions and
+version-wide internal support in exact snapshot delivery with the canonical
+AuditConclusion supported/withdrawn union. Resolve recorded basis through
+the existing support owner, retain exact semantic derivation and selected
+version facts, qualify supported content only, preserve withdrawal and
+version-scoped maturity. Challenges are selected by exact target version;
+their shared fact carrier cutover and receipt audit are still required in
+PUB-07A. This increment changes no persisted model. Measured canonical
+carrier count 233 → 236, maximum carrier fields 13 → 14 (exact required
+snapshot facts), test lines +13. No compatibility shape or separate
+evaluator is introduced; CI verification remains open.
+
 **PUB-02 — Public support and immutable audit (API-09/10/15/18).** After
 PUB-01, edit core/model/support.py, understanding.py, answers.py, repository
 exports and service/support.py / service/answer.py / service/effects.py
