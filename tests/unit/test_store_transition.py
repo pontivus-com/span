@@ -1809,9 +1809,7 @@ class RecoveryTest(unittest.TestCase):
             report = st.rollback(config)
             self.assertEqual(report.state, st.TransitionState.ROLLED_BACK)
             self.assertEqual(paths.active.read_bytes(), before)
-            self.assertEqual(
-                len(list(paths.transition_dir.glob("new-format-*.db"))), 1
-            )
+            self.assertEqual(len(list(paths.transition_dir.glob("new-format-*.db"))), 1)
 
     def test_corrupt_archive_fails_verify(self):
         with tempfile.TemporaryDirectory() as tmp:
