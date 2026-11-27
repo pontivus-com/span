@@ -171,12 +171,19 @@ class AnswerService:
             subject = m.QuestionStatusSubject(surface, selected_question)
         else:
             subject = m.SurfaceStatusSubject(surface)
+        evaluations = tuple(
+            self._support.evaluate_version(
+                item.understanding_id.value, item.current_version.value
+            )
+            for item in understandings
+        )
         status = compose_surface_status(
             subject,
             store=self._store,
             support=self._support,
             evidence=self._evidence,
-            selected=understandings if selected_question is not None else None,
+            selected=understandings,
+            evaluations=evaluations,
         )
         if selected_question is None:
             functional_pyramid = self._functional_pyramid_projection(
@@ -187,6 +194,7 @@ class AnswerService:
                 request,
                 surface,
                 understandings,
+                evaluations,
                 status,
                 functional_pyramid,
             )
@@ -197,6 +205,7 @@ class AnswerService:
             surface,
             selected_question,
             understandings,
+            evaluations,
             status,
         )
 
@@ -207,6 +216,7 @@ class AnswerService:
         surface: m.SurfaceKey,
         selected_question: str,
         understandings: tuple[m.Understanding, ...],
+        evaluations: tuple[m.UnderstandingSupport, ...],
         status: m.SurfaceStatus,
     ) -> m.AskResult:
         matched = understandings
@@ -231,10 +241,7 @@ class AnswerService:
         gaps: list[m.RecordedQuestionGap] = []
         states: list[m.SupportState] = []
         pending = False
-        for understanding in matched:
-            support = self._support.evaluate_version(
-                understanding.understanding_id.value
-            )
+        for understanding, support in zip(matched, evaluations, strict=True):
             states.append(support.state)
             version = self._store.get_version(
                 understanding.understanding_id.value,
@@ -826,16 +833,14 @@ class AnswerService:
         request: m.AskRequest,
         surface: m.SurfaceKey,
         understandings: tuple[m.Understanding, ...],
+        evaluations: tuple[m.UnderstandingSupport, ...],
         status: m.SurfaceStatus,
         functional_pyramid: _FunctionalPyramidOrientation,
     ) -> m.Answer | m.Gap:
         grouped: dict[str, list[m.ConclusionView]] = {}
         gaps: list[m.RecordedQuestionGap] = []
         historical: list[m.HistoricalConclusion] = []
-        for understanding in understandings:
-            support = self._support.evaluate_version(
-                understanding.understanding_id.value
-            )
+        for understanding, support in zip(understandings, evaluations, strict=True):
             version = self._store.get_version(
                 understanding.understanding_id.value,
                 understanding.current_version.value,

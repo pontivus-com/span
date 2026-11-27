@@ -328,7 +328,7 @@ class AnswerServiceTest(unittest.TestCase):
             understanding_id=m.UnderstandingId("u-svc"),
         )
         self._curate("u-svc")
-        result = self._ask("svc", "What does the service do?")
+        result = self._ask("svc", None)
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
         self.assertEqual(result.status.unexamined, 1)
@@ -389,13 +389,18 @@ class AnswerServiceTest(unittest.TestCase):
                 understanding_id=m.UnderstandingId(understanding_id),
             )
             self._curate(understanding_id)
-        result = self._ask("domain", "What does domain do?")
+        result = self._ask("domain", None)
         self.assertIsInstance(result, m.Answer)
         assert isinstance(result, m.Answer)
         self.assertEqual(len(result.status.descendants), 1)
         self.assertEqual(result.status.descendants[0].surface, child)
         self.assertEqual(result.status.current, 1)
         self.assertEqual(result.status.descendants[0].current, 1)
+        exact = self._ask("domain", "What does domain do?")
+        assert isinstance(exact, m.Answer)
+        self.assertEqual(exact.status.current, 1)
+        self.assertEqual(exact.status.descendants, ())
+        self.assertIsNone(exact.status.unexamined)
 
     def test_descendant_stale_ref_is_not_merged_into_parent(self) -> None:
         (self.root / "src/b.py").write_text("b\n", encoding="utf-8")
@@ -460,7 +465,7 @@ class AnswerServiceTest(unittest.TestCase):
         )
         self._curate("u-child-stale")
         (self.root / "src/b.py").write_text("changed\n", encoding="utf-8")
-        result = self._ask("domain", "What does domain do?")
+        result = self._ask("domain", None)
         assert isinstance(result, m.Answer)
         self.assertEqual(result.status.stale, 0)
         self.assertEqual(result.status.stale_refs, ())

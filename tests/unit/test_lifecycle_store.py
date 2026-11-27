@@ -402,9 +402,7 @@ class LifecycleStoreTest(unittest.TestCase):
         )
         self.store.record_understanding(_update_command())
         self.assertEqual(
-            self.store.record_noop(
-                identity, digest, m.UnderstandingId("u-1"), version
-            ),
+            self.store.record_noop(identity, digest, m.UnderstandingId("u-1"), version),
             receipt,
         )
         with self.assertRaises(RecordingConflict):

@@ -16,14 +16,21 @@ def compose_surface_status(
     support: SupportService,
     evidence: EvidenceService,
     selected: tuple[m.Understanding, ...] | None = None,
+    evaluations: tuple[m.UnderstandingSupport, ...] | None = None,
 ) -> m.SurfaceStatus:
     surface = subject.surface
     if not isinstance(subject, m.SurfaceStatusSubject):
         if selected is None:
             raise ValueError("exact status requires its selected population")
-        return _distribution(subject, selected, store=store, support=support)
+        return _distribution(
+            subject, selected, store=store, support=support, evaluations=evaluations
+        )
     all_understandings = tuple(store.list_understandings(surface.repository_id))
-    own = tuple(item for item in all_understandings if item.surface == surface)
+    own = (
+        selected
+        if selected is not None
+        else tuple(item for item in all_understandings if item.surface == surface)
+    )
     examined = _examined_scopes(all_understandings, store=store)
     surfaces = store.list_surfaces(surface.repository_id)
     children = selection.immediate_children(surface, surfaces)
@@ -48,6 +55,7 @@ def compose_surface_status(
         support=support,
         evidence=evidence,
         descendants=summaries,
+        evaluations=evaluations,
     )
 
 
@@ -59,13 +67,16 @@ def _distribution(
     support: SupportService,
     coverage: tuple[int, bool] | None = None,
     descendants: tuple[m.SurfaceStatusSummary, ...] = (),
+    evaluations: tuple[m.UnderstandingSupport, ...] | None = None,
 ) -> m.SurfaceStatus:
-    evaluations = tuple(
-        support.evaluate_version(
-            understanding.understanding_id.value, understanding.current_version.value
+    if evaluations is None:
+        evaluations = tuple(
+            support.evaluate_version(
+                understanding.understanding_id.value,
+                understanding.current_version.value,
+            )
+            for understanding in understandings
         )
-        for understanding in understandings
-    )
     curated = frozenset(
         conclusion.ref
         for qualification in evaluations
@@ -88,6 +99,7 @@ def _surface_distribution(
     support: SupportService,
     evidence: EvidenceService,
     descendants: tuple[m.SurfaceStatusSummary, ...] = (),
+    evaluations: tuple[m.UnderstandingSupport, ...] | None = None,
 ) -> m.SurfaceStatus:
     coverage = _unexamined(
         surface, understandings, examined, store=store, evidence=evidence
@@ -99,6 +111,7 @@ def _surface_distribution(
         support=support,
         coverage=coverage,
         descendants=descendants,
+        evaluations=evaluations,
     )
 
 
