@@ -706,7 +706,9 @@ def _unchanged_confirmations(
             or content.assertion_nature != action.assertion_nature
             or content.scope != action.scope
         ):
-            raise RecordingValidationError("changed conclusion content requires correct")
+            raise RecordingValidationError(
+                "changed conclusion content requires correct"
+            )
         if ref in current and content.support == action.support:
             unchanged.add(ref)
     return frozenset(unchanged)
