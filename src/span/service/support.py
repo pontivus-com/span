@@ -169,9 +169,12 @@ class SupportService:
     def support_basis(self, dependency: m.SupportDependency) -> m.SupportBasis:
         """Read only the immutable facts named by an already-recorded dependency."""
         if isinstance(dependency, m.SourceSupport):
-            observation = self._store.find_source_observation(
-                dependency.observation_id.value
-            )
+            try:
+                observation = self._store.find_source_observation(
+                    dependency.observation_id.value
+                )
+            except (OSError,) + self._store.operational_errors:
+                observation = None
             if observation is None:
                 return m.UnavailableSupportBasis(
                     reference=dependency.observation_id,
@@ -186,9 +189,12 @@ class SupportService:
                 whole_file=observation.whole_file,
             )
         if isinstance(dependency, m.DiscoverySupport):
-            discovery = self._store.find_discovery_observation(
-                dependency.observation_id.value
-            )
+            try:
+                discovery = self._store.find_discovery_observation(
+                    dependency.observation_id.value
+                )
+            except (OSError,) + self._store.operational_errors:
+                discovery = None
             if discovery is None:
                 return m.UnavailableSupportBasis(
                     reference=dependency.observation_id,

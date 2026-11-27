@@ -160,7 +160,7 @@ class UnderstandService:
                 qualification = self._support.qualify_support(
                     self._support.evaluate_revision(ref)
                 )
-            except (OSError, ValueError) + self._store.operational_errors:
+            except (OSError,) + self._store.operational_errors:
                 qualification = m.SupportUnavailable(
                     "live support evaluation is unavailable"
                 )

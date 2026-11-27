@@ -6,6 +6,7 @@ import datetime
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 from span.core import model as m
 from span.service.support import SupportService
@@ -109,6 +110,26 @@ class UnderstandServiceTest(unittest.TestCase):
         self.assertIsInstance(
             retrieved.conclusions[0].basis[0], m.UnavailableSupportBasis
         )
+
+    def test_snapshot_distinguishes_provider_failure_from_invalid_model(self) -> None:
+        self._seed()
+        selector = m.UnderstandingSnapshotSelector(
+            repository_id="repo-1", understanding_id="u-a", version=1
+        )
+        with mock.patch.object(
+            self.support, "evaluate_revision", side_effect=OSError("provider down")
+        ):
+            snapshot = self.understand.snapshot(selector)
+        content = snapshot.conclusions[0].content
+        self.assertIsInstance(content, m.SupportedAuditContent)
+        assert isinstance(content, m.SupportedAuditContent)
+        self.assertIsInstance(content.qualification, m.SupportUnavailable)
+        self.assertEqual(content.statement, "A validates input.")
+        with mock.patch.object(
+            self.support, "evaluate_revision", side_effect=ValueError("invalid model")
+        ):
+            with self.assertRaisesRegex(ValueError, "invalid model"):
+                self.understand.snapshot(selector)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import pathlib
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 from span.core import model as m
 from span.service.support import SupportService
@@ -388,6 +389,98 @@ class SupportServiceTest(unittest.TestCase):
         self.assertEqual(basis.ranges, observation.delivered_ranges)
         self.assertEqual(basis.captured_at, observation.captured_at)
         self.assertEqual(basis.whole_file, observation.whole_file)
+
+    def test_public_basis_preserves_recorded_dependency_facts(self) -> None:
+        observation = self._put_ranged_observation("obs-audit", "src/app.py", 1, 1)
+        source = m.SourceSupport(m.SourceObservationId(observation))
+        recorded = self.store.get_source_observation(observation)
+        scope = m.EvidenceScope(paths=("src",))
+        discovery = m.DiscoveryObservation(
+            observation_id=m.DiscoveryObservationId("disc-audit"),
+            repository_id="repo-1",
+            scope=scope,
+            membership_fingerprint="sha256:private-discovery",
+            captured_at=NOW,
+        )
+        self.store.put_discovery_observation(discovery)
+        authority = m.AuthorityBinding(
+            evidence_ref=recorded.evidence,
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.SUPERSEDED,
+            applicability=m.AuthorityApplicability(description="Recorded applicability"),
+            declared_precedence=m.DeclaredPrecedence(
+                kind=m.PrecedenceKind.PRIORITY_RANK,
+                priority_rank=1,
+                precedence_scheme="recorded policy",
+            ),
+        )
+        premise = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-audit"),
+            conclusion_id=m.ConclusionId("c-audit"),
+            revision=m.ConclusionRevisionNumber(2),
+        )
+        route = m.FunctionalRouteSupport(
+            repository_id="repo-1",
+            pyramid_id=m.FunctionalPyramidId("fp-audit"),
+            semantic_scope=scope,
+            route_identity=m.FunctionalRouteIdentity("private-route"),
+        )
+        cases = (
+            (
+                source,
+                m.SourceSupportBasis(
+                    evidence=recorded.evidence,
+                    observation_id=recorded.observation_id,
+                    ranges=recorded.delivered_ranges,
+                    captured_at=recorded.captured_at,
+                    whole_file=False,
+                ),
+            ),
+            (
+                m.DiscoverySupport(discovery.observation_id),
+                m.DiscoverySupportBasis("repo-1", scope, NOW),
+            ),
+            (
+                m.AuthoritySupportDependency(authority),
+                m.AuthoritySupportBasis(
+                    authority.evidence_ref,
+                    authority.authority_kind,
+                    authority.status,
+                    authority.applicability,
+                    authority.declared_precedence,
+                ),
+            ),
+            (m.PremiseSupport(premise), m.PremiseSupportBasis(premise)),
+            (route, m.GovernanceSupportBasis("repo-1", route.pyramid_id, scope)),
+        )
+        for dependency, expected in cases:
+            with self.subTest(dependency=type(dependency).__name__):
+                self.assertEqual(self.service.support_basis(dependency), expected)
+
+    def test_unavailable_recorded_basis_preserves_exact_reference(self) -> None:
+        cases = (
+            (
+                "find_source_observation",
+                m.SourceSupport(m.SourceObservationId("missing")),
+            ),
+            (
+                "find_discovery_observation",
+                m.DiscoverySupport(m.DiscoveryObservationId("missing")),
+            ),
+        )
+        for lookup, dependency in cases:
+            with self.subTest(lookup=lookup):
+                missing = self.service.support_basis(dependency)
+                self.assertIsInstance(missing, m.UnavailableSupportBasis)
+                assert isinstance(missing, m.UnavailableSupportBasis)
+                self.assertEqual(missing.reference, dependency.observation_id)
+                with mock.patch.object(self.store, lookup, side_effect=OSError("down")):
+                    self.assertEqual(self.service.support_basis(dependency), missing)
+                with mock.patch.object(
+                    self.store, lookup, side_effect=ValueError("bad")
+                ):
+                    with self.assertRaisesRegex(ValueError, "bad"):
+                        self.service.support_basis(dependency)
 
     def test_authority_support_status_and_presence(self) -> None:
         digest = hashlib.sha256((self.root / "docs/rule.md").read_bytes()).hexdigest()
