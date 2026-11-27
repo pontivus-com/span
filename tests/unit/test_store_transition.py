@@ -2019,7 +2019,9 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     self.assertEqual(facts.scope, value.scope)
                     self.assertEqual(facts.outcome, value.outcome)
                 else:
-                    challenge_facts = m.from_canonical(m.ChallengeFacts, staged["facts"])
+                    challenge_facts = m.from_canonical(
+                        m.ChallengeFacts, staged["facts"]
+                    )
                     self.assertEqual(challenge_facts.challenge_id, value.challenge_id)
                     self.assertEqual(challenge_facts.state, value.state)
 
