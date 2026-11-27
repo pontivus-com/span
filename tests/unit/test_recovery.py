@@ -314,9 +314,7 @@ class GovernedRecoveryTests(unittest.TestCase):
         )
         prior = {}
         if existing or unrelated:
-            create_empty_installation_store(
-                data / "installation/functional-pyramid.db"
-            )
+            create_empty_installation_store(data / "installation/functional-pyramid.db")
             prior = {
                 "install_version": INSTALL_VERSION,
                 "repos": [],
@@ -343,9 +341,7 @@ class GovernedRecoveryTests(unittest.TestCase):
         pending, artifacts = governed.prepare(
             data, (repo,), [[repo.name, str(classification)]], [], prior
         )
-        requests = validate_authority_files(
-            (repo,), {}, governed.bindings_for(pending)
-        )
+        requests = validate_authority_files((repo,), {}, governed.bindings_for(pending))
         backup = pathlib.Path(
             governed_recovery.protect_setup(
                 data, prior, pending, requests, indexer_pointer_payload("/graft")
@@ -496,7 +492,13 @@ class GovernedRecoveryTests(unittest.TestCase):
     def test_recovery_conflicts_before_mutating_independent_or_unowned_state(self):
         from span.shell.context import create_empty_repository_store
 
-        for case in ("unexplained", "fresh-write", "existing-write", "shared-write", "generated"):
+        for case in (
+            "unexplained",
+            "fresh-write",
+            "existing-write",
+            "shared-write",
+            "generated",
+        ):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
                 fixture = self._fixture(
                     pathlib.Path(tmp), existing=case == "existing-write"
@@ -512,11 +514,14 @@ class GovernedRecoveryTests(unittest.TestCase):
                         else data / "repo-a.db"
                     )
                     with sqlite3.connect(path) as connection:
-                        connection.execute("INSERT INTO meta VALUES('independent', 'write')")
+                        connection.execute(
+                            "INSERT INTO meta VALUES('independent', 'write')"
+                        )
                     connection.close()
                 else:
                     locator = next(
-                        locator for _, locator in artifacts
+                        locator
+                        for _, locator in artifacts
                         if (repo / locator).is_file()
                     )
                     (repo / locator).write_text("independent modification")
@@ -525,7 +530,9 @@ class GovernedRecoveryTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "governed recovery conflict"):
                     self._restore(fixture)
                 self.assertEqual((data / "install.json").read_bytes(), receipt)
-                self.assertEqual((data / "structural-indexer.json").read_bytes(), pointer)
+                self.assertEqual(
+                    (data / "structural-indexer.json").read_bytes(), pointer
+                )
 
     def test_unrelated_repository_is_not_restored_from_full_backup(self):
         from span.shell.install.governed_recovery import _database_digest

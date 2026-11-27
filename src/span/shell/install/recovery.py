@@ -438,7 +438,9 @@ def restore_backup(backup_dir, data_dir, confirm, backup_root=None, dry_run=Fals
     if any(
         item.path.startswith("governed-targets/") for item in report.artifacts
     ) or _load_manifest(backup_dir).label.startswith("governed-"):
-        raise SystemExit("governed recovery backup requires its original pending intent")
+        raise SystemExit(
+            "governed recovery backup requires its original pending intent"
+        )
     _assert_quiescent(data_dir)
     snapshot = create_backup(data_dir, backup_root=backup_root, label="pre-restore")
     restored = []

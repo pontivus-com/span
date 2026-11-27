@@ -69,7 +69,9 @@ def _existing_roots(
     for path in sorted(data_dir.glob("*.db")):
         readiness = probe_store(data_dir, path.stem)
         if not readiness.ready or readiness.bound_root is None:
-            if pending is not None and owned_empty_repository_store(data_dir, pending, path.stem):
+            if pending is not None and owned_empty_repository_store(
+                data_dir, pending, path.stem
+            ):
                 continue
             raise ValueError(f"registered repository store is unavailable: {path.stem}")
         roots[path.stem] = readiness.bound_root
@@ -86,7 +88,9 @@ def _bindings(
         return ()
     raw = installed_authority_bindings(data_dir, repository_id)
     if raw is None:
-        if pending is not None and owned_empty_repository_store(data_dir, pending, repository_id):
+        if pending is not None and owned_empty_repository_store(
+            data_dir, pending, repository_id
+        ):
             return ()
         raise ValueError(f"registered authority unavailable: {repository_id}")
     return _canonical_bindings(raw)

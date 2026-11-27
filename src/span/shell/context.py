@@ -256,9 +256,10 @@ def provision_repository_runtime(
     data_dir: str | _pathlib.Path,
     request: m.InitializeRepositoryRequest,
     *,
-    prepare_store: _typing.Callable[
-        [_pathlib.Path, _typing.Callable[[_pathlib.Path], None]], None
-    ] | None = None,
+    prepare_store: (
+        _typing.Callable[[_pathlib.Path, _typing.Callable[[_pathlib.Path], None]], None]
+        | None
+    ) = None,
 ) -> tuple[RepositoryRuntime, m.InitializeRepositoryResult]:
     """Explicit setup, returning raw capabilities rather than partial services."""
     data_root = _pathlib.Path(data_dir)

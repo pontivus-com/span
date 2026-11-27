@@ -100,10 +100,16 @@ def _generated_files(pending: dict[str, object]) -> dict[str, Path]:
     for repository_id, raw in governed._object(pending["repositories"]).items():
         entry = governed._object(raw)
         root = Path(governed._string(entry["root"]))
-        if repository_id not in requests or str(root) != requests[repository_id].repository_locator:
+        if (
+            repository_id not in requests
+            or str(root) != requests[repository_id].repository_locator
+        ):
             _conflict(f"generated root differs from selected root: {repository_id}")
         for locator, digest in governed._object(entry["artifacts"]).items():
-            if locator != governed.BOOTSTRAP and locator != f".span/functional-pyramid/{digest}.json":
+            if (
+                locator != governed.BOOTSTRAP
+                and locator != f".span/functional-pyramid/{digest}.json"
+            ):
                 _conflict(f"unexpected generated path: {repository_id}/{locator}")
             key = f"governed-targets/{repository_id}/{locator}"
             result[key] = _safe_file(root, locator)
@@ -182,12 +188,12 @@ def protect_setup(
             _conflict("selected authority configuration or indexer pointer changed")
         saved = pending.get("backup")
         if "backup_manifest_digest" in pending:
-            names = set(_database_names(pending)) | set(_generated_files(pending))
+            required_names = set(_database_names(pending)) | set(_generated_files(pending))
             _verified_manifest(
                 Path(governed._string(saved)),
                 data_dir,
                 pending["backup_manifest_digest"],
-                names | {_POINTER, _RECEIPT},
+                required_names | {_POINTER, _RECEIPT},
                 "governed-pre-setup",
             )
         return None if saved is None else governed._string(saved)
@@ -353,7 +359,10 @@ def _expected_repository_states(
 
 
 def _empty_database_digest(name: str) -> str:
-    from span.shell.context import create_empty_installation_store, create_empty_repository_store
+    from span.shell.context import (
+        create_empty_installation_store,
+        create_empty_repository_store,
+    )
 
     create = (
         create_empty_installation_store
@@ -452,7 +461,10 @@ def _database_preconditions(
             created[name] = _identity(stage)
             pending["created_stores"] = created
         if before is None and connection is not None:
-            if any(Path(str(path) + suffix).exists() for suffix in ("-wal", "-shm", "-journal")):
+            if any(
+                Path(str(path) + suffix).exists()
+                for suffix in ("-wal", "-shm", "-journal")
+            ):
                 _conflict(f"database sidecar prevents safe retirement: {name}")
         result[name] = current
     return result
@@ -513,7 +525,11 @@ def _restore_snapshot(
             _conflict("restore intent differs from requested baseline or scope")
         snapshot = Path(governed._string(intent["snapshot"]))
         entries = _verified_manifest(
-            snapshot, data_dir, intent["snapshot_digest"], required, "governed-pre-restore"
+            snapshot,
+            data_dir,
+            intent["snapshot_digest"],
+            required,
+            "governed-pre-restore",
         )
         observed = _snapshot_states(snapshot, entries, names, files)
         for name, state in current.items():
@@ -572,7 +588,9 @@ def _restore_database(
     source = backup / item.path
     expected = _database_digest(source)
     if logical_database_digest(connection) != expected:
-        with contextlib.closing(sqlite3.connect(read_only_uri(source), uri=True)) as src:
+        with contextlib.closing(
+            sqlite3.connect(read_only_uri(source), uri=True)
+        ) as src:
             src.backup(connection)
     if logical_database_digest(connection) != expected:
         _conflict(f"restored database differs: {path}")
@@ -617,10 +635,9 @@ def _restore_effects(
         if item is None:
             if path.exists():
                 _conflict(f"retired database reappeared: {name}")
-        elif (
-            not path.is_file()
-            or logical_database_digest(connections[name]) != _database_digest(backup / name)
-        ):
+        elif not path.is_file() or logical_database_digest(
+            connections[name]
+        ) != _database_digest(backup / name):
             _conflict(f"restored database state changed: {name}")
     # Receipt is the final publication; it cannot hide incomplete reconciliation.
     _restore_file(data_dir / _RECEIPT, backup, entries[_RECEIPT])
@@ -637,7 +654,9 @@ def _restore_pending(
 ) -> RestoreResult:
     pending = governed._object(receipt[governed.PENDING])
     if "backup_manifest_digest" not in pending:
-        _conflict("legacy pending setup lacks verified preimages; resume its original input")
+        _conflict(
+            "legacy pending setup lacks verified preimages; resume its original input"
+        )
     if backup.resolve() != Path(governed._string(pending["backup"])):
         _conflict("restore requires the exact original pre-setup backup")
     backup = backup.resolve()
@@ -646,14 +665,26 @@ def _restore_pending(
     names = _database_names(pending)
     required = set(names) | set(files) | {_RECEIPT}
     entries = _verified_manifest(
-        backup, data_dir, pending["backup_manifest_digest"], required, "governed-pre-setup"
+        backup,
+        data_dir,
+        pending["backup_manifest_digest"],
+        required,
+        "governed-pre-setup",
     )
     current = _database_preconditions(data_dir, pending, backup, entries, connections)
     current.update(_file_preconditions(files, entries, _planned_files(pending)))
     baseline = _snapshot_states(backup, entries, names, files)
     snapshot = _restore_snapshot(
-        data_dir, receipt, pending, backup, backup_root, names, files,
-        connections, current, baseline,
+        data_dir,
+        receipt,
+        pending,
+        backup,
+        backup_root,
+        names,
+        files,
+        connections,
+        current,
+        baseline,
     )
     restored = _restore_effects(
         data_dir, pending, backup, entries, files, names, connections, current
@@ -683,7 +714,10 @@ def pending_restore(
     if not isinstance(raw, dict) or governed.PENDING not in raw:
         return None
     try:
-        with store_use_ownership(data_dir, exclusive=True), contextlib.ExitStack() as stack:
+        with (
+            store_use_ownership(data_dir, exclusive=True),
+            contextlib.ExitStack() as stack,
+        ):
             receipt = read_receipt(data_dir)
             if receipt is None or governed.PENDING not in receipt:
                 _conflict("pending receipt changed before recovery ownership")
@@ -694,7 +728,9 @@ def pending_restore(
                 databases.append(installation)
             connections = {
                 path.relative_to(data_dir).as_posix(): stack.enter_context(
-                    exclusive_ownership(_safe_file(data_dir, path.relative_to(data_dir).as_posix()))
+                    exclusive_ownership(
+                        _safe_file(data_dir, path.relative_to(data_dir).as_posix())
+                    )
                 )
                 for path in databases
             }

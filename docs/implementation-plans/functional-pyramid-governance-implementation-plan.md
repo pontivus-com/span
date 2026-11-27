@@ -237,7 +237,13 @@ design/task level below; no production correction or executable proof yet.
 ### S-FIELD-02 — Restore pending governed setup without orphaned ownership
 
 **Status:** IMPLEMENTED IN CANDIDATE, VERIFICATION OPEN. **Owner:** existing installer receipt, governed artifact
-publication and full installation backup/restore owners. Depends on S-FIELD-01
+publication and full installation backup/restore owners. Focused diagnostic run
+[45923069189](https://github.com/pontivus-com/span/actions/runs/45923069189)
+passed 154 tests and 21 subtests on the formatted working tree; two typing
+diagnostics and formatting were corrected before the full CI candidate.
+The measured test-line increase is 459 and the lifecycle module increases by
+four lines (1913) to bind connection lifetime to ownership; the existing
+AST gate records those measurements, not delivery limits. Depends on S-FIELD-01
 for the corrected preflight boundary, not for ownership semantics.
 
 1. Implement TD §17.2's verified pre-setup artifact/absence protection in the

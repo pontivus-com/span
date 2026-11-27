@@ -604,12 +604,22 @@ dispose();
         self.assertEqual(pending["accepted_version"], 2)
         backup = _pathlib.Path(pending["backup"])
         restore = [
-            command[0], "--data-dir", str(data_dir),
-            "--restore-backup", str(backup), "--restore-confirm", backup.name,
+            command[0],
+            "--data-dir",
+            str(data_dir),
+            "--restore-backup",
+            str(backup),
+            "--restore-confirm",
+            backup.name,
         ]
         accepted_bytes = receipt_path.read_bytes()
         refused = _subprocess.run(
-            restore, cwd=str(self.tmp), capture_output=True, text=True, timeout=900, env=env
+            restore,
+            cwd=str(self.tmp),
+            capture_output=True,
+            text=True,
+            timeout=900,
+            env=env,
         )
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("participation was accepted", refused.stderr + refused.stdout)
@@ -625,11 +635,16 @@ dispose();
             with self.subTest(existing=existing):
                 root = self.tmp / f"abandon-{existing}"
                 repo_a, repo_b = root / "repo-a", root / "repo-b"
-                for repo, files in ((repo_a, _GOVERNED_A_FILES), (repo_b, _GOVERNED_B_FILES)):
+                for repo, files in (
+                    (repo_a, _GOVERNED_A_FILES),
+                    (repo_b, _GOVERNED_B_FILES),
+                ):
                     repo.mkdir(parents=True)
                     _write_files(repo, files)
                 data_dir = root / "data"
-                _, command, env = self._governed_runtime_command(repo_a, repo_b, data_dir)
+                _, command, env = self._governed_runtime_command(
+                    repo_a, repo_b, data_dir
+                )
                 receipt_path = data_dir / "install.json"
                 before = None
                 prior_artifacts = {}
@@ -637,7 +652,9 @@ dispose();
                     self._execute_installer(command, env)
                     before = receipt_path.read_bytes()
                     for repo in (repo_a, repo_b):
-                        entry = _json.loads(before)["governed_initialization"][repo.name]
+                        entry = _json.loads(before)["governed_initialization"][
+                            repo.name
+                        ]
                         for locator in entry["artifacts"]:
                             path = repo / locator
                             prior_artifacts[path] = path.read_bytes()
@@ -660,15 +677,26 @@ dispose();
                 )
                 failed = _subprocess.run(
                     [self.isolated_python, "-c", injected, *command[1:]],
-                    cwd=str(self.tmp), capture_output=True, text=True, timeout=900, env=env,
+                    cwd=str(self.tmp),
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    env=env,
                 )
                 self.assertNotEqual(failed.returncode, 0)
                 self.assertIn("after first registration", failed.stderr)
-                pending = _json.loads(receipt_path.read_text())["pending_governed_initialization"]
+                pending = _json.loads(receipt_path.read_text())[
+                    "pending_governed_initialization"
+                ]
                 backup = _pathlib.Path(pending["backup"])
                 restore = [
-                    command[0], "--data-dir", str(data_dir),
-                    "--restore-backup", str(backup), "--restore-confirm", backup.name,
+                    command[0],
+                    "--data-dir",
+                    str(data_dir),
+                    "--restore-backup",
+                    str(backup),
+                    "--restore-confirm",
+                    backup.name,
                 ]
                 injected_restore = (
                     "from span.shell.install import cli, governed_recovery as recovery; "
@@ -682,11 +710,17 @@ dispose();
                 )
                 failed = _subprocess.run(
                     [self.isolated_python, "-c", injected_restore, *restore[1:]],
-                    cwd=str(self.tmp), capture_output=True, text=True, timeout=900, env=env,
+                    cwd=str(self.tmp),
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    env=env,
                 )
                 self.assertNotEqual(failed.returncode, 0)
                 self.assertIn("during recovery", failed.stderr)
-                retained = _json.loads(receipt_path.read_text())["pending_governed_initialization"]
+                retained = _json.loads(receipt_path.read_text())[
+                    "pending_governed_initialization"
+                ]
                 snapshot = _pathlib.Path(retained["restore_intent"]["snapshot"])
                 count = len(list((data_dir / "backups").iterdir()))
                 self._execute_installer(restore, env)
@@ -697,7 +731,9 @@ dispose();
                     self.assertFalse((data_dir / "structural-indexer.json").exists())
                     self.assertFalse((data_dir / "repo-a.db").exists())
                     self.assertFalse((data_dir / "repo-b.db").exists())
-                    self.assertFalse((data_dir / "installation/functional-pyramid.db").exists())
+                    self.assertFalse(
+                        (data_dir / "installation/functional-pyramid.db").exists()
+                    )
                 else:
                     self.assertEqual(receipt_path.read_bytes(), before)
                 for repo in (repo_a, repo_b):
