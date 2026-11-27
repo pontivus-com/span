@@ -1998,6 +1998,83 @@ class InstallerCommandTest(unittest.TestCase):
 
 
 class PubSchemaTransitionTest(unittest.TestCase):
+    def test_coordinated_staging_preserves_all_active_sources(self):
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_store.functional_pyramid import (
+            FunctionalPyramidInstallationStore,
+            functional_pyramid_installation_path,
+        )
+        from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            data = base / "data"
+            data.mkdir()
+            roots = tuple(base / name for name in ("one", "two"))
+            for root in roots:
+                root.mkdir()
+                store = LifecycleStore(
+                    data / f"{root.name}.db", retention=DEFAULT_LIFECYCLE_RETENTION
+                )
+                store.register_repository(root.name, str(root))
+                store.close()
+            installation = functional_pyramid_installation_path(data)
+            store = FunctionalPyramidInstallationStore.create(
+                installation, retention=DEFAULT_LIFECYCLE_RETENTION
+            )
+            store.close()
+            members = st._cutover_members(data, roots)
+            before = {paths.active: paths.active.read_bytes() for _, paths in members}
+            manifests = st._prepare_installation_cutover(data, roots)
+            self.assertEqual(len(manifests), 3)
+            for (_, paths), manifest in zip(members, manifests, strict=True):
+                self.assertEqual(manifest.state, st.TransitionState.ACTIVATED)
+                self.assertEqual(
+                    st._read_schema_version_ro(paths.staging), paths.target_schema
+                )
+                self.assertEqual(paths.active.read_bytes(), before[paths.active])
+            self.assertEqual(st._prepare_installation_cutover(data, roots), manifests)
+            with st._exclusive_source(members[-1][1].active):
+                with self.assertRaises(st.TransitionError):
+                    st._prepare_installation_cutover(data, roots)
+            for _, paths in members:
+                self.assertEqual(paths.active.read_bytes(), before[paths.active])
+
+    def test_coordinated_staging_composes_earlier_repository_mapping(self):
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_store.functional_pyramid import (
+            FunctionalPyramidInstallationStore,
+            functional_pyramid_installation_path,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            data = base / "data"
+            data.mkdir()
+            root = base / "demo"
+            _schema14_store(data / "demo.db", root)
+            installation = FunctionalPyramidInstallationStore.create(
+                functional_pyramid_installation_path(data),
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+            )
+            installation.close()
+            active = data / "demo.db"
+            before = active.read_bytes()
+            st._prepare_installation_cutover(data, (root,))
+            paths = st.TransitionPaths(data, "demo", target_schema=16)
+            self.assertEqual(st._read_schema_version_ro(paths.staging), 16)
+            self.assertEqual(active.read_bytes(), before)
+            with sqlite3.connect(paths.staging) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT canonical_json FROM record_receipts"
+                    ).fetchone()[0]
+                )
+                self.assertEqual(
+                    payload["accepted_effect"]["$type"],
+                    "HistoricalAcceptanceDetailUnavailable",
+                )
+
     def test_schema15_stage_preserves_complete_retained_database(self):
         from span.shell.store_transition_schema15 import stage_schema15
 

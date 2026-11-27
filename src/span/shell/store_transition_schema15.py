@@ -395,16 +395,29 @@ def _backup(source: _Path, target: _Path) -> None:
         old.close()
 
 
-def stage_schema15(paths: TransitionPaths) -> None:
-    """Copy the complete archived SQLite database before changing its payloads."""
-    _backup(paths.archive, paths.staging)
-    connection = _sqlite3.connect(paths.staging)
+def _stage_repository_copy(source: _Path, staged: _Path) -> None:
+    _backup(source, staged)
+    connection = _sqlite3.connect(staged)
     try:
         with connection:
             upgrade_repository_payloads(connection)
     finally:
         connection.close()
-    verify_schema15_staging(paths)
+    _verify_repository_copy(source, staged)
+
+
+def stage_schema15(paths: TransitionPaths) -> None:
+    """Copy the complete archived SQLite database before changing its payloads."""
+    _stage_repository_copy(paths.archive, paths.staging)
+
+
+def upgrade_staged_repository(paths: TransitionPaths) -> None:
+    """Compose the already verified earlier mapping into the current target."""
+    import os
+
+    mapped = paths.transition_dir / "mapped-source.db"
+    os.replace(paths.staging, mapped)
+    _stage_repository_copy(mapped, paths.staging)
 
 
 def stage_installation_schema1(paths: TransitionPaths) -> None:
@@ -464,13 +477,14 @@ def _verify_table(
 
 
 def _verify_copy(
-    paths: TransitionPaths,
+    source: _Path,
+    staged: _Path,
     version: str,
     transforms: dict[str, tuple[str, _Callable[[object], object]]],
     added_ddl: tuple[str, ...],
 ) -> None:
-    old = _connect_read_only(paths.archive)
-    new = _connect_read_only(paths.staging)
+    old = _connect_read_only(source)
+    new = _connect_read_only(staged)
     try:
         if _integrity(new) != "ok":
             raise TransitionError("staged database failed integrity check")
@@ -503,9 +517,10 @@ def _verify_copy(
         new.close()
 
 
-def verify_schema15_staging(paths: TransitionPaths) -> None:
+def _verify_repository_copy(source: _Path, staged: _Path) -> None:
     _verify_copy(
-        paths,
+        source,
+        staged,
         "16",
         {
             "verification_runs": ("canonical_json", _restore_verification),
@@ -516,9 +531,14 @@ def verify_schema15_staging(paths: TransitionPaths) -> None:
     )
 
 
+def verify_schema15_staging(paths: TransitionPaths) -> None:
+    _verify_repository_copy(paths.archive, paths.staging)
+
+
 def verify_installation_schema1_staging(paths: TransitionPaths) -> None:
     _verify_copy(
-        paths,
+        paths.archive,
+        paths.staging,
         "2",
         {
             "functional_pyramid_receipts": (

@@ -170,14 +170,28 @@ class TransitionPaths:
 
     data_dir: _pathlib.Path
     repository_id: str
+    target_schema: int | None = None
+    installation: bool = False
 
     @property
     def active(self) -> _pathlib.Path:
+        if self.installation:
+            from span.shell.sqlite_store.functional_pyramid import (
+                functional_pyramid_installation_path,
+            )
+
+            return functional_pyramid_installation_path(self.data_dir)
         return self.data_dir / f"{self.repository_id}.db"
 
     @property
     def transition_dir(self) -> _pathlib.Path:
-        return self.data_dir / _TRANSITIONS_DIR / self.repository_id
+        if self.installation:
+            directory = self.active.parent / _TRANSITIONS_DIR
+        else:
+            directory = self.data_dir / _TRANSITIONS_DIR / self.repository_id
+        if self.target_schema is not None:
+            directory = directory / f"schema-{self.target_schema}"
+        return directory
 
     @property
     def manifest(self) -> _pathlib.Path:
@@ -471,8 +485,21 @@ def _empty_target_bytes() -> int:
 
 def inspect_store(config: TransitionConfig) -> LegacyInspection:
     """Read every observable fact without creating, migrating or reaping."""
-    paths = TransitionPaths(config.data_dir, config.repository_id)
+    return _inspect_paths(
+        config, TransitionPaths(config.data_dir, config.repository_id)
+    )
+
+
+def _inspect_paths(
+    config: TransitionConfig, paths: TransitionPaths
+) -> LegacyInspection:
     source = paths.active
+    target = paths.target_schema or TARGET_SCHEMA
+    supported = (
+        frozenset({1})
+        if paths.installation
+        else SUPPORTED_SOURCE_SCHEMAS | ({15} if target == 16 else set())
+    )
     if not source.is_file():
         return LegacyInspection(
             path=source,
@@ -488,7 +515,7 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
             unknown_tables=(),
             limitations=(
                 f"no store at {source}; explicit installer provisioning creates "
-                f"a new schema-{TARGET_SCHEMA} store instead of a transition",
+                f"a new schema-{target} store instead of a transition",
             ),
         )
     connection = _connect_read_only(source)
@@ -511,10 +538,10 @@ def inspect_store(config: TransitionConfig) -> LegacyInspection:
         limitations.append(
             "store has no readable meta.schema_version; apply is refused"
         )
-    elif version not in SUPPORTED_SOURCE_SCHEMAS:
+    elif version not in supported:
         limitations.append(
             f"schema {version} is not a supported transition source "
-            f"({sorted(SUPPORTED_SOURCE_SCHEMAS)})"
+            f"({sorted(supported)})"
         )
     if config.root is not None:
         root_name = _pathlib.Path(config.root).name
@@ -1577,17 +1604,11 @@ def _apply(config: TransitionConfig) -> TransitionReport:
     effects: list[str] = []
     limitations: list[str] = list(inspection.limitations)
     with _exclusive_source(paths.active) as source:
-        manifest = _open_manifest(config, paths, inspection, root)
-        manifest, step_effects, step_limits = _archive_step(
-            config, paths, manifest, root, source
+        manifest, step_effects, step_limits = _prepare_member(
+            config, paths, inspection, root, source
         )
         effects.extend(step_effects)
         limitations.extend(step_limits)
-        _require_archived_source(paths, manifest, source)
-        for step in (_export_step, _stage_step):
-            manifest, step_effects, step_limits = step(config, paths, manifest, root)
-            effects.extend(step_effects)
-            limitations.extend(step_limits)
         _prepare_replacement(source, paths.active)
         manifest, step_effects, step_limits = _activate_step(
             config, paths, manifest, root
@@ -1604,6 +1625,123 @@ def _apply(config: TransitionConfig) -> TransitionReport:
         manifest=manifest,
         limitations=tuple(limitations),
     )
+
+
+def _prepare_member(
+    config: TransitionConfig,
+    paths: TransitionPaths,
+    inspection: LegacyInspection,
+    root: str,
+    source: _sqlite3.Connection,
+) -> tuple[TransitionManifest, tuple[str, ...], tuple[str, ...]]:
+    """One preparation protocol for an individual or coordinated transition."""
+    manifest = _open_manifest(config, paths, inspection, root)
+    manifest, effects, limitations = _archive_step(
+        config, paths, manifest, root, source
+    )
+    _require_archived_source(paths, manifest, source)
+    for step in (_export_step, _stage_step):
+        manifest, step_effects, step_limits = step(config, paths, manifest, root)
+        effects += step_effects
+        limitations += step_limits
+    if (
+        not manifest.staged_sha256
+        or not paths.staging.is_file()
+        or _sha256_file(paths.staging) != manifest.staged_sha256
+    ):
+        raise TransitionError("verified staging store is missing or changed")
+    return manifest, effects, limitations
+
+
+def _cutover_members(
+    data_dir: _pathlib.Path, roots: tuple[_pathlib.Path, ...]
+) -> tuple[tuple[TransitionConfig, TransitionPaths], ...]:
+    """Bind the complete explicit registration set before opening any source."""
+    resolved = tuple(root.resolve() for root in roots)
+    if len({root.name for root in resolved}) != len(resolved):
+        raise TransitionError("registered repository identities are not unique")
+    if not resolved or any(not root.is_dir() for root in resolved):
+        raise TransitionError("cutover requires every registered repository root")
+    members = [
+        (
+            TransitionConfig(data_dir, root.name, str(root)),
+            TransitionPaths(data_dir, root.name, target_schema=16),
+        )
+        for root in resolved
+    ]
+    members.append(
+        (
+            TransitionConfig(data_dir, "installation"),
+            TransitionPaths(
+                data_dir, "installation", target_schema=2, installation=True
+            ),
+        )
+    )
+    return tuple(sorted(members, key=lambda member: str(member[1].active)))
+
+
+def _require_cutover_source(
+    config: TransitionConfig,
+    paths: TransitionPaths,
+    source: _sqlite3.Connection,
+    inspection: LegacyInspection,
+) -> None:
+    if inspection.integrity != "ok":
+        raise TransitionError(f"cutover source failed integrity: {paths.active}")
+    version = _read_schema_version(source)
+    if paths.installation:
+        if version != 1:
+            raise TransitionError("installation cutover requires schema 1")
+        return
+    if version not in SUPPORTED_SOURCE_SCHEMAS | {15}:
+        raise TransitionError(f"unsupported cutover source schema: {version}")
+    if inspection.repository_ids != (config.repository_id,):
+        raise TransitionError("cutover source repository identity does not match")
+    if version == 15:
+        row = source.execute(
+            "SELECT root FROM repositories WHERE repository_id=?",
+            (config.repository_id,),
+        ).fetchone()
+        if row is None or row[0] != config.root:
+            raise TransitionError("cutover source root binding does not match")
+
+
+def _prepare_installation_cutover(
+    data_dir: _pathlib.Path, roots: tuple[_pathlib.Path, ...]
+) -> tuple[TransitionManifest, ...]:
+    """Stage and verify the entire 16/2 set without publishing a database.
+
+    This is an offline prerequisite of the integrated runtime cutover.
+    No mixed-version set is made visible by this preparation operation.
+    """
+    members = _cutover_members(data_dir, roots)
+    with _transition_ownership(data_dir), _contextlib.ExitStack() as stack:
+        for _, paths in members:
+            if not paths.active.is_file():
+                raise TransitionError(
+                    f"registered cutover source missing: {paths.active}"
+                )
+        inspections = tuple(_inspect_paths(config, paths) for config, paths in members)
+        sources = tuple(
+            stack.enter_context(_exclusive_source(paths.active))
+            for _, paths in members
+        )
+        for (config, paths), source, inspection in zip(
+            members, sources, inspections, strict=True
+        ):
+            _require_cutover_source(config, paths, source, inspection)
+        required = sum(item.required_free_bytes for item in inspections)
+        if _shutil.disk_usage(data_dir).free < required:
+            raise TransitionError("insufficient free space for coordinated staging")
+        manifests = []
+        for (config, paths), source, inspection in zip(
+            members, sources, inspections, strict=True
+        ):
+            manifest, _, _ = _prepare_member(
+                config, paths, inspection, config.root or str(data_dir), source
+            )
+            manifests.append(manifest)
+        return tuple(manifests)
 
 
 def _resume_published(
@@ -1665,7 +1803,7 @@ def _open_manifest(
             source_schema_version=_typing.cast(int, inspection.schema_version),
             root=root,
             state=TransitionState.INSPECTED,
-            expected_active_schema=TARGET_SCHEMA,
+            expected_active_schema=paths.target_schema or TARGET_SCHEMA,
             archive_sha256="",
             export_sha256="",
             tables=(),
@@ -1679,6 +1817,8 @@ def _open_manifest(
     if (
         existing.repository_id != config.repository_id
         or existing.root != root
+        or existing.source_path != str(paths.active)
+        or existing.expected_active_schema != (paths.target_schema or TARGET_SCHEMA)
         or existing.source_schema_version != inspection.schema_version
     ):
         raise TransitionError(
@@ -1756,18 +1896,13 @@ def _stage_step(
 ) -> tuple[TransitionManifest, tuple[str, ...], tuple[str, ...]]:
     if manifest.state is not TransitionState.STAGED:
         return manifest, (), ()
-    _require_schema12_context_drain(paths.archive, config)
-    _, binding_limitations = _stage(paths, config, root, manifest.source_schema_version)
-    effects = [f"staged schema-{TARGET_SCHEMA} store at {paths.staging}"]
-    effects.extend(
-        _verify_staged(
-            paths,
-            config,
-            root,
-            manifest.tables,
-            manifest.source_schema_version,
-        )
-    )
+    if _sha256_file(paths.export) != manifest.export_sha256:
+        raise TransitionError("verified export changed before staging")
+    if _reconcile_export(paths) != manifest.tables:
+        raise TransitionError("archive/export reconciliation changed before staging")
+    effects, binding_limitations = _stage_candidate(config, paths, manifest, root)
+    _fsync_file(paths.staging)
+    _fsync_dir(paths.transition_dir)
     manifest = _advance(
         manifest,
         TransitionState.ACTIVATED,
@@ -1779,6 +1914,37 @@ def _stage_step(
     )
     _write_manifest(paths, manifest)
     return manifest, tuple(effects), binding_limitations
+
+
+def _stage_candidate(
+    config: TransitionConfig,
+    paths: TransitionPaths,
+    manifest: TransitionManifest,
+    root: str,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Use the existing historical mapping owners for the selected target."""
+    target = manifest.expected_active_schema
+    if paths.installation:
+        from span.shell.store_transition_schema15 import stage_installation_schema1
+
+        stage_installation_schema1(paths)
+        return ("verified installation schema-2 staging",), ()
+    if manifest.source_schema_version == 15 and target == 16:
+        from span.shell.store_transition_schema15 import stage_schema15
+
+        stage_schema15(paths)
+        return ("verified repository schema-16 staging",), ()
+    _require_schema12_context_drain(paths.archive, config)
+    _, limitations = _stage(paths, config, root, manifest.source_schema_version)
+    effects = _verify_staged(
+        paths, config, root, manifest.tables, manifest.source_schema_version
+    )
+    if target == 16:
+        from span.shell.store_transition_schema15 import upgrade_staged_repository
+
+        upgrade_staged_repository(paths)
+        effects += ("verified mapped repository schema-16 staging",)
+    return effects, limitations
 
 
 def _activate_step(
