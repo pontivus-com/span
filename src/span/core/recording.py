@@ -151,7 +151,9 @@ class UnderstandingTransition:
             version=self.new_version.version,
             revision_effects=self.revision_effects,
             challenge_dispositions=tuple(
-                AcceptedChallengeDispositionRef(effect.challenge_id, effect.new_revision)
+                AcceptedChallengeDispositionRef(
+                    effect.challenge_id, effect.new_revision
+                )
                 for effect in self.challenge_effects
             ),
             dependency_effects=dependencies,

@@ -748,12 +748,16 @@ class ChallengeTransitionTest(unittest.TestCase):
         self.assertEqual(accepted.target_conclusions, version.conclusions)
         self.assertEqual(accepted.target_version, version.version)
         self.assertEqual(
-            m.from_canonical(m.AcceptedChallengeOpeningEffect, m.to_canonical(accepted)),
+            m.from_canonical(
+                m.AcceptedChallengeOpeningEffect, m.to_canonical(accepted)
+            ),
             accepted,
         )
         with self.assertRaisesRegex(ValueError, "newly accepted revision"):
             accepted_challenge_opening(
-                dataclasses.replace(challenge, challenge_revision=m.ChallengeRevision(2))
+                dataclasses.replace(
+                    challenge, challenge_revision=m.ChallengeRevision(2)
+                )
             )
 
     def test_unresolved_disposition_advances_revision(self):
