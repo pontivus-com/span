@@ -280,7 +280,7 @@ def _render_affected(repository_id, changed, *, close_prefix=False):
         for conclusion in surface.conclusions:
             support = conclusion.support
             if (
-                isinstance(support, m.SupportEvaluation)
+                isinstance(support, m.SupportQualification)
                 and support.state is m.SupportState.CURRENT
             ):
                 continue

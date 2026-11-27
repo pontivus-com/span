@@ -833,8 +833,10 @@ class LifecycleService:
             OSError,
         ) + self._store.operational_errors
         try:
-            qualification: m.UnderstandingSupport | m.SupportUnavailable = (
-                self._support.evaluate_version(understanding_id, version)
+            qualification: m.UnderstandingQualification | m.SupportUnavailable = (
+                self._support.qualify_understanding(
+                    self._support.evaluate_version(understanding_id, version)
+                )
             )
         except operational_errors:
             qualification = m.SupportUnavailable(
@@ -878,11 +880,6 @@ class LifecycleService:
             if accepted_curations and not semantic_effects
             else snapshot.conclusions
         )
-        compact_qualification = (
-            m.compact_understanding(qualification)
-            if isinstance(qualification, m.UnderstandingSupport)
-            else qualification
-        )
         return m.UnderstandingRecorded(
             receipt_selector=m.ReceiptRetrievalSelector(
                 repository_id=receipt.identity.repository_id,
@@ -893,7 +890,7 @@ class LifecycleService:
             version=m.UnderstandingVersionNumber(version),
             affected_revisions=affected_revisions,
             dependent_effects=receipt.dependent_effects,
-            qualification=compact_qualification,
+            qualification=qualification,
             status=status,
         )
 
@@ -905,19 +902,16 @@ class LifecycleService:
             OSError,
         ) + self._store.operational_errors
         try:
-            qualification: m.VerificationSupport | m.SupportUnavailable = (
-                self._support.evaluate_verification(run_id)
+            qualification: m.VerificationQualification | m.SupportUnavailable = (
+                self._support.qualify_verification(
+                    self._support.evaluate_verification(run_id)
+                )
             )
         except operational_errors:
             qualification = m.SupportUnavailable(
                 "verification support evaluation is unavailable"
             )
         run = self._store.get_verification_run(run_id)
-        compact_qualification = (
-            m.compact_verification(qualification)
-            if isinstance(qualification, m.VerificationSupport)
-            else qualification
-        )
         return m.VerificationRecorded(
             receipt_selector=m.ReceiptRetrievalSelector(
                 repository_id=receipt.identity.repository_id,
@@ -928,7 +922,7 @@ class LifecycleService:
             command=run.command,
             scenario=run.scenario,
             outcome=run.outcome,
-            qualification=compact_qualification,
+            qualification=qualification,
         )
 
     def qualify_challenge(self, receipt: m.RecordReceipt) -> m.ChallengeRecorded:

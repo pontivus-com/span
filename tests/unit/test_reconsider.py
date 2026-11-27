@@ -591,8 +591,8 @@ class ReconsiderServiceTest(unittest.TestCase):
             for conclusion in surface.conclusions
             if conclusion.ref.understanding_id.value == "u-installation-engine"
         )
-        self.assertIsInstance(affected.support, m.SupportEvaluation)
-        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertIsInstance(affected.support, m.SupportQualification)
+        assert isinstance(affected.support, m.SupportQualification)
         self.assertEqual(
             affected.support.state,
             m.SupportState.REASSESSMENT_REQUIRED,
@@ -630,8 +630,8 @@ class ReconsiderServiceTest(unittest.TestCase):
             for conclusion in surface.conclusions
             if conclusion.ref.understanding_id.value == "u-pre-route"
         )
-        self.assertIsInstance(affected.support, m.SupportEvaluation)
-        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertIsInstance(affected.support, m.SupportQualification)
+        assert isinstance(affected.support, m.SupportQualification)
         self.assertEqual(
             affected.support.state,
             m.SupportState.REASSESSMENT_REQUIRED,
@@ -668,13 +668,13 @@ class ReconsiderServiceTest(unittest.TestCase):
             for conclusion in surface.conclusions
             if conclusion.ref.understanding_id.value == "u-pre-route-retained"
         )
-        self.assertIsInstance(retained.support, m.SupportEvaluation)
-        assert isinstance(retained.support, m.SupportEvaluation)
+        self.assertIsInstance(retained.support, m.SupportQualification)
+        assert isinstance(retained.support, m.SupportQualification)
         self.assertEqual(
             retained.support.state,
             m.SupportState.REASSESSMENT_REQUIRED,
         )
-        self.assertIn("FunctionalRouteSupport", retained.support.reason)
+        self.assertIn("governing support", retained.support.reason)
         self.assertEqual(
             tuple(context.repository_id for context in contexts),
             ("repo-1",),
@@ -710,8 +710,8 @@ class ReconsiderServiceTest(unittest.TestCase):
             for conclusion in surface.conclusions
             if conclusion.ref.understanding_id.value == "u-governed"
         )
-        self.assertIsInstance(affected.support, m.SupportEvaluation)
-        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertIsInstance(affected.support, m.SupportQualification)
+        assert isinstance(affected.support, m.SupportQualification)
         self.assertEqual(
             affected.support.state,
             m.SupportState.REASSESSMENT_REQUIRED,
@@ -817,8 +817,8 @@ class ReconsiderServiceTest(unittest.TestCase):
             if conclusion.ref.understanding_id.value == "u-authority"
         )
         self.assertIn(m.ChangeReason.DIRECT, affected.reasons)
-        self.assertIsInstance(affected.support, m.SupportEvaluation)
-        assert isinstance(affected.support, m.SupportEvaluation)
+        self.assertIsInstance(affected.support, m.SupportQualification)
+        assert isinstance(affected.support, m.SupportQualification)
         self.assertEqual(affected.support.state, m.SupportState.CURRENT)
         self.assertEqual(result.reestablishment_contexts, ())
 

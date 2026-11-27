@@ -44,7 +44,6 @@ from span.core.model.primitives import (
     _require_non_empty,
 )
 from span.core.model.support import (
-    SupportEvaluation,
     SupportQualification,
     SupportState,
     SupportUnavailable,
@@ -305,7 +304,7 @@ class ChangedConclusion:
     ref: ConclusionRevisionRef
     expected_version: UnderstandingVersionNumber
     reasons: tuple[ChangeReason, ...]
-    support: SupportEvaluation | SupportUnavailable
+    support: SupportQualification | SupportUnavailable
 
     def __post_init__(self) -> None:
         if not self.reasons:

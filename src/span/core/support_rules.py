@@ -216,7 +216,7 @@ def functional_route_state(
         return evaluation(
             _m.SupportState.UNVERIFIABLE,
             observed_at,
-            "functional route could not be evaluated: " + current.failure,
+            "governing applicability could not be evaluated",
         )
     if isinstance(current, _m.FunctionalPyramidParticipation):
         return evaluation(
@@ -240,13 +240,13 @@ def functional_route_state(
         return evaluation(
             _m.SupportState.UNVERIFIABLE,
             observed_at,
-            "current functional route identity is unavailable",
+            "current governing applicability is unavailable",
         )
     if current_route_identity != recorded.route_identity:
         return evaluation(
             _m.SupportState.REASSESSMENT_REQUIRED,
             observed_at,
-            "functional route identity changed",
+            "governing applicability changed",
         )
     return evaluation(_m.SupportState.CURRENT, observed_at)
 

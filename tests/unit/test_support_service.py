@@ -364,6 +364,31 @@ class SupportServiceTest(unittest.TestCase):
         )
         self.assertIn("observed source bytes changed", by_observation[second].reason)
 
+    def test_public_support_basis_preserves_recorded_source_boundary(self) -> None:
+        self._put_observation("public-source", "src/app.py")
+        dependency = m.SourceSupport(
+            observation_id=m.SourceObservationId("public-source")
+        )
+        self._create("u-public-source", "req-public-source", (dependency,))
+        ref = m.ConclusionRevisionRef(
+            understanding_id=m.UnderstandingId("u-public-source"),
+            conclusion_id=m.ConclusionId("c-1"),
+            revision=m.ConclusionRevisionNumber(1),
+        )
+        _write(self.root, "src/app.py", "changed\n")
+        qualification = self.service.qualify_support(
+            self.service.evaluate_revision(ref)
+        )
+        self.assertEqual(len(qualification.findings), 1)
+        basis = qualification.findings[0].basis
+        self.assertIsInstance(basis, m.SourceSupportBasis)
+        assert isinstance(basis, m.SourceSupportBasis)
+        observation = self.store.get_source_observation("public-source")
+        self.assertEqual(basis.evidence, observation.evidence)
+        self.assertEqual(basis.ranges, observation.delivered_ranges)
+        self.assertEqual(basis.captured_at, observation.captured_at)
+        self.assertEqual(basis.whole_file, observation.whole_file)
+
     def test_authority_support_status_and_presence(self) -> None:
         digest = hashlib.sha256((self.root / "docs/rule.md").read_bytes()).hexdigest()
         binding = m.AuthorityBinding(

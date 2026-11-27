@@ -704,6 +704,20 @@ cleanup deferred to PUB-09/10; those integrate/verify, not repair debt.
 Record actual tests and review evidence in the existing invariant/functional
 acceptance matrices, never mark passing from plan text.
 
+**PUB-02 candidate development increment (OPEN, not accepted).** CI
+45954673769 at `a8cf8c1f763a` established 18 target failures, with 1,038
+passing and one skipped; the measured test-budget gate passed. The first
+source increment implements the live public support basis and finding union
+at the existing core support owner, resolves recorded facts through the
+existing support service, and replaces live qualification consumers
+including edit notices. It does not change retained support records or
+store versions. The existing wire registry is extended for the seven
+canonical semantic carriers (measured carrier count 226 → 233); the
+recorded-source equivalence test adds 25 test lines. The raw historical
+audit and receipt projection, full PUB-01 audit, schema transition, and
+all acceptance evidence remain open. This candidate is not permission
+to close PUB-01, PUB-02 or proceed to deployment.
+
 **PUB-02 — Public support and immutable audit (API-09/10/15/18).** After
 PUB-01, edit core/model/support.py, understanding.py, answers.py, repository
 exports and service/support.py / service/answer.py / service/effects.py

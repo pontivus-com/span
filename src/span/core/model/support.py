@@ -12,10 +12,20 @@ import typing as _typing
 from dataclasses import dataclass as _dataclass
 
 from span.core.model.verification import VerificationRun
-from span.core.model.functional_pyramid import FunctionalRouteSupport
+from span.core.model.functional_pyramid import (
+    FunctionalPyramidId,
+    FunctionalRouteSupport,
+)
+from span.core.model.investigation import SourceRange
 from span.core.model.primitives import (
+    AuthorityApplicability,
     AuthorityBinding,
+    AuthorityKind,
+    AuthorityStatus,
     ConclusionRevisionRef,
+    DeclaredPrecedence,
+    EvidenceRef,
+    EvidenceScope,
     DiscoveryObservationId,
     SourceObservationId,
     UnderstandingId,
@@ -175,6 +185,89 @@ class VerificationSupportRequest:
 
 
 @_dataclass(frozen=True)
+class SourceSupportBasis:
+    evidence: EvidenceRef
+    observation_id: SourceObservationId
+    ranges: tuple[SourceRange, ...]
+    captured_at: _datetime.datetime
+    whole_file: bool
+
+    def __post_init__(self) -> None:
+        if self.captured_at.utcoffset() is None:
+            raise ValueError("source basis requires an aware observation time")
+        if not self.whole_file and not self.ranges:
+            raise ValueError("source basis requires a recorded evidence boundary")
+
+
+@_dataclass(frozen=True)
+class DiscoverySupportBasis:
+    repository_id: str
+    scope: EvidenceScope
+    captured_at: _datetime.datetime
+
+    def __post_init__(self) -> None:
+        _require_non_empty("discovery basis repository", self.repository_id)
+        if self.captured_at.utcoffset() is None:
+            raise ValueError("discovery basis requires an aware observation time")
+
+
+@_dataclass(frozen=True)
+class AuthoritySupportBasis:
+    evidence: EvidenceRef
+    authority_kind: AuthorityKind
+    status: AuthorityStatus
+    applicability: AuthorityApplicability
+    declared_precedence: DeclaredPrecedence | None
+
+
+@_dataclass(frozen=True)
+class PremiseSupportBasis:
+    ref: ConclusionRevisionRef
+
+
+@_dataclass(frozen=True)
+class GovernanceSupportBasis:
+    repository_id: str
+    pyramid_id: FunctionalPyramidId
+    scope: EvidenceScope
+
+    def __post_init__(self) -> None:
+        _require_non_empty("governance basis repository", self.repository_id)
+
+
+@_dataclass(frozen=True)
+class UnavailableSupportBasis:
+    reference: SourceObservationId | DiscoveryObservationId
+    reason: str
+    recovery: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("unavailable basis reason", self.reason)
+        _require_non_empty("unavailable basis recovery", self.recovery)
+
+
+SupportBasis = _typing.Union[
+    SourceSupportBasis,
+    DiscoverySupportBasis,
+    AuthoritySupportBasis,
+    PremiseSupportBasis,
+    GovernanceSupportBasis,
+    UnavailableSupportBasis,
+]
+
+
+@_dataclass(frozen=True)
+class SupportFinding:
+    basis: SupportBasis
+    state: SupportState
+    reason: str
+
+    def __post_init__(self) -> None:
+        if self.state is SupportState.CURRENT:
+            raise ValueError("public support findings require non-current support")
+
+
+@_dataclass(frozen=True)
 class SupportQualification:
     """Compact public support evaluation for one already-identified subject."""
 
@@ -182,7 +275,7 @@ class SupportQualification:
     observed_at: _datetime.datetime
     reason: str
     limitations: tuple[str, ...]
-    findings: tuple[DependencyFinding, ...]
+    findings: tuple[SupportFinding, ...]
 
     def __post_init__(self) -> None:
         if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
@@ -225,48 +318,24 @@ class VerificationQualification:
             raise ValueError("VerificationQualification.observed_at must be aware")
 
 
-def compact_support(value: SupportEvaluation) -> SupportQualification:
-    """Project detailed support once without copying its full dependency array."""
+def compact_support(
+    value: SupportEvaluation, bases: tuple[SupportBasis, ...]
+) -> SupportQualification:
+    """Combine one evaluated result with its exact recorded semantic facts."""
     if value.observed_at is None:
         raise ValueError("public support qualification requires evaluation time")
+    non_current = tuple(
+        finding
+        for finding in value.findings
+        if finding.state is not SupportState.CURRENT
+    )
     return SupportQualification(
         state=value.state,
         observed_at=value.observed_at,
         reason=value.reason,
         limitations=value.limitations,
         findings=tuple(
-            finding
-            for finding in value.findings
-            if finding.state is not SupportState.CURRENT
-        ),
-    )
-
-
-def compact_understanding(value: UnderstandingSupport) -> UnderstandingQualification:
-    return UnderstandingQualification(
-        state=value.state,
-        observed_at=value.observed_at,
-        limitations=value.limitations,
-        conclusions=tuple(
-            ConclusionQualification(
-                ref=item.ref,
-                evaluation=compact_support(item.evaluation),
-            )
-            for item in value.conclusions
-        ),
-    )
-
-
-def compact_verification(value: VerificationSupport) -> VerificationQualification:
-    return VerificationQualification(
-        state=value.state,
-        observed_at=value.observed_at,
-        limitations=value.limitations,
-        observations=tuple(
-            ObservationQualification(
-                observation_id=item.observation_id,
-                evaluation=compact_support(item.evaluation),
-            )
-            for item in value.observations
+            SupportFinding(basis=basis, state=finding.state, reason=finding.reason)
+            for finding, basis in zip(non_current, bases, strict=True)
         ),
     )

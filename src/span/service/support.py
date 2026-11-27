@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as _datetime
 import typing as _typing
+from dataclasses import replace as _replace
 
 from span.core import model as m
 from span.core import support_rules as _rules
@@ -163,6 +164,98 @@ class SupportService:
             state=state,
             observed_at=self._clock(),
             limitations=limitations,
+        )
+
+    def support_basis(self, dependency: m.SupportDependency) -> m.SupportBasis:
+        """Read only the immutable facts named by an already-recorded dependency."""
+        if isinstance(dependency, m.SourceSupport):
+            observation = self._store.find_source_observation(
+                dependency.observation_id.value
+            )
+            if observation is None:
+                return m.UnavailableSupportBasis(
+                    reference=dependency.observation_id,
+                    reason="recorded source observation is unavailable",
+                    recovery="re-establish support from the source",
+                )
+            return m.SourceSupportBasis(
+                evidence=observation.evidence,
+                observation_id=observation.observation_id,
+                ranges=observation.delivered_ranges,
+                captured_at=observation.captured_at,
+                whole_file=observation.whole_file,
+            )
+        if isinstance(dependency, m.DiscoverySupport):
+            discovery = self._store.find_discovery_observation(
+                dependency.observation_id.value
+            )
+            if discovery is None:
+                return m.UnavailableSupportBasis(
+                    reference=dependency.observation_id,
+                    reason="recorded discovery observation is unavailable",
+                    recovery="re-establish support from the discovery scope",
+                )
+            return m.DiscoverySupportBasis(
+                repository_id=discovery.repository_id,
+                scope=discovery.scope,
+                captured_at=discovery.captured_at,
+            )
+        if isinstance(dependency, m.AuthoritySupportDependency):
+            authority = dependency.authority
+            return m.AuthoritySupportBasis(
+                evidence=authority.evidence_ref,
+                authority_kind=authority.authority_kind,
+                status=authority.status,
+                applicability=authority.applicability,
+                declared_precedence=authority.declared_precedence,
+            )
+        if isinstance(dependency, m.PremiseSupport):
+            return m.PremiseSupportBasis(ref=dependency.premise)
+        if isinstance(dependency, m.FunctionalRouteSupport):
+            return m.GovernanceSupportBasis(
+                repository_id=dependency.repository_id,
+                pyramid_id=dependency.pyramid_id,
+                scope=dependency.semantic_scope,
+            )
+        _typing.assert_never(dependency)
+
+    def qualify_support(self, value: m.SupportEvaluation) -> m.SupportQualification:
+        bases = tuple(
+            self.support_basis(finding.dependency)
+            for finding in value.findings
+            if finding.state is not m.SupportState.CURRENT
+        )
+        return m.compact_support(value, bases)
+
+    def qualify_understanding(
+        self, value: m.UnderstandingSupport
+    ) -> m.UnderstandingQualification:
+        return m.UnderstandingQualification(
+            state=value.state,
+            observed_at=value.observed_at,
+            limitations=value.limitations,
+            conclusions=tuple(
+                m.ConclusionQualification(
+                    ref=item.ref, evaluation=self.qualify_support(item.evaluation)
+                )
+                for item in value.conclusions
+            ),
+        )
+
+    def qualify_verification(
+        self, value: m.VerificationSupport
+    ) -> m.VerificationQualification:
+        return m.VerificationQualification(
+            state=value.state,
+            observed_at=value.observed_at,
+            limitations=value.limitations,
+            observations=tuple(
+                m.ObservationQualification(
+                    observation_id=item.observation_id,
+                    evaluation=self.qualify_support(item.evaluation),
+                )
+                for item in value.observations
+            ),
         )
 
     # -- dependency evaluation --------------------------------------------
@@ -324,11 +417,25 @@ class SupportService:
                     else:
                         observed = ranged
                         expected = record.content_digest.value
-        return _rules.source_state(
+        evaluation = _rules.source_state(
             record=record,
             observed_fingerprint=observed,
             expected_fingerprint=expected,
             observed_at=self._clock(),
+        )
+        dependency = m.SourceSupport(
+            observation_id=m.SourceObservationId(observation_id)
+        )
+        return _replace(
+            evaluation,
+            dependencies=(dependency,),
+            findings=(
+                m.DependencyFinding(
+                    dependency=dependency,
+                    state=evaluation.state,
+                    reason=evaluation.reason,
+                ),
+            ),
         )
 
     def _discovery_eval(self, observation_id: str) -> m.SupportEvaluation:

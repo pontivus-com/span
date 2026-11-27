@@ -189,14 +189,13 @@ class DependencyEffectService:
             )
             support = (
                 self._forced_reassessment(
-                    ref,
-                    "ACTIVE normative revision predates required FunctionalRouteSupport",
+                    "ACTIVE normative revision predates required governing support"
                 )
                 if missing_required_route
                 else self._support_state(ref)
             )
             if (
-                isinstance(support, m.SupportEvaluation)
+                isinstance(support, m.SupportQualification)
                 and support.state is m.SupportState.CURRENT
             ):
                 continue
@@ -270,7 +269,7 @@ class DependencyEffectService:
                 direct.append(ref)
                 forced[ref] = (
                     "repository became ACTIVE and this normative revision "
-                    "predates required FunctionalRouteSupport"
+                    "predates required governing support"
                 )
 
         for repository_id in sorted(set(deliberately_inactive_repositories)):
@@ -420,7 +419,7 @@ class DependencyEffectService:
         if ref not in version.conclusions:
             return None
         support = (
-            self._forced_reassessment(ref, forced_reason)
+            self._forced_reassessment(forced_reason)
             if forced_reason is not None
             else self._support_state(ref)
         )
@@ -431,20 +430,14 @@ class DependencyEffectService:
             support=support,
         )
 
-    def _forced_reassessment(
-        self,
-        ref: m.ConclusionRevisionRef,
-        reason: str,
-    ) -> m.SupportEvaluation:
-        revision = self._conclusion_revision(ref)
-        dependencies: tuple[m.SupportDependency, ...] = ()
-        if isinstance(revision.content, m.SupportedConclusion):
-            dependencies = tuple(revision.content.support)
-        return _support_rules.evaluation(
-            m.SupportState.REASSESSMENT_REQUIRED,
-            self._clock(),
-            reason,
-            dependencies=dependencies,
+    def _forced_reassessment(self, reason: str) -> m.SupportQualification:
+        return m.compact_support(
+            _support_rules.evaluation(
+                m.SupportState.REASSESSMENT_REQUIRED,
+                self._clock(),
+                reason,
+            ),
+            (),
         )
 
     def _current_version(
@@ -722,7 +715,7 @@ class DependencyEffectService:
     @staticmethod
     def _is_actionable(conclusion: m.ChangedConclusion) -> bool:
         return not (
-            isinstance(conclusion.support, m.SupportEvaluation)
+            isinstance(conclusion.support, m.SupportQualification)
             and conclusion.support.state is m.SupportState.CURRENT
         )
 
@@ -745,10 +738,10 @@ class DependencyEffectService:
     def _support_state(
         self,
         ref: m.ConclusionRevisionRef,
-    ) -> m.SupportEvaluation | m.SupportUnavailable:
+    ) -> m.SupportQualification | m.SupportUnavailable:
         support = self._support_for_repository(self._repository_for_ref(ref))
         try:
-            return support.evaluate_revision(ref)
+            return support.qualify_support(support.evaluate_revision(ref))
         except (OSError, ValueError):
             return m.SupportUnavailable("conclusion support evaluation is unavailable")
 

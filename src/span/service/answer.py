@@ -378,7 +378,7 @@ class AnswerService:
             statement=content.statement,
             assertion_nature=content.assertion_nature,
             scope=content.scope,
-            support=m.compact_support(support.evaluation),
+            support=self._support.qualify_support(support.evaluation),
             evidence=self._evidence_refs(content.support),
         )
 
@@ -599,7 +599,7 @@ class AnswerService:
             try:
                 detailed = self._support.evaluate_verification(run.run_id.value)
                 qualification: m.VerificationQualification | m.SupportUnavailable = (
-                    m.compact_verification(detailed)
+                    self._support.qualify_verification(detailed)
                 )
             except (OSError, ValueError):
                 qualification = m.SupportUnavailable(
