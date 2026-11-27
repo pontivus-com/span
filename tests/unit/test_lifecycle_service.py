@@ -2937,6 +2937,14 @@ class LifecycleServiceTest(unittest.TestCase):
         unresolved: tuple[m.FunctionalPyramidFinding, ...] = (),
     ):
         placements = tuple(route.placement for route in routes)
+        identities = {
+            identity
+            for placement in placements
+            for identity in (
+                placement.declaring_repository_id, placement.document.repository_id
+            )
+        }
+        roots = {identity: f"/repos/{identity}" for identity in identities}
         declared_layers = tuple(
             layer
             for layer in m.FunctionalPyramidLayer
@@ -2951,8 +2959,12 @@ class LifecycleServiceTest(unittest.TestCase):
                 version=m.FunctionalPyramidVersion(1),
                 status=status,
                 semantic_scope=scope,
-                placements=placements,
-                unresolved=unresolved,
+                placements=tuple(
+                    m.public_pyramid_placement(item, roots) for item in placements
+                ),
+                unresolved=tuple(
+                    m.public_pyramid_finding(item, roots) for item in unresolved
+                ),
                 declared_layers=declared_layers,
                 absent_layers=absent_layers,
             ),

@@ -574,7 +574,7 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.assertIsInstance(view, m.FunctionalPyramidView)
         assert isinstance(view, m.FunctionalPyramidView)
         self.assertEqual(
-            tuple(placement.document.document_ref for placement in view.placements),
+            tuple(placement.document.path for placement in view.placements),
             ("docs/foundation.md", "docs/design.md"),
         )
 
@@ -593,6 +593,22 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(child, m.FunctionalPyramidView)
         self.assertEqual(parent, child)
+        assert isinstance(child, m.FunctionalPyramidView)
+        self.assertEqual(child.resolved_repository_id, "repo-b")
+        self.assertEqual(
+            child.directory, m.FunctionalPyramidPath("repo-a", "nested/src")
+        )
+        self.assertEqual(
+            tuple(item.document for item in child.placements),
+            (
+                m.FunctionalPyramidPath("repo-a", "nested/docs/foundation.md"),
+                m.FunctionalPyramidPath("repo-a", "nested/docs/design.md"),
+            ),
+        )
+        self.assertEqual(
+            tuple(item.document_repository_id for item in child.placements),
+            ("repo-b", "repo-b"),
+        )
 
     def test_equal_registered_roots_are_ambiguous(self) -> None:
         self.declarations.roots["repo-b"] = self.declarations.roots["repo-a"]

@@ -108,7 +108,8 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
                     detail="internal secret.json",
                     recovery="secret.json",
                     declaration_locator="secret.json",
-                )
+                ),
+                {},
             )
             payload = json.dumps(to_wire_root(type(finding), m.to_canonical(finding)))
             self.assertNotIn("declaration_locator", payload)
@@ -140,7 +141,8 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
                 pyramid_id=m.FunctionalPyramidId("p"),
                 version=m.FunctionalPyramidVersion(1),
                 status=m.FunctionalPyramidRouteStatus.RESOLVED,
-                directory=".",
+                resolved_repository_id="repo-a",
+                directory=m.FunctionalPyramidPath("repo-a", "."),
                 semantic_scope=m.EvidenceScope(),
                 placements=(),
                 declared_layers=(),

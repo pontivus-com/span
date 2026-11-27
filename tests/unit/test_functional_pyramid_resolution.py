@@ -145,6 +145,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
 
     def _directory(self, directory: str) -> m.FunctionalPyramidResolution:
         return fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -155,12 +156,31 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             authority_bindings=self.authorities,
         )
 
+    @staticmethod
+    def _public(
+        placement: m.FunctionalDocumentPlacement,
+    ) -> m.FunctionalPyramidPlacementView:
+        return m.FunctionalPyramidPlacementView(
+            declaring_repository_id=placement.declaring_repository_id,
+            document_repository_id=placement.document.repository_id,
+            layer=placement.document.layer,
+            document=m.FunctionalPyramidPath(
+                placement.document.repository_id, placement.document.document_ref
+            ),
+            scope=m.FunctionalPyramidPath(
+                placement.declaring_repository_id, placement.scope
+            ),
+        )
+
     def test_root_totality_and_additive_ancestor_composition(self) -> None:
         root = self._directory(".").view
-        self.assertEqual(root.placements, (self.p0,))
+        self.assertEqual(root.placements, (self._public(self.p0),))
         nested = self._directory("src/service").view
-        self.assertEqual(nested.placements, (self.p0, self.p1, self.p3))
-        self.assertNotIn(self.sibling, nested.placements)
+        self.assertEqual(
+            nested.placements,
+            (self._public(self.p0), self._public(self.p1), self._public(self.p3)),
+        )
+        self.assertNotIn(self._public(self.sibling), nested.placements)
         self.assertEqual(
             nested.declared_layers,
             (
@@ -181,19 +201,22 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
 
     def test_descendant_placement_does_not_apply_to_ancestor(self) -> None:
         src = self._directory("src").view
-        self.assertEqual(src.placements, (self.p0, self.p1))
-        self.assertNotIn(self.p3, src.placements)
+        self.assertEqual(src.placements, (self._public(self.p0), self._public(self.p1)))
+        self.assertNotIn(self._public(self.p3), src.placements)
 
     def test_directory_without_own_placement_inherits_all_ancestors(self) -> None:
         leaf = self._directory("src/service/leaf").view
-        self.assertEqual(leaf.placements, (self.p0, self.p1, self.p3))
+        self.assertEqual(
+            leaf.placements,
+            (self._public(self.p0), self._public(self.p1), self._public(self.p3)),
+        )
         self.assertEqual(leaf.status, m.FunctionalPyramidRouteStatus.RESOLVED)
 
     def test_disconnected_placements_apply_only_at_their_declared_scopes(self) -> None:
         service = self._directory("src/service").view
         ui = self._directory("ui").view
-        self.assertNotIn(self.sibling, service.placements)
-        self.assertEqual(ui.placements, (self.p0, self.sibling))
+        self.assertNotIn(self._public(self.sibling), service.placements)
+        self.assertEqual(ui.placements, (self._public(self.p0), self._public(self.sibling)))
 
     def test_document_locator_never_infers_applicability(self) -> None:
         deceptive = _placement(
@@ -221,6 +244,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             ),
         }
         view = fp.resolve_functional_pyramid_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -234,8 +258,8 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             available_repositories=frozenset({"repo-a"}),
             authority_bindings=authorities,
         ).view
-        self.assertEqual(view.placements, (self.p0,))
-        self.assertNotIn(deceptive, view.placements)
+        self.assertEqual(view.placements, (self._public(self.p0),))
+        self.assertNotIn(self._public(deceptive), view.placements)
 
     def test_narrower_governing_scope_is_invalid(self) -> None:
         broad = _placement(
@@ -300,6 +324,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             recovery="restore it",
         )
         view = fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -314,6 +339,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
 
     def test_multi_path_summary_is_union_not_intersection_or_last_path(self) -> None:
         resolution = fp.resolve_functional_pyramid_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -330,7 +356,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         view = resolution.view
         self.assertEqual(
             view.placements,
-            (self.p0, self.p1, self.p3, self.sibling),
+            tuple(
+                self._public(item) for item in (self.p0, self.p1, self.p3, self.sibling)
+            ),
         )
         self.assertEqual(
             view.declared_layers,
@@ -348,6 +376,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
 
     def test_repository_wide_semantic_scope_selects_all_placements(self) -> None:
         view = fp.resolve_functional_pyramid_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -362,11 +391,13 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             authority_bindings=self.authorities,
         ).view
         self.assertEqual(
-            set(view.placements), {self.p0, self.p1, self.p3, self.sibling}
+            set(view.placements),
+            {self._public(item) for item in (self.p0, self.p1, self.p3, self.sibling)},
         )
 
     def test_unrelated_member_does_not_change_route_identity(self) -> None:
         first = fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -387,6 +418,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             "repo-b", (_declaration(repo_b_root, "ROOT"),)
         )
         second = fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(2),
             members=(_member("repo-a"), _member("repo-b")),
@@ -417,6 +449,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             (*self.declaration_entries, _declaration(changed, self.p3)),
         )
         second = fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -442,6 +475,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             status=m.AuthorityStatus.DRAFT,
         )
         second_resolution = fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -565,6 +599,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
 
     def test_route_identity_tracks_applicability_not_pyramid_version(self) -> None:
         first = fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(1),
             members=(_member("repo-a"),),
@@ -575,6 +610,7 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
             authority_bindings=self.authorities,
         ).identity
         second = fp.resolve_functional_pyramid_directory_route(
+            roots={"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"},
             pyramid_id=m.FunctionalPyramidId("pyramid"),
             version=m.FunctionalPyramidVersion(2),
             members=(_member("repo-a"),),

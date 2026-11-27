@@ -40,6 +40,8 @@ from span.core.model.functional_pyramid import (
     FunctionalRouteIdentity,
     FunctionalRouteProvenance,
     public_pyramid_finding,
+    public_pyramid_path,
+    public_pyramid_placement,
 )
 from span.core.model.investigation import EvidenceRequest, SourceRange
 from span.core.model.primitives import (
@@ -1703,6 +1705,7 @@ def _resolve(
     index: dict[FunctionalDocumentPlacement, FunctionalDocumentDeclaration],
     structural: tuple[FunctionalPyramidFinding, ...],
     authority_bindings: dict[tuple[str, str], AuthorityBinding],
+    roots: _collections_abc.Mapping[str, str],
 ) -> FunctionalPyramidResolution:
     provenance: list[FunctionalRouteProvenance] = []
     direct: set[FunctionalDocumentPlacement] = set()
@@ -1759,7 +1762,7 @@ def _resolve(
         else FunctionalPyramidRouteStatus.UNRESOLVED
     )
     if isinstance(selection, str):
-        directory_selection = selection
+        directory_selection = public_pyramid_path(repository_id, selection, roots)
         semantic_selection = None
         selection_identity: object = {"directory": selection}
     else:
@@ -1789,10 +1792,18 @@ def _resolve(
             pyramid_id=pyramid_id,
             version=version,
             status=status,
+            resolved_repository_id=repository_id if directory_selection else None,
             directory=directory_selection,
             semantic_scope=semantic_selection,
-            placements=closure,
-            unresolved=tuple(public_pyramid_finding(item) for item in unresolved),
+            placements=tuple(
+                public_pyramid_placement(item, roots)
+                for item in closure
+                if item.declaring_repository_id in roots
+                and item.document.repository_id in roots
+            ),
+            unresolved=tuple(
+                public_pyramid_finding(item, roots) for item in unresolved
+            ),
             declared_layers=declared,
             absent_layers=absent,
         ),
@@ -1813,6 +1824,7 @@ def resolve_functional_pyramid_route(
     declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
     available_repositories: frozenset[str],
     authority_bindings: dict[tuple[str, str], AuthorityBinding],
+    roots: _collections_abc.Mapping[str, str],
     declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
 ) -> FunctionalPyramidResolution:
     """Resolve the exact effective semantic scope through document placements."""
@@ -1835,6 +1847,7 @@ def resolve_functional_pyramid_route(
         index=index,
         structural=structural,
         authority_bindings=authority_bindings,
+        roots=roots,
     )
 
 
@@ -1848,6 +1861,7 @@ def resolve_functional_pyramid_directory_route(
     declarations: tuple[tuple[str, FunctionalPyramidDeclaration], ...],
     available_repositories: frozenset[str],
     authority_bindings: dict[tuple[str, str], AuthorityBinding],
+    roots: _collections_abc.Mapping[str, str],
     declaration_findings: tuple[FunctionalPyramidFinding, ...] = (),
 ) -> FunctionalPyramidResolution:
     """Resolve one exact directory as a point in the repository tree."""
@@ -1867,4 +1881,5 @@ def resolve_functional_pyramid_directory_route(
         index=index,
         structural=structural,
         authority_bindings=authority_bindings,
+        roots=roots,
     )

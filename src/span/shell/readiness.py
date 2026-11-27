@@ -386,7 +386,9 @@ def _functional_pyramid_declaration_report(
                 "locator": coordinate,
                 "status": "valid" if not graph_findings else "invalid",
                 "findings": [
-                    m.public_pyramid_finding(finding).reason.value
+                    m.public_pyramid_finding(
+                        finding, {repository_id: canonical_root}
+                    ).reason.value
                     for finding in graph_findings
                 ],
             }
@@ -501,7 +503,9 @@ def _active_declaration_report(
                 "locator": coordinate,
                 "status": "valid" if not findings else "invalid",
                 "findings": [
-                    m.public_pyramid_finding(finding).reason.value
+                    m.public_pyramid_finding(
+                        finding, {repository_id: canonical_root}
+                    ).reason.value
                     for finding in findings
                 ],
             }
@@ -689,7 +693,7 @@ def _active_instance_report(
         "status": status,
         "members": member_reports,
         "findings": [
-            m.public_pyramid_finding(finding).reason.value for finding in structural
+            m.public_pyramid_finding(finding, roots).reason.value for finding in structural
         ],
         "action": (
             "restore the registered ACTIVE member repository"

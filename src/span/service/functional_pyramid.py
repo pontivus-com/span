@@ -284,6 +284,10 @@ class FunctionalPyramidService:
     def _registered(self) -> frozenset[str]:
         return frozenset(self._roots().repository_ids())
 
+    def _root_coordinates(self) -> dict[str, str]:
+        roots = self._roots()
+        return {identity: roots.root(identity) for identity in roots.repository_ids()}
+
     def registered_repository_ids(self) -> tuple[str, ...]:
         """Return the exact installation registry used by Functional Pyramid state."""
         return tuple(sorted(self._registered()))
@@ -364,13 +368,16 @@ class FunctionalPyramidService:
         assert pyramid_id is not None
         assert version is not None
         health, findings = self.health(members)
+        roots = self._root_coordinates()
         return m.FunctionalPyramidStatus(
             state=m.FunctionalPyramidParticipationState.ACTIVE,
             health=health,
             pyramid_id=pyramid_id,
             version=version,
             member_repository_ids=tuple(sorted(item.repository_id for item in members)),
-            findings=tuple(m.public_pyramid_finding(item) for item in findings),
+            findings=tuple(
+                m.public_pyramid_finding(item, roots) for item in findings
+            ),
         )
 
     def route(
@@ -431,12 +438,17 @@ class FunctionalPyramidService:
         participation, pyramid_id, version, members = self._active_participation(
             m.FunctionalPyramidSelector(repository_id=owner)
         )
+        roots = self._root_coordinates()
         if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
             if selector.after is not None:
                 raise StaleContinuationError(
                     "pyramid participation changed; restart the directory listing"
                 )
-            return m.FunctionalPyramidParticipation(participation)
+            return m.FunctionalPyramidParticipation(
+                participation,
+                resolved_repository_id=owner,
+                directory=m.public_pyramid_path(owner, directory, roots),
+            )
         assert pyramid_id is not None
         assert version is not None
         try:
@@ -456,6 +468,7 @@ class FunctionalPyramidService:
                 declarations=context.declarations,
                 available_repositories=context.available,
                 authority_bindings=context.authority_bindings,
+                roots=roots,
                 declaration_findings=context.findings,
             )
             return self._directory_page(
@@ -672,6 +685,7 @@ class FunctionalPyramidService:
             eligible,
             validation,
         ) = self._candidate_lifecycle(selector, state)
+        roots = self._root_coordinates()
         if not eligible:
             return (
                 m.FunctionalPyramidCandidate(
@@ -680,7 +694,7 @@ class FunctionalPyramidService:
                     version=target_version,
                     activation_ready=False,
                     validation_findings=tuple(
-                        m.public_pyramid_finding(item)
+                        m.public_pyramid_finding(item, roots)
                         for item in _ordered_validation_findings(validation)
                     ),
                     graph_findings=(),
@@ -709,10 +723,10 @@ class FunctionalPyramidService:
                 version=target_version,
                 activation_ready=not ordered_validation and not structural,
                 validation_findings=tuple(
-                    m.public_pyramid_finding(item) for item in ordered_validation
+                    m.public_pyramid_finding(item, roots) for item in ordered_validation
                 ),
                 graph_findings=tuple(
-                    m.public_pyramid_finding(item) for item in structural
+                    m.public_pyramid_finding(item, roots) for item in structural
                 ),
             ),
             members,
@@ -1759,6 +1773,7 @@ class FunctionalPyramidService:
             declarations=context.declarations,
             available_repositories=context.available,
             authority_bindings=context.authority_bindings,
+            roots=self._root_coordinates(),
             declaration_findings=context.findings,
         )
 

@@ -687,18 +687,18 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                 "ask_a_error": ask_a_error,
                 "ask_a_route_status": fp_a.get("status"),
                 "ask_a_documents": [
-                    placement.get("document", {}).get("document_ref")
+                    placement.get("document", {}).get("path")
                     for placement in fp_a.get("placements", [])
                 ],
                 "directory_src_error": directory_src_error,
                 "directory_src_route_status": directory_src_fp.get("status"),
                 "directory_src_documents": [
-                    placement.get("document", {}).get("document_ref")
+                    placement.get("document", {}).get("path")
                     for placement in directory_src_fp.get("placements", [])
                 ],
                 "directory_root_error": directory_root_error,
                 "directory_root_documents": [
-                    placement.get("document", {}).get("document_ref")
+                    placement.get("document", {}).get("path")
                     for placement in directory_root_fp.get("placements", [])
                 ],
                 "read_exposes_internal": read_exposes_internal,

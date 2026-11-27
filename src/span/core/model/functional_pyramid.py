@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import datetime as _datetime
 import enum as _enum
+import pathlib as _pathlib
+import typing as _typing
 from dataclasses import dataclass as _dataclass
 
 from span.core.model.investigation import EvidenceRequest
@@ -291,10 +293,77 @@ class FunctionalPyramidMemberView:
 
 
 @_dataclass(frozen=True)
-class FunctionalPyramidParticipation:
-    state: FunctionalPyramidParticipationState
+class FunctionalPyramidPath:
+    """A usable location in a registered repository root's coordinates."""
+
+    repository_id: str
+    path: str
 
     def __post_init__(self) -> None:
+        _require_non_empty("FunctionalPyramidPath.repository_id", self.repository_id)
+        _require_directory_scope("FunctionalPyramidPath.path", self.path)
+
+
+@_dataclass(frozen=True)
+class FunctionalPyramidPlacementView:
+    """Public coordinates for a canonical declaration placement."""
+
+    declaring_repository_id: str
+    document_repository_id: str
+    layer: FunctionalPyramidLayer
+    document: FunctionalPyramidPath
+    scope: FunctionalPyramidPath
+
+    def __post_init__(self) -> None:
+        _require_non_empty("declaring_repository_id", self.declaring_repository_id)
+        _require_non_empty("document_repository_id", self.document_repository_id)
+        _require_canonical_repository_path("placement document", self.document.path)
+
+
+def public_pyramid_path(
+    repository_id: str, path: str, roots: _typing.Mapping[str, str]
+) -> FunctionalPyramidPath:
+    """Rebase an owner-relative path to its outermost registered ancestor."""
+    _require_directory_scope("public path", path)
+    owner = _pathlib.PurePath(roots[repository_id])
+    ancestors = [
+        (len(base.parts), identity, base)
+        for identity, root in roots.items()
+        if owner.is_relative_to(base := _pathlib.PurePath(root))
+    ]
+    depth = min(item[0] for item in ancestors)
+    outer = [item for item in ancestors if item[0] == depth]
+    if len(outer) != 1:
+        raise ValueError("public path has ambiguous registered root coordinates")
+    _, identity, base = outer[0]
+    return FunctionalPyramidPath(identity, (owner / path).relative_to(base).as_posix())
+
+
+def public_pyramid_placement(
+    placement: FunctionalDocumentPlacement, roots: _typing.Mapping[str, str]
+) -> FunctionalPyramidPlacementView:
+    return FunctionalPyramidPlacementView(
+        declaring_repository_id=placement.declaring_repository_id,
+        document_repository_id=placement.document.repository_id,
+        layer=placement.document.layer,
+        document=public_pyramid_path(
+            placement.document.repository_id, placement.document.document_ref, roots
+        ),
+        scope=public_pyramid_path(
+            placement.declaring_repository_id, placement.scope, roots
+        ),
+    )
+
+
+@_dataclass(frozen=True)
+class FunctionalPyramidParticipation:
+    state: FunctionalPyramidParticipationState
+    resolved_repository_id: str | None = None
+    directory: FunctionalPyramidPath | None = None
+
+    def __post_init__(self) -> None:
+        if (self.resolved_repository_id is None) != (self.directory is None):
+            raise ValueError("directory participation requires owner and path")
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
             raise ValueError(
                 "ACTIVE participation is projected as FunctionalPyramidView"
@@ -372,8 +441,8 @@ class FunctionalPyramidPublicFinding:
     detail: str
     recovery: str
     repository_id: str | None = None
-    directory: str | None = None
-    placement: FunctionalDocumentPlacement | None = None
+    directory: FunctionalPyramidPath | None = None
+    placement: FunctionalPyramidPlacementView | None = None
     pyramid_id: FunctionalPyramidId | None = None
     expected_version: FunctionalPyramidVersion | None = None
     current_version: FunctionalPyramidVersion | None = None
@@ -381,8 +450,16 @@ class FunctionalPyramidPublicFinding:
 
 def public_pyramid_finding(
     finding: FunctionalPyramidFinding | FunctionalPyramidValidationFinding,
+    roots: _typing.Mapping[str, str],
 ) -> FunctionalPyramidPublicFinding:
     """Project internal diagnostics onto the exact public vocabulary."""
+    directory = (
+        public_pyramid_path(finding.repository_id, finding.directory, roots)
+        if finding.repository_id is not None
+        and finding.repository_id in roots
+        and finding.directory is not None
+        else None
+    )
     if isinstance(finding, FunctionalPyramidValidationFinding):
         reason = (
             FunctionalPyramidPublicReason.DECLARATION_INVALID
@@ -406,7 +483,7 @@ def public_pyramid_finding(
                 else finding.recovery
             ),
             repository_id=finding.repository_id,
-            directory=finding.directory,
+            directory=directory,
             pyramid_id=finding.pyramid_id,
             expected_version=finding.expected_version,
             current_version=finding.current_version,
@@ -460,8 +537,14 @@ def public_pyramid_finding(
         detail=detail,
         recovery=recovery,
         repository_id=finding.repository_id,
-        directory=finding.directory,
-        placement=finding.placement,
+        directory=directory,
+        placement=(
+            public_pyramid_placement(finding.placement, roots)
+            if finding.placement is not None
+            and finding.placement.declaring_repository_id in roots
+            and finding.placement.document.repository_id in roots
+            else None
+        ),
     )
 
 
@@ -628,10 +711,11 @@ class FunctionalPyramidView:
     pyramid_id: FunctionalPyramidId
     version: FunctionalPyramidVersion
     status: FunctionalPyramidRouteStatus
-    placements: tuple[FunctionalDocumentPlacement, ...]
+    placements: tuple[FunctionalPyramidPlacementView, ...]
     declared_layers: tuple[FunctionalPyramidLayer, ...]
     absent_layers: tuple[FunctionalPyramidLayer, ...]
-    directory: str | None = None
+    resolved_repository_id: str | None = None
+    directory: FunctionalPyramidPath | None = None
     semantic_scope: EvidenceScope | None = None
     unresolved: tuple[FunctionalPyramidPublicFinding, ...] = ()
     truncated: bool = False
@@ -643,8 +727,8 @@ class FunctionalPyramidView:
             raise ValueError(
                 "FunctionalPyramidView requires exactly one directory or semantic_scope"
             )
-        if self.directory is not None:
-            _require_directory_scope("FunctionalPyramidView.directory", self.directory)
+        if (self.resolved_repository_id is None) != (self.directory is None):
+            raise ValueError("directory view requires resolved repository identity")
         if self.status is FunctionalPyramidRouteStatus.RESOLVED and self.unresolved:
             raise ValueError(
                 "RESOLVED FunctionalPyramidView has no unresolved findings"

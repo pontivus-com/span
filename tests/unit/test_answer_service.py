@@ -237,14 +237,14 @@ class AnswerServiceTest(unittest.TestCase):
     def test_oversized_governing_view_is_truncated_not_refused(self) -> None:
         (self.root / "src/c.py").write_text("c\n", encoding="utf-8")
         placements = tuple(
-            m.FunctionalDocumentPlacement(
-                "repo-1",
-                m.FunctionalDocumentRef(
-                    repository_id="repo-1",
-                    document_ref=f"docs/foundation-{index}.md",
-                    layer=m.FunctionalPyramidLayer.P0,
+            m.FunctionalPyramidPlacementView(
+                declaring_repository_id="repo-1",
+                document_repository_id="repo-1",
+                layer=m.FunctionalPyramidLayer.P0,
+                document=m.FunctionalPyramidPath(
+                    "repo-1", f"docs/foundation-{index}.md"
                 ),
-                ".",
+                scope=m.FunctionalPyramidPath("repo-1", "."),
             )
             for index in range(1200)
         )

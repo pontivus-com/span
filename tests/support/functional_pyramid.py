@@ -14,11 +14,11 @@ def functional_pyramid_view(
     status: m.FunctionalPyramidRouteStatus = m.FunctionalPyramidRouteStatus.RESOLVED,
 ) -> m.FunctionalPyramidView:
     """One compact view with an explicit route status."""
-    unresolved: tuple[m.FunctionalPyramidFinding, ...] = ()
+    unresolved: tuple[m.FunctionalPyramidPublicFinding, ...] = ()
     if status is m.FunctionalPyramidRouteStatus.UNRESOLVED:
         unresolved = (
-            m.FunctionalPyramidFinding(
-                reason=m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
+            m.FunctionalPyramidPublicFinding(
+                reason=m.FunctionalPyramidPublicReason.DOCUMENT_UNAVAILABLE,
                 repository_id="repo-1",
                 detail="canonical Functional Pyramid document is unavailable",
                 recovery="restore the declared canonical document",
