@@ -159,6 +159,7 @@ class Rejection(ValueError):
     required_action: str             # one function of cause_kind only
     current_version: int | None = None
     current_boundary_version: int | None = None
+    restart_continuation: str | None = None  # only the bound stale-effect recovery
 ```
 
 Every raise site selects its kind; one cause-to-action function is the only place
@@ -695,7 +696,12 @@ Bind each issued cursor position to the evaluated-state fingerprint used to
 fit it (part of position_json, including current context identity; exclude
 clock-only variation). If a live effect state changes, issue the same
 selection's start-position cursor under the new fingerprint and return the
-P2 stale-continuation recovery. Invalidate prior generation offsets; do not
+P2 stale-continuation recovery. The existing rejection owner carries the
+optional typed restart token; service resumes a start cursor by composing
+the existing initial canonical result family from the pinned effect set and
+accepted receipt, not invoking record/reconsider. The initial fitter is
+reused. Ordinary position cursors return ResultPage. Invalidate prior
+generation offsets; do not
 persist another copy of the selected effects or replay semantic writes.
 Refresh expired contexts only for actionable owners. For accepted writes
 persist complete immutable effect refs in receipt in the commit transaction;

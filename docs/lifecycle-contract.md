@@ -264,8 +264,8 @@ reference grants no authority; liveness, scope and membership are checked at the
 owner. Pure obtains have no context. Context inspection remains internal/admin.
 
 **Continuation and delivery completeness (L1–L4, L10, L12, L15).**
-The initial result retains its semantic family. Subsequent collection delivery
-through existing `ask.continuation` returns
+The initial result retains its semantic family. Subsequent collection delivery (other than the explicit stale-effect restart
+below) through existing `ask.continuation` returns
 `ResultPage{selection_id: str, result_kind: ResultKind, parts: tuple[ResultPart, ...],
 continuation: str | None, omitted: tuple[str, ...], truncated: bool}`.
 Selection IDs/tokens are opaque. Initial results with more data carry
@@ -372,8 +372,16 @@ ChangedConclusion or EffectDisposition. Live state changes may change nested
 findings and encoded page boundaries: never continue from an offset into a
 changed nested collection. Return a typed stale-continuation Rejected with an
 opaque `restart_continuation: str` addressing the beginning of the same pinned
-selection at its new evaluated state. The client replaces the old delivered
-prefix, not appends to it. No new changed-scope discovery, write or receipt
+selection at its new evaluated state. `Rejected.restart_continuation: str |
+None` is present only for this known stale effect selection with
+`cause_kind=CONTINUATION_INVALID`; other rejections omit it. Resuming that
+start-position token returns a fresh initial result of the bound family
+(Changed, UnderstandingRecorded, VerificationRecorded, FunctionalPyramidRecorded
+or Challenged), with its refreshed scalar envelope and fitting prefixes.
+The ask result union includes these existing canonical result families only
+for this recovery path, never as new write operations. No second copy of the
+accepted facts or new recovery carrier. The client replaces the entire old
+result/prefix, not appends to it. No new changed-scope discovery, write or receipt
 is required. Refresh expired contexts only for still-actionable refs.
 Use this restart rule for any state change affecting a live effect page,
 including owner/context change; preserve the immutable accepted set. No new write, silent rescan or lost obligation.
@@ -395,7 +403,9 @@ selector where it actually helps); otherwise a named blocker remains.
 No omission discharges an obligation; no raised budget, stale substitution,
 or misleading fragment. Evidence lines are indivisible.
 
-**The agent receives** exactly one of (ResultPage is valid only for bound continuation):
+**The agent receives** exactly one of the following (ResultPage is valid only
+for bound continuation; the existing initial effect families named above
+are also valid only for the bound stale-effect restart):
 
 | Result | Meaning |
 | --- | --- |

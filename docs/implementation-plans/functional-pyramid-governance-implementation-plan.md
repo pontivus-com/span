@@ -742,8 +742,8 @@ canonical form. Test stale state vs timestamp-only changes, exact restart,
 missing/forged cursor, mixed nested collection, no-progress rejection,
 expiry with undisposed effects, receipt recovery after manifest loss.
 Test state changes between nested effect pages (including context expiry):
-restart at the same pinned selection, no offset reuse, no new traversal or
-write. Verify one enclosing delivery metadata owner and exact count/ref
+restart with a fresh initial envelope of the same pinned selection via the
+typed rejection recovery token, no offset reuse, no new traversal or write. Verify one enclosing delivery metadata owner and exact count/ref
 equality on complete delivery; reject misleading partial status.
 Test repeated admission retry against the same durable manifest, successor
 becoming non-current, and primary-complete Answer with history cursor. No
