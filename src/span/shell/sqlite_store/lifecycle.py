@@ -918,52 +918,6 @@ class LifecycleStore:
     def get_receipt(self, key: m.RecordingKey) -> m.RecordReceipt | None:
         return self._get_receipt_in(self._connection, key, self._clock())
 
-    def record_noop(
-        self,
-        identity: m.RecordingIdentity,
-        content_digest: m.ContentDigest,
-        understanding_id: m.UnderstandingId,
-        expected_version: m.UnderstandingVersionNumber,
-    ) -> m.RecordReceipt:
-        """Persist acceptance for an unchanged, already-current version (FD-31)."""
-        with _transaction(self._connection) as connection:
-            now = self._clock()
-            key = recording_key(identity)
-            existing = self._get_receipt_in(connection, key, now)
-            decision = receipt_decision(existing, key, content_digest)
-            if decision.kind is m.ReceiptDecisionKind.REPLAY:
-                if decision.receipt is None:
-                    raise LifecycleStoreInvariantError(
-                        "a replay decision carried no receipt"
-                    )
-                return decision.receipt
-            if decision.kind is m.ReceiptDecisionKind.CONFLICT:
-                raise RecordingConflict(
-                    decision.reason
-                    or "this request identity already committed different content",
-                    cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
-                )
-            understanding = self._get_understanding_in(
-                connection, understanding_id.value
-            )
-            if understanding.current_version != expected_version:
-                raise RecordingConflict(
-                    "expected understanding version does not match current",
-                    current_version=understanding.current_version.value,
-                )
-            receipt = build_receipt(
-                identity,
-                content_digest,
-                now,
-                understanding=(
-                    understanding.understanding_id,
-                    understanding.current_version,
-                ),
-                replay_expires_at=now + self.retention.replay_retention,
-            )
-            self._write_receipt(connection, receipt)
-            return receipt
-
     def find_context_by_request(
         self, repository_id: str, request_id: m.RequestId
     ) -> m.InvestigationContext | None:
@@ -1003,6 +957,7 @@ class LifecycleStore:
         *,
         understanding_id: m.UnderstandingId | None = None,
         content_digest: m.ContentDigest | None = None,
+        current_confirmations: frozenset[m.ConclusionRevisionRef] = frozenset(),
     ) -> m.RecordReceipt:
         digest = content_digest or record_content_digest(command)
         if isinstance(command, m.CreateUnderstandingCommand):
@@ -1100,8 +1055,12 @@ class LifecycleStore:
                         connection, selected.value
                     ),
                     existing_curations=existing_curations,
+                    current_confirmations=current_confirmations,
                 )
-            self._write_transition(connection, transition)
+            if isinstance(command, m.CreateUnderstandingCommand) or (
+                transition.new_version.version != command.expected_version
+            ):
+                self._write_transition(connection, transition)
             for disposition in transition.curations:
                 self._insert_curation_in(connection, disposition)
             self._write_challenge_effects(connection, transition.challenge_effects)

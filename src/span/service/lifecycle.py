@@ -460,15 +460,17 @@ class LifecycleService:
                 raise TypeError(
                     "update governance derivation returned a create command"
                 )
-            no_op = self._confirm_noop(governed)
-            if no_op is not None:
-                return self.qualify_understanding(
-                    self._store.record_noop(
-                        governed.identity, digest, no_op, governed.expected_version
-                    )
-                )
+            confirmed = {action.conclusion_id for action in governed.confirm}
+            current = frozenset(
+                ref
+                for ref in expected_snapshot.conclusions
+                if ref.conclusion_id in confirmed
+                and self._support.evaluate_revision(ref).state is m.SupportState.CURRENT
+            )
             return self.qualify_understanding(
-                self._store.record_understanding(governed, content_digest=digest)
+                self._store.record_understanding(
+                    governed, content_digest=digest, current_confirmations=current
+                )
             )
         raise RecordingValidationError("record did not produce a command")
 
@@ -774,54 +776,6 @@ class LifecycleService:
             or "this submission identity already committed different content",
             cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
         )
-
-    def _confirm_noop(
-        self, command: m.UpdateUnderstandingCommand
-    ) -> m.UnderstandingId | None:
-        """FD-31: confirming an already-current, unchanged version is a no-op."""
-        if (
-            not command.confirm
-            or command.add
-            or command.correct
-            or command.replace
-            or command.withdraw
-            or command.curate
-            or command.gaps is not None
-            or command.challenge_dispositions
-        ):
-            return None
-        understanding = self._store.get_understanding(command.understanding_id.value)
-        version = self._store.get_version(
-            command.understanding_id.value,
-            understanding.current_version.value,
-        )
-        if version.version != command.expected_version:
-            return None
-        revisions = self._store.get_conclusions(command.understanding_id.value)
-        by_key = {(item.conclusion_id, item.revision.value): item for item in revisions}
-        current = {ref.conclusion_id: ref for ref in version.conclusions}
-        for action in command.confirm:
-            ref = current.get(action.conclusion_id)
-            if ref is None:
-                raise RecordingValidationError(
-                    "confirm targets a conclusion absent from the current version"
-                )
-            if self._support.evaluate_revision(ref).state is not m.SupportState.CURRENT:
-                return None
-            content = by_key[(ref.conclusion_id, ref.revision.value)].content
-            if not isinstance(content, m.SupportedConclusion):
-                return None
-            if (
-                content.statement != action.statement
-                or content.assertion_nature != action.assertion_nature
-                or content.scope != action.scope
-            ):
-                raise RecordingValidationError(
-                    "a current conclusion with changed content requires correct"
-                )
-            if content.support != action.support:
-                return None
-        return command.understanding_id
 
     def qualify_understanding(
         self, receipt: m.RecordReceipt

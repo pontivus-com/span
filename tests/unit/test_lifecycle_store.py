@@ -158,7 +158,7 @@ def _update_command(
         confirm=(
             m.ConfirmConclusion(
                 conclusion_id=m.ConclusionId("c-1"),
-                **_content("A does X, reassessed"),
+                **_content("A does X"),
             ),
         ),
     )
@@ -297,7 +297,7 @@ def _disposition_command(
         confirm=(
             m.ConfirmConclusion(
                 conclusion_id=m.ConclusionId("c-1"),
-                **_content("A does X, reassessed"),
+                **_content("A does X"),
             ),
         ),
         challenge_dispositions=dispositions,
@@ -394,20 +394,23 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.record_understanding(
             _create_command(), understanding_id=m.UnderstandingId("u-1")
         )
-        identity = _identity("sub-noop")
-        digest = m.ContentDigest("sha256:noop")
-        version = m.UnderstandingVersionNumber(1)
-        receipt = self.store.record_noop(
-            identity, digest, m.UnderstandingId("u-1"), version
+        command = _same_confirm_command(expected=1, submission="sub-noop")
+        version = self.store.get_version("u-1", 1)
+        current = frozenset(version.conclusions)
+        receipt = self.store.record_understanding(
+            command, current_confirmations=current
         )
+        self.assertEqual(receipt.accepted_understanding_versions, (version.version,))
+        self.assertEqual(self.store.get_version("u-1", 1), version)
         self.store.record_understanding(_update_command())
         self.assertEqual(
-            self.store.record_noop(identity, digest, m.UnderstandingId("u-1"), version),
+            self.store.record_understanding(command, current_confirmations=current),
             receipt,
         )
         with self.assertRaises(RecordingConflict):
-            self.store.record_noop(
-                _identity("sub-stale-noop"), digest, m.UnderstandingId("u-1"), version
+            self.store.record_understanding(
+                _same_confirm_command(expected=1, submission="sub-stale-noop"),
+                current_confirmations=current,
             )
 
     def test_update_cas_and_history(self) -> None:

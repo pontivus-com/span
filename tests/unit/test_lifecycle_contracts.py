@@ -471,6 +471,42 @@ class UpdateUnderstandingTest(unittest.TestCase):
         self.assertEqual(transition.new_version.conclusions[0].revision.value, 2)
         self.assertEqual(transition.new_conclusions[0].revision.value, 2)
 
+    def test_current_confirmation_has_an_exact_unchanged_effect(self):
+        understanding, version, revisions = _created()
+        ref = version.conclusions[0]
+        transition = apply_update(
+            understanding,
+            version,
+            revisions,
+            _update_command(confirm=(_confirm("c-1"),)),
+            _context(),
+            LATER,
+            current_confirmations=frozenset({ref}),
+        )
+        self.assertEqual(transition.new_version, version)
+        self.assertEqual(transition.understanding, understanding)
+        self.assertEqual(transition.new_conclusions, ())
+        self.assertEqual(
+            transition.revision_effects,
+            (
+                m.AcceptedRevisionEffect(
+                    m.RevisionEffectAction.CONFIRM, ref, False, m.CurationState.CAPTURED
+                ),
+            ),
+        )
+
+    def test_confirm_rejects_semantic_change(self):
+        understanding, version, revisions = _created()
+        with self.assertRaisesRegex(RecordingValidationError, "requires correct"):
+            apply_update(
+                understanding,
+                version,
+                revisions,
+                _update_command(confirm=(_confirm("c-1", "changed statement"),)),
+                _context(),
+                LATER,
+            )
+
     def test_add_preserves_unmentioned_membership(self):
         understanding, version, revisions = _created()
         transition = apply_update(

@@ -311,16 +311,6 @@ class LifecycleStorePort(_typing.Protocol):
         """Return the retained receipt for one request key."""
         ...
 
-    def record_noop(
-        self,
-        identity: m.RecordingIdentity,
-        content_digest: m.ContentDigest,
-        understanding_id: m.UnderstandingId,
-        expected_version: m.UnderstandingVersionNumber,
-    ) -> m.RecordReceipt:
-        """Persist acceptance for an unchanged, already-current version."""
-        ...
-
     def find_context_by_request(
         self, repository_id: str, request_id: m.RequestId
     ) -> m.InvestigationContext | None:
@@ -333,6 +323,7 @@ class LifecycleStorePort(_typing.Protocol):
         *,
         understanding_id: m.UnderstandingId | None = None,
         content_digest: m.ContentDigest | None = None,
+        current_confirmations: frozenset[m.ConclusionRevisionRef] = frozenset(),
     ) -> m.RecordReceipt:
         """Accept one understanding create/update atomically."""
         ...

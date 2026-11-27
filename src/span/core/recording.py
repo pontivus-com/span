@@ -627,10 +627,12 @@ def _curation_effects(
         if prior_curation is None:
             continue
         successor = resulting_by_lineage.get(confirm_action.conclusion_id)
-        if successor is None or successor == predecessor:
+        if successor is None:
             raise RecordingValidationError(
-                "confirmed curated conclusion did not produce a successor revision"
+                "confirmed curated conclusion is missing from resulting membership"
             )
+        if successor == predecessor:
+            continue
         effects.append(
             CurationDisposition(
                 ref=successor,
@@ -651,13 +653,15 @@ def _accepted_revision_effects(
         tuple[ConclusionRevisionRef, RevisionEffectAction, ConclusionRevisionRef | None]
     ],
     curations: tuple[CurationDisposition, ...],
+    unchanged: frozenset[ConclusionRevisionRef],
+    prior_curations: tuple[CurationDisposition, ...],
 ) -> tuple[AcceptedRevisionEffect, ...]:
-    curated = {item.ref for item in curations}
+    curated = {item.ref for item in (*prior_curations, *curations)}
     effects = [
         AcceptedRevisionEffect(
             action=action,
             ref=ref,
-            changed=True,
+            changed=ref not in unchanged,
             maturity=(
                 None
                 if action is RevisionEffectAction.WITHDRAW
@@ -679,6 +683,35 @@ def _accepted_revision_effects(
     return tuple(effects)
 
 
+def _unchanged_confirmations(
+    command: UpdateUnderstandingCommand,
+    version: UnderstandingVersion,
+    revisions: tuple[ConclusionRevision, ...],
+    current: frozenset[ConclusionRevisionRef],
+) -> frozenset[ConclusionRevisionRef]:
+    """FD-31: consume evaluated currency, never infer it from unchanged wording."""
+    by_lineage = _membership_refs(version.conclusions)
+    by_ref = {
+        (revision.conclusion_id, revision.revision.value): revision
+        for revision in revisions
+    }
+    unchanged: set[ConclusionRevisionRef] = set()
+    for action in command.confirm:
+        ref = _require_current(by_lineage, action.conclusion_id)
+        content = by_ref[(ref.conclusion_id, ref.revision.value)].content
+        if not isinstance(content, SupportedConclusion):
+            raise RecordingValidationError("confirm requires a supported predecessor")
+        if (
+            content.statement != action.statement
+            or content.assertion_nature != action.assertion_nature
+            or content.scope != action.scope
+        ):
+            raise RecordingValidationError("changed conclusion content requires correct")
+        if ref in current and content.support == action.support:
+            unchanged.add(ref)
+    return frozenset(unchanged)
+
+
 def apply_update(
     current_understanding: Understanding,
     current_version: UnderstandingVersion,
@@ -689,6 +722,7 @@ def apply_update(
     *,
     existing_challenges: tuple[Challenge, ...] = (),
     existing_curations: tuple[CurationDisposition, ...] = (),
+    current_confirmations: frozenset[ConclusionRevisionRef] = frozenset(),
 ) -> UnderstandingTransition:
     """Apply one closed update to the current version, or reject atomically."""
     repository_id = command.identity.repository_id
@@ -729,8 +763,16 @@ def apply_update(
         + command.replace
         + command.withdraw
     )
+    unchanged = _unchanged_confirmations(
+        command, current_version, existing_conclusions, current_confirmations
+    )
     accepted = []
     for action in actions:
+        if isinstance(action, ConfirmConclusion):
+            ref = _require_current(by_lineage, action.conclusion_id)
+            if ref in unchanged:
+                accepted.append((ref, RevisionEffectAction.CONFIRM, None))
+                continue
         accepted.append(
             _apply_action(
                 action,
@@ -742,6 +784,17 @@ def apply_update(
                 latest=latest,
                 revisions=revisions,
             )
+        )
+    if not revisions and not (
+        command.curate or command.challenge_dispositions or command.gaps is not None
+    ):
+        return UnderstandingTransition(
+            understanding=current_understanding,
+            new_version=current_version,
+            new_conclusions=(),
+            revision_effects=_accepted_revision_effects(
+                accepted, (), unchanged, existing_curations
+            ),
         )
     gaps = current_version.gaps if command.gaps is None else _gap_values(command.gaps)
     new_version = UnderstandingVersion(
@@ -788,7 +841,9 @@ def apply_update(
         new_conclusions=tuple(revisions),
         challenge_effects=effects,
         curations=curations,
-        revision_effects=_accepted_revision_effects(accepted, curations),
+        revision_effects=_accepted_revision_effects(
+            accepted, curations, unchanged, existing_curations
+        ),
     )
 
 
