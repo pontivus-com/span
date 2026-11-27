@@ -73,7 +73,9 @@ def _live_tests() -> dict[str, list[str]]:
             ):
                 index.setdefault(node.name, []).append(f"{relative}::{node.name}")
     for path in sorted((REPO_ROOT / "tests" / "plugin").glob("test_*.mjs")):
-        index.setdefault(path.name, []).append(str(path.relative_to(REPO_ROOT)))
+        relative = str(path.relative_to(REPO_ROOT))
+        index.setdefault(path.name, []).append(relative)
+        index.setdefault(relative, []).append(relative)
     return index
 
 

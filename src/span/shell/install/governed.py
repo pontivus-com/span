@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import json
 import typing
 from pathlib import Path
 
@@ -132,12 +131,18 @@ def _artifact_path(root: Path, locator: str) -> Path:
     path = root
     for part in locator.split("/"):
         if part in ("", ".", ".."):
-            raise _governance_conflict(root, f"noncanonical generated locator: {locator}")
+            raise _governance_conflict(
+                root, f"noncanonical generated locator: {locator}"
+            )
         path = path / part
         if path.is_symlink():
-            raise _governance_conflict(root, f"symlink in generated artifact path: {path}")
+            raise _governance_conflict(
+                root, f"symlink in generated artifact path: {path}"
+            )
     if path.exists() and not path.is_file():
-        raise _governance_conflict(root, f"generated artifact is not a regular file: {path}")
+        raise _governance_conflict(
+            root, f"generated artifact is not a regular file: {path}"
+        )
     return path
 
 
@@ -154,9 +159,13 @@ def _inspect_artifact(
         return
     actual = _digest(path.read_bytes())
     if known.get(locator) != actual and not (recovering and actual == digest):
-        raise _governance_conflict(root, f"unowned or modified generated artifact: {path}")
+        raise _governance_conflict(
+            root, f"unowned or modified generated artifact: {path}"
+        )
     if locator != BOOTSTRAP and actual != digest:
-        raise _governance_conflict(root, f"immutable generated declaration collision: {path}")
+        raise _governance_conflict(
+            root, f"immutable generated declaration collision: {path}"
+        )
 
 
 def _classify(roots: dict[str, Path], mapped: dict[str, str]) -> tuple[
@@ -600,11 +609,16 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
                 if not validation.activation_ready:
                     from span.core.rejection import Rejection
 
-                    findings = (*validation.validation_findings, *validation.graph_findings)
+                    findings = (
+                        *validation.validation_findings,
+                        *validation.graph_findings,
+                    )
                     raise Rejection(
                         f"governed candidate rejected: {validation}",
-                        public_cause="Governed installation cannot proceed: " + "; ".join(
-                            f"{finding.detail}. {finding.recovery}" for finding in findings
+                        public_cause="Governed installation cannot proceed: "
+                        + "; ".join(
+                            f"{finding.detail}. {finding.recovery}"
+                            for finding in findings
                         ),
                     )
             else:

@@ -278,7 +278,12 @@ def _functional_pyramid_participation(
 
 def _public_declaration_coordinate(repository_id: str, locator: str) -> str:
     # Generated declarations are installer-owned, never a user repair input.
-    return repository_id if locator == ".span/functional-pyramid.json" or locator.startswith(".span/functional-pyramid/") else locator
+    return (
+        repository_id
+        if locator == ".span/functional-pyramid.json"
+        or locator.startswith(".span/functional-pyramid/")
+        else locator
+    )
 
 
 def _functional_pyramid_declaration_report(

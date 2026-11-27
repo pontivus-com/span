@@ -358,7 +358,8 @@ def _initialize_repositories(
                 runtime, result = provision_repository_runtime(env.data_dir, request)
         except (OSError, ValueError, GraftUnavailableError) as exc:
             raise administrative_failure(
-                exc, action=f"Repository initialization failed for {repository_id!r}; check repository access and configuration before retrying."
+                exc,
+                action=f"Repository initialization failed for {repository_id!r}; check repository access and configuration before retrying.",
             ) from None
         try:
             results.append(result)
@@ -460,7 +461,9 @@ def _provision_runtime(
 
     expected_identity = None if env.dry else requested_build_identity(env.span_repo)
     if not env.dry and expected_identity is None:
-        raise SystemExit("The requested Span build cannot be verified. Use a known source revision or verified distribution.")
+        raise SystemExit(
+            "The requested Span build cannot be verified. Use a known source revision or verified distribution."
+        )
     venv_python = ensure_venv(env.venv_dir, dry_run=env.dry)
     indexer_binary = ensure_structural_indexer(env.venv_dir, dry_run=env.dry)
     data_backup = None
@@ -976,7 +979,8 @@ def _execute(env: _Environment) -> None:
             )
         except (OSError, ValueError, KeyError) as exc:
             raise administrative_failure(
-                exc, action="Governed initialization cannot proceed; check the selected repositories and supplied classification. If installation was interrupted, resume the original request or restore its verified backup."
+                exc,
+                action="Governed initialization cannot proceed; check the selected repositories and supplied classification. If installation was interrupted, resume the original request or restore its verified backup.",
             ) from None
     elif governed.PENDING in prior:
         print("incomplete governed initialization; observation only")
@@ -990,7 +994,8 @@ def _execute(env: _Environment) -> None:
         state = _provision_runtime(env, prior, pending, artifacts)
     except (OSError, ValueError, KeyError) as exc:
         raise administrative_failure(
-            exc, action="Installation could not complete; verify the current installation and follow the reported recovery action."
+            exc,
+            action="Installation could not complete; verify the current installation and follow the reported recovery action.",
         ) from None
     host_registration = _register_hosts(env, scope, prior_receipt)
     report = verify_installation(
@@ -1010,7 +1015,9 @@ def _execute(env: _Environment) -> None:
             or not isinstance(identity, dict)
             or any(identity.get(key) != value for key, value in expected.items())
         ):
-            raise SystemExit("The requested Span build changed or could not be verified. Reinstall the intended revision.")
+            raise SystemExit(
+                "The requested Span build changed or could not be verified. Reinstall the intended revision."
+            )
     receipt = _build_receipt(env, state, host_registration, report)
     if not env.dry:
         governed.finalize(receipt, prior, pending)
@@ -1037,5 +1044,6 @@ def main(argv=None):
                     _execute(env)
     except StoreHeldError as exc:
         raise administrative_failure(
-            exc, action="Installation ownership is unavailable; stop other Span installation, recovery or runtime processes and retry."
+            exc,
+            action="Installation ownership is unavailable; stop other Span installation, recovery or runtime processes and retry.",
         ) from None

@@ -1942,12 +1942,16 @@ class Tier1MechanismTest(unittest.TestCase):
                 "span.shell.install.venv._source_identity", return_value=changed
             ):
                 (site / "BUILD_IDENTITY").write_text(json.dumps(changed))
-                self.assertFalse(install.source_venv_in_sync(
-                    repo, python, expected_identity=self.identity
-                )[0])
-                self.assertFalse(install.verify_installed(
-                    repo, python, expected_identity=self.identity
-                )[0])
+                self.assertFalse(
+                    install.source_venv_in_sync(
+                        repo, python, expected_identity=self.identity
+                    )[0]
+                )
+                self.assertFalse(
+                    install.verify_installed(
+                        repo, python, expected_identity=self.identity
+                    )[0]
+                )
 
     def test_clean_build_staging(self):
         import tempfile

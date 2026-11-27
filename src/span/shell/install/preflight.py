@@ -13,9 +13,7 @@ if _typing.TYPE_CHECKING:
     from span.core import model as m
 
 
-def administrative_failure(
-    exc: BaseException, *, action: str
-) -> SystemExit:
+def administrative_failure(exc: BaseException, *, action: str) -> SystemExit:
     """Render the existing typed public rejection; never render raw exceptions."""
     import logging
 
@@ -33,7 +31,8 @@ def _json_object_list(path: str | Path, *, label: str) -> list[dict[str, object]
         data = json.loads(Path(path).read_text())
     except (OSError, ValueError) as exc:
         raise administrative_failure(
-            exc, action=f"Cannot read {label} file {path}; supply a readable JSON list and retry."
+            exc,
+            action=f"Cannot read {label} file {path}; supply a readable JSON list and retry.",
         ) from None
     if not isinstance(data, list):
         raise SystemExit(f"{label} file must hold a JSON list: {path}")
@@ -222,7 +221,8 @@ def validate_authority_files(
             )
         except (OSError, ValueError) as exc:
             raise administrative_failure(
-                exc, action=f"Authority configuration for {repository_id!r} cannot be verified; check the supplied documents and retry."
+                exc,
+                action=f"Authority configuration for {repository_id!r} cannot be verified; check the supplied documents and retry.",
             ) from None
     return tuple(requests)
 
