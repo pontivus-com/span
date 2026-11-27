@@ -181,7 +181,9 @@ def receipt_payload(value: object) -> dict[str, object]:
         for item in _sequence(payload.pop("dependent_effects", []))
     )
     if len(understanding_ids) != len(versions):
-        raise TransitionError("historical receipt has unpaired understanding coordinates")
+        raise TransitionError(
+            "historical receipt has unpaired understanding coordinates"
+        )
     if not (understanding_ids or runs or challenges):
         raise TransitionError("historical receipt lacks accepted identity")
     if len(runs) == 1 and not (understanding_ids or challenges or dependents):
@@ -218,8 +220,7 @@ def receipt_payload(value: object) -> dict[str, object]:
 
 def installation_dependency_payload(value: object) -> object:
     refs = tuple(
-        m.from_canonical(m.ConclusionRevisionRef, item)
-        for item in _sequence(value)
+        m.from_canonical(m.ConclusionRevisionRef, item) for item in _sequence(value)
     )
     if refs:
         return _historical(dependent_effect_refs=refs)
@@ -245,14 +246,17 @@ def _replace_payloads(
         )
 
 
-def upgrade_repository_payloads(connection: _sqlite3.Connection) -> None:
+def upgrade_repository_payloads(
+    connection: _sqlite3.Connection, *, receipts: bool = True
+) -> None:
     """Convert all staged retained rows, including those mapped from 7–14."""
     for table, transform in (
         ("verification_runs", verification_payload),
         ("challenges", challenge_payload),
         ("record_receipts", receipt_payload),
     ):
-        _replace_payloads(connection, table, "canonical_json", transform)
+        if table != "record_receipts" or receipts:
+            _replace_payloads(connection, table, "canonical_json", transform)
     connection.execute("UPDATE meta SET value='16' WHERE key='schema_version'")
 
 

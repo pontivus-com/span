@@ -256,6 +256,7 @@ def _decode_receipt(row: _sqlite3.Row) -> m.FunctionalPyramidReceipt:
         )
     if not isinstance(refs_raw, dict):
         raise FunctionalPyramidInstallationStoreError("stored receipt dependent effects are invalid")
+    dependencies: m.AcceptedDependencyEffects | m.HistoricalAcceptanceDetailUnavailable
     if refs_raw.get("$type") == "AcceptedDependencyEffects":
         dependencies = m.from_canonical(m.AcceptedDependencyEffects, refs_raw)
     elif refs_raw.get("$type") == "HistoricalAcceptanceDetailUnavailable":

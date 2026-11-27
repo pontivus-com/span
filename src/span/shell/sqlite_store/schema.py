@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3 as _sqlite3
 import typing as _typing
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 def validate_schema(

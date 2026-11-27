@@ -69,8 +69,8 @@ __all__ = [
 ]
 
 
-TARGET_SCHEMA = 15
-SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12, 13, 14})
+TARGET_SCHEMA = 16
+SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12, 13, 14, 15})
 
 #: Every table the schema-7/8/9 runtime could own. A table outside this set is
 #: preserved and reported, never silently omitted.
@@ -1036,6 +1036,13 @@ def _stage(
     for stale in (paths.staging, paths.smoke):
         if stale.exists():
             stale.unlink()
+    if source_schema == 15:
+        from span.shell.store_transition_schema15 import stage_schema15
+
+        stage_schema15(paths)
+        _fsync_file(paths.staging)
+        _fsync_dir(paths.transition_dir)
+        return (), ()
     seeds, limitations = _legacy_binding(paths, config.repository_id)
     store = LifecycleStore(paths.staging, retention=DEFAULT_LIFECYCLE_RETENTION)
     try:
@@ -1072,6 +1079,12 @@ def _stage(
 
         limits, _ = stage_schema14(paths, config, root)
         limitations = limitations + limits
+    if 10 <= source_schema <= 14:
+        from span.shell.store_transition_schema15 import upgrade_repository_payloads
+
+        with _contextlib.closing(_sqlite3.connect(paths.staging)) as connection:
+            with connection:
+                upgrade_repository_payloads(connection, receipts=source_schema != 10)
     _fsync_file(paths.staging)
     _fsync_dir(paths.transition_dir)
     return (), limitations
@@ -1186,6 +1199,12 @@ def _verify_staged(
             "schema-15 curation storage begins empty",
             "fresh lifecycle smoke test passed on an isolated copy",
         )
+    if source_schema == 15:
+        from span.shell.store_transition_schema15 import verify_schema15_staging
+
+        verify_schema15_staging(paths)
+        _smoke(paths, config)
+        return ("schema-15 retained cells verified", "isolated lifecycle smoke test passed")
     counts = _semantic_counts(paths.staging)
     if any(counts.values()):
         raise TransitionError(
@@ -1246,12 +1265,16 @@ def _verify_staged_references(
         "SELECT canonical_json FROM record_receipts"
     ).fetchall():
         receipt = m.from_canonical(m.RecordReceipt, _json.loads(row[0]))
-        if receipt.identity.repository_id != config.repository_id:
+        if receipt.key.repository_id != config.repository_id:
             raise TransitionError(
                 "a mapped receipt names another repository: "
-                f"{receipt.identity.repository_id}"
+                f"{receipt.key.repository_id}"
             )
-        for understanding_id in receipt.accepted_understanding_ids:
+        coordinates = m.historical_acceptance(receipt)
+        if isinstance(receipt.accepted_effect, m.HistoricalAcceptanceDetailUnavailable):
+            continue
+        for coordinate in coordinates.understanding_versions:
+            understanding_id = coordinate.understanding_id
             if (
                 connection.execute(
                     "SELECT 1 FROM understandings WHERE understanding_id=?",
@@ -1263,7 +1286,7 @@ def _verify_staged_references(
                     "a mapped receipt names a missing understanding: "
                     f"{understanding_id.value}"
                 )
-        for run_id in receipt.accepted_verification_run_ids:
+        for run_id in coordinates.verification_run_ids:
             if (
                 connection.execute(
                     "SELECT 1 FROM verification_runs WHERE run_id=?",
@@ -1275,7 +1298,7 @@ def _verify_staged_references(
                     f"a mapped receipt names a missing verification run: "
                     f"{run_id.value}"
                 )
-        for challenge_id in receipt.accepted_challenge_ids:
+        for challenge_id in coordinates.challenge_ids:
             if (
                 connection.execute(
                     "SELECT 1 FROM challenges WHERE challenge_id=?",
