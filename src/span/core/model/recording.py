@@ -229,7 +229,9 @@ class RecordReceipt:
     replay_expires_at: _datetime.datetime | None = None
 
     def __post_init__(self) -> None:
-        _require_non_empty("original addressing repository", self.original_addressing_repository_id)
+        _require_non_empty(
+            "original addressing repository", self.original_addressing_repository_id
+        )
         if self.committed_at.utcoffset() is None:
             raise ValueError("RecordReceipt.committed_at must be timezone-aware")
         if self.replay_expires_at is not None:
@@ -242,7 +244,9 @@ class RecordReceipt:
                 raise ValueError("surface acceptance has no investigation context")
             if self.accepted_effect.surface.repository_id != self.key.repository_id:
                 raise ValueError("surface acceptance must share receipt owner")
-        elif self.context is None or self.context.repository_id != self.key.repository_id:
+        elif (
+            self.context is None or self.context.repository_id != self.key.repository_id
+        ):
             raise ValueError("semantic acceptance requires its owner-bound context")
 
 

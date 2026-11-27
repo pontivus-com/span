@@ -12,6 +12,7 @@ import typing as _typing
 from dataclasses import dataclass as _dataclass
 
 from span.core.model.claims import AssertionNature
+from span.core.model.effects import ChangedSurface
 from span.core.model.outcomes import (
     UnderstandingRecorded,
     VerificationRecorded,
@@ -49,8 +50,7 @@ from span.core.model.support import (
     VerificationView,
 )
 from span.core.model.surfaces import (
-    ChangeReason,
-    Surface,
+    SurfaceAction,
     SurfaceKey,
     SurfaceReference,
     SurfaceStatus,
@@ -208,12 +208,15 @@ class EvidencePage:
 class SurfaceDeclared:
     """The accepted surface declaration or boundary update."""
 
-    action: str
-    surface: Surface
+    receipt_selector: ReceiptRetrievalSelector
+    committed_at: _datetime.datetime
+    action: SurfaceAction
+    surface: SurfaceKey
+    boundary_version: int
 
     def __post_init__(self) -> None:
-        if self.action not in ("create", "update"):
-            raise ValueError("SurfaceDeclared.action must be create or update")
+        if self.boundary_version < 1:
+            raise ValueError("accepted boundary must be positive")
 
 
 @_dataclass(frozen=True)
@@ -273,41 +276,6 @@ class Rejected:
             and self.current_boundary_version < 1
         ):
             raise ValueError("Rejected.current_boundary_version must be positive")
-
-
-@_dataclass(frozen=True)
-class ChangedConclusion:
-    """One conclusion considered by reconsideration and its present state.
-
-    ``reasons`` mean "considered", not "stale". A conclusion may be included
-    because its surface was considered and still be ``CURRENT``.
-    """
-
-    ref: ConclusionRevisionRef
-    expected_version: UnderstandingVersionNumber
-    reasons: tuple[ChangeReason, ...]
-    support: SupportQualification | SupportUnavailable
-
-    def __post_init__(self) -> None:
-        if not self.reasons:
-            raise ValueError("ChangedConclusion requires at least one reason")
-        if len(set(self.reasons)) != len(self.reasons):
-            raise ValueError("ChangedConclusion reasons must be distinct")
-
-
-@_dataclass(frozen=True)
-class ChangedSurface:
-    """One surface that must be re-examined, with every reason (FD-20)."""
-
-    surface: SurfaceKey
-    reasons: tuple[ChangeReason, ...]
-    conclusions: tuple[ChangedConclusion, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not self.reasons:
-            raise ValueError("ChangedSurface requires at least one reason")
-        if len(set(self.reasons)) != len(self.reasons):
-            raise ValueError("ChangedSurface reasons must be distinct")
 
 
 @_dataclass(frozen=True)

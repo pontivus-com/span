@@ -7,20 +7,37 @@ import typing as _typing
 from dataclasses import dataclass as _dataclass
 
 from span.core.model.primitives import (
-    ConclusionRevisionRef,
     UnderstandingId,
     UnderstandingVersionNumber,
     VerificationRunId,
 )
-from span.core.model.recording import RecordReceipt
+from span.core.model.effects import ChangedSurface
+from span.core.model.investigation import InvestigationContextRef
+from span.core.model.recording import AcceptedRevisionEffect, RecordReceipt, RevisionEffectAction
 from span.core.model.support import (
     SupportUnavailable,
-    UnderstandingQualification,
+    SupportQualification,
     VerificationQualification,
 )
-from span.core.model.surfaces import SurfaceStatus, SurfaceStatusUnavailable
-from span.core.model.understanding import Challenge, ReceiptRetrievalSelector
+from span.core.model.surfaces import SurfaceKey
+from span.core.model.understanding import (
+    AcceptedChallengeDisposition,
+    Challenge,
+    ReceiptRetrievalSelector,
+)
 from span.core.model.verification import VerificationOutcome
+
+
+@_dataclass(frozen=True)
+class RecordedRevisionEffect:
+    effect: AcceptedRevisionEffect
+    qualification: SupportQualification | SupportUnavailable | None
+
+    def __post_init__(self) -> None:
+        if (self.qualification is None) != (
+            self.effect.action is RevisionEffectAction.WITHDRAW
+        ):
+            raise ValueError("only withdrawal has no live qualification")
 
 
 @_dataclass(frozen=True)
@@ -31,10 +48,11 @@ class UnderstandingRecorded:
     committed_at: _datetime.datetime
     understanding_id: UnderstandingId
     version: UnderstandingVersionNumber
-    affected_revisions: tuple[ConclusionRevisionRef, ...]
-    dependent_effects: tuple[ConclusionRevisionRef, ...]
-    qualification: UnderstandingQualification | SupportUnavailable
-    status: SurfaceStatus | SurfaceStatusUnavailable
+    surface: SurfaceKey
+    revision_effects: tuple[RecordedRevisionEffect, ...]
+    challenge_dispositions: tuple[AcceptedChallengeDisposition, ...]
+    dependent_effects: tuple[ChangedSurface, ...]
+    reestablishment_contexts: tuple[InvestigationContextRef, ...]
 
 
 @_dataclass(frozen=True)

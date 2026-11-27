@@ -262,6 +262,7 @@ from span.core.model.understanding import (  # noqa: F401
     RetrievedContext,
     RetrievedReceipt,
     AcceptedVerificationReceipt,
+    AcceptedUnderstandingReceipt,
     RetrievedUnderstanding,
     AuditConclusion,
     SupportedAuditContent,
@@ -330,6 +331,7 @@ from span.core.model.outcomes import (  # noqa: F401
     ChallengeRecorded,
     RecordOutcome,
     UnderstandingRecorded,
+    RecordedRevisionEffect,
     VerificationRecorded,
 )
 from span.core.model.surfaces import (  # noqa: F401
@@ -352,6 +354,12 @@ from span.core.model.surfaces import (  # noqa: F401
     SurfaceStatusSummary,
     SurfaceStatusUnavailable,
 )
+from span.core.model.effects import (  # noqa: F401
+    ChangedConclusion,
+    ChangedSurface,
+    EffectDisposition,
+    EffectDispositionState,
+)
 from span.core.model.answers import (  # noqa: F401
     AmbiguousSurface,
     AcceptedDetailUnavailable,
@@ -359,8 +367,6 @@ from span.core.model.answers import (  # noqa: F401
     AnswerGroup,
     AskResult,
     Changed,
-    ChangedConclusion,
-    ChangedSurface,
     Challenged,
     ConclusionView,
     EvidencePage,
@@ -657,11 +663,13 @@ __all__ = [
     "RetrievedContext",
     "RetrievedReceipt",
     "AcceptedVerificationReceipt",
+    "AcceptedUnderstandingReceipt",
     "HistoricalAcceptanceDetailUnavailable",
     "UnderstandingVersionRef",
     "RetrieveResult",
     "SupportUnavailable",
     "UnderstandingRecorded",
+    "RecordedRevisionEffect",
     "VerificationRecorded",
     "ChallengeRecorded",
     "RecordOutcome",
@@ -688,6 +696,8 @@ __all__ = [
     "Changed",
     "ChangedConclusion",
     "ChangedSurface",
+    "EffectDisposition",
+    "EffectDispositionState",
     "Challenged",
     "ConclusionView",
     "EvidencePage",

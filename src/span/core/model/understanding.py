@@ -35,8 +35,17 @@ from span.core.model.primitives import (
     UnderstandingVersionNumber,
     _require_non_empty,
 )
-from span.core.model.recording import HistoricalAcceptanceDetailUnavailable
-from span.core.model.surfaces import SurfaceKey, SurfaceReference
+from span.core.model.recording import (
+    AcceptedChallengeOpeningEffect,
+    AcceptedRevisionEffect,
+    AcceptedSurfaceEffect,
+    HistoricalAcceptanceDetailUnavailable,
+)
+from span.core.model.surfaces import (
+    AcceptedDependencyEffects,
+    SurfaceKey,
+    SurfaceReference,
+)
 from span.core.model.support import (
     SupportBasis,
     SupportDependency,
@@ -733,12 +742,27 @@ class AcceptedVerificationReceipt:
 
 
 @_dataclass(frozen=True)
+class AcceptedUnderstandingReceipt:
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+    revision_effects: tuple[AcceptedRevisionEffect, ...]
+    challenge_dispositions: tuple[AcceptedChallengeDisposition, ...]
+    dependent_effects: AcceptedDependencyEffects
+
+
+@_dataclass(frozen=True)
 class RetrievedReceipt:
     """Public immutable acceptance audit; replay internals stay private."""
 
     receipt_selector: ReceiptRetrievalSelector
     committed_at: _datetime.datetime
-    accepted_effect: AcceptedVerificationReceipt | HistoricalAcceptanceDetailUnavailable
+    accepted_effect: (
+        AcceptedUnderstandingReceipt
+        | AcceptedVerificationReceipt
+        | AcceptedSurfaceEffect
+        | AcceptedChallengeOpeningEffect
+        | HistoricalAcceptanceDetailUnavailable
+    )
 
     def __post_init__(self) -> None:
         _require_aware("RetrievedReceipt.committed_at", self.committed_at)
