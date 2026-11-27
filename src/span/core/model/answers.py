@@ -39,12 +39,12 @@ from span.core.model.primitives import (
     ConclusionRevisionRef,
     EvidenceRef,
     EvidenceScope,
+    SupportState,
     UnderstandingVersionNumber,
     _require_non_empty,
 )
 from span.core.model.support import (
     SupportQualification,
-    SupportState,
     SupportUnavailable,
     VerificationView,
 )
@@ -55,10 +55,10 @@ from span.core.model.surfaces import (
     SurfaceReference,
     SurfaceStatus,
 )
+from span.core.model.recording import HistoricalAcceptanceDetailUnavailable
 from span.core.model.understanding import (
     AuditConclusion,
     ChallengeView,
-    HistoricalAcceptanceDetailUnavailable,
     PendingCuration,
     ReceiptRetrievalSelector,
     RecordedQuestionGap,

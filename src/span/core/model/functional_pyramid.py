@@ -15,6 +15,7 @@ from dataclasses import dataclass as _dataclass
 
 from span.core.model.investigation import EvidenceRequest
 from span.core.model.primitives import (
+    ContentDigest,
     AuthorityBinding,
     ConclusionRevisionRef,
     EvidenceRef,
@@ -23,7 +24,6 @@ from span.core.model.primitives import (
     _require_non_empty,
     _require_positive_int,
 )
-from span.core.model.recording import ContentDigest
 
 
 class FunctionalPyramidParticipationState(_enum.Enum):

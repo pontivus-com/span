@@ -12,6 +12,9 @@ from dataclasses import dataclass as _dataclass
 
 from span.core.model.primitives import (
     ChallengeId,
+    ChallengeRevision,
+    ContentDigest,
+    CurationState,
     ConclusionRevisionRef,
     InvestigationContextId,
     RequestId,
@@ -20,16 +23,11 @@ from span.core.model.primitives import (
     VerificationRunId,
     _require_non_empty,
 )
-
-
-@_dataclass(frozen=True)
-class ContentDigest:
-    """Canonical content digest; the server owns its derivation."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        _require_non_empty("ContentDigest", self.value)
+from span.core.model.surfaces import (
+    AcceptedDependencyEffects,
+    SurfaceAction,
+    SurfaceKey,
+)
 
 
 @_dataclass(frozen=True)
@@ -70,6 +68,132 @@ class RequestBinding:
 
     def __post_init__(self) -> None:
         _require_non_empty("RequestBinding.repository_id", self.repository_id)
+
+
+class RevisionEffectAction(_enum.Enum):
+    """The exact action accepted by an understanding transition."""
+
+    CREATE = "CREATE"
+    ADD = "ADD"
+    CONFIRM = "CONFIRM"
+    CORRECT = "CORRECT"
+    REPLACE = "REPLACE"
+    WITHDRAW = "WITHDRAW"
+    CURATE = "CURATE"
+
+
+@_dataclass(frozen=True)
+class AcceptedRevisionEffect:
+    """Immutable action fact, independent of subsequent support or maturity."""
+
+    action: RevisionEffectAction
+    ref: ConclusionRevisionRef
+    changed: bool
+    maturity: CurationState | None
+    replaced_ref: ConclusionRevisionRef | None = None
+
+    def __post_init__(self) -> None:
+        if not self.changed and self.action is not RevisionEffectAction.CONFIRM:
+            raise ValueError("only confirmation may be unchanged")
+        if (self.maturity is None) != (self.action is RevisionEffectAction.WITHDRAW):
+            raise ValueError("withdrawal alone has no reuse maturity")
+        if (self.replaced_ref is not None) != (
+            self.action is RevisionEffectAction.REPLACE
+        ):
+            raise ValueError("replacement alone names the replaced revision")
+        if self.replaced_ref is not None and (
+            self.replaced_ref.understanding_id != self.ref.understanding_id
+            or self.replaced_ref.conclusion_id == self.ref.conclusion_id
+        ):
+            raise ValueError(
+                "replacement must name another lineage in the same understanding"
+            )
+
+
+@_dataclass(frozen=True)
+class UnderstandingVersionRef:
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+
+
+@_dataclass(frozen=True)
+class HistoricalAcceptanceDetailUnavailable:
+    """Retained acceptance coordinates whose original effect detail was not stored."""
+
+    understanding_versions: tuple[UnderstandingVersionRef, ...]
+    verification_run_ids: tuple[VerificationRunId, ...]
+    challenge_ids: tuple[ChallengeId, ...]
+    dependent_effect_refs: tuple[ConclusionRevisionRef, ...]
+    reason: str
+    recovery: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("historical acceptance reason", self.reason)
+        _require_non_empty("historical acceptance recovery", self.recovery)
+
+
+@_dataclass(frozen=True)
+class AcceptedChallengeCoordinate:
+    """The exact accepted challenge disposition revision."""
+
+    challenge_id: ChallengeId
+    challenge_revision: ChallengeRevision
+
+
+@_dataclass(frozen=True)
+class AcceptedUnderstandingEffect:
+    """The immutable facts produced by one semantic transition."""
+
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+    revision_effects: tuple[AcceptedRevisionEffect, ...]
+    challenge_dispositions: tuple[AcceptedChallengeCoordinate, ...]
+    dependent_effects: AcceptedDependencyEffects
+
+    def __post_init__(self) -> None:
+        refs = tuple(effect.ref for effect in self.revision_effects)
+        if any(ref.understanding_id != self.understanding_id for ref in refs):
+            raise ValueError("accepted revision effects cross understanding identity")
+        if len(set(refs)) != len(refs):
+            raise ValueError("accepted revision effects contain duplicate refs")
+        challenge_ids = tuple(item.challenge_id for item in self.challenge_dispositions)
+        if len(set(challenge_ids)) != len(challenge_ids):
+            raise ValueError("accepted challenge dispositions contain duplicate IDs")
+
+
+@_dataclass(frozen=True)
+class AcceptedSurfaceEffect:
+    """The original accepted boundary, never the mutable surface pointer."""
+
+    action: SurfaceAction
+    surface: SurfaceKey
+    boundary_version: int
+
+    def __post_init__(self) -> None:
+        if self.boundary_version < 1:
+            raise ValueError("accepted surface boundary version must be positive")
+        if self.action is SurfaceAction.CREATE and self.boundary_version != 1:
+            raise ValueError("accepted create must identify boundary version one")
+
+
+@_dataclass(frozen=True)
+class AcceptedChallengeOpeningEffect:
+    """Exact opening identity and disputed version/refs."""
+
+    challenge_id: ChallengeId
+    challenge_revision: ChallengeRevision
+    understanding_id: UnderstandingId
+    target_version: UnderstandingVersionNumber
+    target_conclusions: tuple[ConclusionRevisionRef, ...]
+
+    def __post_init__(self) -> None:
+        if self.challenge_revision.value != 1:
+            raise ValueError("accepted challenge opening must identify revision one")
+        if any(
+            ref.understanding_id != self.understanding_id
+            for ref in self.target_conclusions
+        ):
+            raise ValueError("accepted challenge opening crosses understanding identity")
 
 
 @_dataclass(frozen=True)

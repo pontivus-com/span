@@ -25,6 +25,7 @@ from span.core.model.primitives import (
     ConclusionId,
     ConclusionRevisionNumber,
     ConclusionRevisionRef,
+    CurationState,
     DerivationKind,
     EvidenceRef,
     EvidenceScope,
@@ -32,9 +33,9 @@ from span.core.model.primitives import (
     SemanticBasis,
     UnderstandingId,
     UnderstandingVersionNumber,
-    VerificationRunId,
     _require_non_empty,
 )
+from span.core.model.recording import HistoricalAcceptanceDetailUnavailable
 from span.core.model.surfaces import SurfaceKey, SurfaceReference
 from span.core.model.support import (
     SupportBasis,
@@ -106,53 +107,6 @@ class ConclusionRevision:
     def __post_init__(self) -> None:
         if self.originating_version.value < 1:
             raise ValueError("originating_version must be positive")
-
-
-class CurationState(_enum.Enum):
-    """Derived reuse maturity for one exact semantic revision."""
-
-    CAPTURED = "CAPTURED"
-    CURATED = "CURATED"
-
-
-class RevisionEffectAction(_enum.Enum):
-    """The exact action accepted by an understanding transition."""
-
-    CREATE = "CREATE"
-    ADD = "ADD"
-    CONFIRM = "CONFIRM"
-    CORRECT = "CORRECT"
-    REPLACE = "REPLACE"
-    WITHDRAW = "WITHDRAW"
-    CURATE = "CURATE"
-
-
-@_dataclass(frozen=True)
-class AcceptedRevisionEffect:
-    """Immutable action fact, independent of subsequent support or maturity."""
-
-    action: RevisionEffectAction
-    ref: ConclusionRevisionRef
-    changed: bool
-    maturity: CurationState | None
-    replaced_ref: ConclusionRevisionRef | None = None
-
-    def __post_init__(self) -> None:
-        if not self.changed and self.action is not RevisionEffectAction.CONFIRM:
-            raise ValueError("only confirmation may be unchanged")
-        if (self.maturity is None) != (self.action is RevisionEffectAction.WITHDRAW):
-            raise ValueError("withdrawal alone has no reuse maturity")
-        if (self.replaced_ref is not None) != (
-            self.action is RevisionEffectAction.REPLACE
-        ):
-            raise ValueError("replacement alone names the replaced revision")
-        if self.replaced_ref is not None and (
-            self.replaced_ref.understanding_id != self.ref.understanding_id
-            or self.replaced_ref.conclusion_id == self.ref.conclusion_id
-        ):
-            raise ValueError(
-                "replacement must name another lineage in the same understanding"
-            )
 
 
 class CurationOrigin(_enum.Enum):
@@ -763,28 +717,6 @@ class RetrievedContext:
     context: InvestigationContext
     observations: tuple[SourceObservation, ...]
     discovery: tuple[DiscoveryObservation, ...] = ()
-
-
-@_dataclass(frozen=True)
-class UnderstandingVersionRef:
-    understanding_id: UnderstandingId
-    version: UnderstandingVersionNumber
-
-
-@_dataclass(frozen=True)
-class HistoricalAcceptanceDetailUnavailable:
-    """Retained acceptance coordinates whose original effect detail was not stored."""
-
-    understanding_versions: tuple[UnderstandingVersionRef, ...]
-    verification_run_ids: tuple[VerificationRunId, ...]
-    challenge_ids: tuple[ChallengeId, ...]
-    dependent_effect_refs: tuple[ConclusionRevisionRef, ...]
-    reason: str
-    recovery: str
-
-    def __post_init__(self) -> None:
-        _require_non_empty("historical acceptance reason", self.reason)
-        _require_non_empty("historical acceptance recovery", self.recovery)
 
 
 @_dataclass(frozen=True)

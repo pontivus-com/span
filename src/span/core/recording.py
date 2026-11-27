@@ -31,6 +31,8 @@ from span.core.model.investigation import (
 )
 from span.core.model.primitives import (
     ChallengeId,
+    ContentDigest,
+    CurationState,
     ChallengeRevision,
     ConclusionId,
     ConclusionRevisionNumber,
@@ -44,7 +46,8 @@ from span.core.model.primitives import (
     evidence_scope_contains,
 )
 from span.core.model.recording import (
-    ContentDigest,
+    AcceptedRevisionEffect,
+    RevisionEffectAction,
     ReceiptDecision,
     ReceiptDecisionKind,
     RecordReceipt,
@@ -56,11 +59,8 @@ from span.core.model.understanding import (
     ChallengeDispositionRecord,
     ChallengeResolution,
     ChallengeState,
-    AcceptedRevisionEffect,
     CurationDisposition,
     CurationOrigin,
-    CurationState,
-    RevisionEffectAction,
     ResolvedChallengeRecord,
     UnresolvedChallengeRecord,
     ConclusionRevision,

@@ -14,11 +14,11 @@ from dataclasses import field as _field
 from span.core.schema import constraints as _constraints
 from span.core.model.primitives import (
     ConclusionRevisionRef,
+    SupportState,
     UnderstandingId,
     UnderstandingVersionNumber,
     _require_non_empty,
 )
-from span.core.model.support import SupportState
 
 
 class ChangeReason(_enum.Enum):
@@ -27,6 +27,13 @@ class ChangeReason(_enum.Enum):
     CONTAINMENT = "containment"
     DIRECT = "direct"
     INDIRECT = "indirect"
+
+
+class SurfaceAction(_enum.Enum):
+    """A surface declaration is either created or boundary-updated."""
+
+    CREATE = "create"
+    UPDATE = "update"
 
 
 class SurfaceKind(_enum.Enum):

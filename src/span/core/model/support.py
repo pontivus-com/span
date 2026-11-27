@@ -7,7 +7,6 @@ Part of the canonical domain carrier package. Import through
 from __future__ import annotations
 
 import datetime as _datetime
-import enum as _enum
 import typing as _typing
 from dataclasses import dataclass as _dataclass
 
@@ -32,18 +31,11 @@ from span.core.model.primitives import (
     EvidenceScope,
     DiscoveryObservationId,
     SourceObservationId,
+    SupportState,
     UnderstandingId,
     UnderstandingVersionNumber,
     _require_non_empty,
 )
-
-
-class SupportState(_enum.Enum):
-    """Support currency, independent of retrieval/page availability."""
-
-    CURRENT = "CURRENT"
-    REASSESSMENT_REQUIRED = "REASSESSMENT_REQUIRED"
-    UNVERIFIABLE = "UNVERIFIABLE"
 
 
 @_dataclass(frozen=True)
