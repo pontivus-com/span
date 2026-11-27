@@ -324,7 +324,9 @@ class EffectDisposition:
                 raise ValueError("unavailable effect requires recovery")
         if self.state is EffectDispositionState.CURRENT:
             if self.support is None or self.support.state is not SupportState.CURRENT:
-                raise ValueError("current disposition requires verified current support")
+                raise ValueError(
+                    "current disposition requires verified current support"
+                )
         elif self.support is not None:
             raise ValueError("non-current dispositions cannot carry a support verdict")
 
