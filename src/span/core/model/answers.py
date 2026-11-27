@@ -20,7 +20,6 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidAction,
     FunctionalPyramidCandidate,
     FunctionalPyramidId,
-    FunctionalPyramidMemberView,
     FunctionalPyramidParticipation,
     FunctionalPyramidParticipationEffect,
     FunctionalPyramidReceiptSelector,
@@ -337,7 +336,6 @@ class FunctionalPyramidRecorded:
     action: FunctionalPyramidAction
     pyramid_id: FunctionalPyramidId | None
     version: FunctionalPyramidVersion | None
-    members: tuple[FunctionalPyramidMemberView, ...]
     participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]
     dependent_effects: tuple[ChangedSurface, ...] = ()
     reestablishment_contexts: tuple[InvestigationContextRef, ...] = ()

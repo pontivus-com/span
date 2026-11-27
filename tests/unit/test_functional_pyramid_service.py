@@ -718,7 +718,16 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             tuple(effect.repository_id for effect in result.participation_effects),
             ("repo-a", "repo-b"),
         )
-        self.assertIsNotNone(self.state.receipt(m.RequestId("activate-1")))
+        receipt = self.state.receipt(m.RequestId("activate-1"))
+        assert receipt is not None
+        self.assertEqual(
+            tuple(item.repository_id for item in receipt.members),
+            ("repo-a", "repo-b"),
+        )
+        status = self.admin_service.status(
+            m.FunctionalPyramidSelector(repository_id="repo-a")
+        )
+        self.assertEqual(status.member_repository_ids, ("repo-a", "repo-b"))
         self.assertEqual(
             self.state.transaction_paths[-1],
             (("repo-a", "/stores/repo-a.db"), ("repo-b", "/stores/repo-b.db")),

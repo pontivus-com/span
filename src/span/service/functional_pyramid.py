@@ -365,7 +365,7 @@ class FunctionalPyramidService:
             health=health,
             pyramid_id=pyramid_id,
             version=version,
-            members=members,
+            member_repository_ids=tuple(sorted(item.repository_id for item in members)),
             findings=tuple(m.public_pyramid_finding(item) for item in findings),
         )
 
@@ -639,13 +639,14 @@ class FunctionalPyramidService:
         self, selector: m.FunctionalPyramidCandidateSelector
     ) -> m.FunctionalPyramidCandidate:
         """Pure action-aware candidate validation (FD-84)."""
-        return self._candidate(selector, self._require_state())
+        candidate, _ = self._candidate(selector, self._require_state())
+        return candidate
 
     def _candidate(
         self,
         selector: m.FunctionalPyramidCandidateSelector,
         state: FunctionalPyramidStatePort | FunctionalPyramidStateTransaction,
-    ) -> m.FunctionalPyramidCandidate:
+    ) -> tuple[m.FunctionalPyramidCandidate, tuple[m.FunctionalPyramidMemberView, ...]]:
         (
             target_id,
             target_version,
@@ -653,17 +654,19 @@ class FunctionalPyramidService:
             validation,
         ) = self._candidate_lifecycle(selector, state)
         if not eligible:
-            return m.FunctionalPyramidCandidate(
-                action=selector.action,
-                pyramid_id=target_id,
-                version=target_version,
-                members=(),
-                activation_ready=False,
-                validation_findings=tuple(
-                    m.public_pyramid_finding(item)
-                    for item in _ordered_validation_findings(validation)
+            return (
+                m.FunctionalPyramidCandidate(
+                    action=selector.action,
+                    pyramid_id=target_id,
+                    version=target_version,
+                    activation_ready=False,
+                    validation_findings=tuple(
+                        m.public_pyramid_finding(item)
+                        for item in _ordered_validation_findings(validation)
+                    ),
+                    graph_findings=(),
                 ),
-                graph_findings=(),
+                (),
             )
 
         members, declarations, available, source_validation, source_graph = (
@@ -680,16 +683,20 @@ class FunctionalPyramidService:
             source_graph + authority_findings,
         )
         ordered_validation = _ordered_validation_findings(validation)
-        return m.FunctionalPyramidCandidate(
-            action=selector.action,
-            pyramid_id=target_id,
-            version=target_version,
-            members=members,
-            activation_ready=not ordered_validation and not structural,
-            validation_findings=tuple(
-                m.public_pyramid_finding(item) for item in ordered_validation
+        return (
+            m.FunctionalPyramidCandidate(
+                action=selector.action,
+                pyramid_id=target_id,
+                version=target_version,
+                activation_ready=not ordered_validation and not structural,
+                validation_findings=tuple(
+                    m.public_pyramid_finding(item) for item in ordered_validation
+                ),
+                graph_findings=tuple(
+                    m.public_pyramid_finding(item) for item in structural
+                ),
             ),
-            graph_findings=tuple(m.public_pyramid_finding(item) for item in structural),
+            members,
         )
 
     def _candidate_lifecycle(
@@ -1008,7 +1015,7 @@ class FunctionalPyramidService:
             pyramid_id=pyramid_id,
             expected_version=expected_version,
         )
-        candidate = self._candidate(selector, transaction)
+        candidate, validated_members = self._candidate(selector, transaction)
         stale = next(
             (
                 finding
@@ -1059,14 +1066,14 @@ class FunctionalPyramidService:
         effects = self._participation_effects(
             action=action,
             old_members=old_members,
-            new_members=candidate.members,
+            new_members=validated_members,
         )
         dependent, contexts, refs = self._change_effects(
             transaction,
             action,
             selected_id,
             old_members,
-            candidate.members,
+            validated_members,
             changed_authority_refs=changed_authority_refs,
         )
         now = self._clock()
@@ -1075,12 +1082,12 @@ class FunctionalPyramidService:
             version=version,
             content_digest=digest,
             committed_at=now,
-            members=candidate.members,
+            members=validated_members,
         )
         transaction.set_current_pyramid(
             pyramid_id=selected_id,
             version=version,
-            members=candidate.members,
+            members=validated_members,
         )
         receipt = m.RetrievedFunctionalPyramidReceipt(
             request_id=request_id,
@@ -1089,7 +1096,7 @@ class FunctionalPyramidService:
             action=action,
             pyramid_id=selected_id,
             version=version,
-            members=candidate.members,
+            members=validated_members,
             participation_effects=effects,
             dependent_effect_refs=refs,
         )
@@ -1456,7 +1463,6 @@ class FunctionalPyramidService:
             action=receipt.action,
             pyramid_id=receipt.pyramid_id,
             version=receipt.version,
-            members=receipt.members,
             participation_effects=receipt.participation_effects,
             dependent_effects=dependent_effects,
             reestablishment_contexts=contexts,

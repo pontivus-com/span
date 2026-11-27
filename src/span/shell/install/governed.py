@@ -655,26 +655,30 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
             for member in members
             for request in member.declaration_sources
         }
+        assert pyramid_id is not None and version is not None
+        with _state(data_dir) as state:
+            if state is None:
+                raise ValueError("Functional Pyramid installation state unavailable")
+            actual = {
+                (item.repository_id, ref.locator)
+                for item in state.pyramid_members(pyramid_id, version)
+                for ref in item.declaration_refs
+            }
+        if actual != expected:
+            raise ValueError("governed participation declaration membership differs")
         for member in members:
             status = service.status(
                 m.FunctionalPyramidSelector(repository_id=member.repository_id)
             )
-            actual = {
-                (item.repository_id, ref.locator)
-                for item in status.members
-                for ref in item.declaration_refs
-            }
             if (
                 status.state is not m.FunctionalPyramidParticipationState.ACTIVE
                 or status.health is not m.FunctionalPyramidHealth.VALID
                 or status.pyramid_id != pyramid_id
                 or status.version != version
-                or expected != actual
             ):
                 raise ValueError(
                     f"governed participation verification failed: {member.repository_id}"
                 )
-        assert pyramid_id is not None and version is not None
         pending["accepted_pyramid_id"] = pyramid_id.value
         pending["accepted_version"] = version.value
     prior = read_receipt(data_dir)

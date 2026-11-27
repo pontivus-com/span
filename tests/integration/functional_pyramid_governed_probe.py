@@ -247,6 +247,16 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
             activated = _install(command, data_dir, repo_a_id)
             activated_error = False
             activation_id = _value(activated["receipt_selector"]["request_id"])
+            activation_receipt_before, activation_receipt_before_error = await _call(
+                session,
+                "ask",
+                {
+                    "selector": {
+                        "$type": "FunctionalPyramidReceiptSelector",
+                        "request_id": {"value": activation_id},
+                    }
+                },
+            )
             members = [
                 {
                     "repository_id": member["repository_id"],
@@ -255,7 +265,7 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                         for ref in member["declaration_refs"]
                     ],
                 }
-                for member in activated["members"]
+                for member in activation_receipt_before["members"]
             ]
             candidate, candidate_error = await _call(
                 session,
@@ -271,16 +281,6 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                 },
             )
 
-            activation_receipt_before, activation_receipt_before_error = await _call(
-                session,
-                "ask",
-                {
-                    "selector": {
-                        "$type": "FunctionalPyramidReceiptSelector",
-                        "request_id": {"value": activation_id},
-                    }
-                },
-            )
             activation_replay_before, activation_replay_before_error = await _call(
                 session,
                 "record",

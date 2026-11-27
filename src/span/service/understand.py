@@ -54,9 +54,7 @@ class UnderstandService:
         )
         if request.version is None:
             # A missing current row is retained-state unavailability.
-            version = self._store.get_version(
-                request.understanding_id, version_number
-            )
+            version = self._store.get_version(request.understanding_id, version_number)
         else:
             selected_version = self._store.find_version(
                 request.understanding_id, version_number

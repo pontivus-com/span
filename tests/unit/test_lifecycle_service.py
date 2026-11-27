@@ -3353,7 +3353,7 @@ class LifecycleServiceTest(unittest.TestCase):
     def test_refs_only_semantic_scope_does_not_examine_unrelated_files(self):
         from span.service.surface_status import compose_surface_status
         from span.service.answer import AnswerService
-from span.service.understand import UnderstandService
+        from span.service.understand import UnderstandService
 
         context = self.service.start_context(
             m.StartContextRequest(

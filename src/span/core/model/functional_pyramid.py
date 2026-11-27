@@ -471,7 +471,7 @@ class FunctionalPyramidStatus:
     health: FunctionalPyramidHealth | None = None
     pyramid_id: FunctionalPyramidId | None = None
     version: FunctionalPyramidVersion | None = None
-    members: tuple[FunctionalPyramidMemberView, ...] = ()
+    member_repository_ids: tuple[str, ...] = ()
     findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
 
     def __post_init__(self) -> None:
@@ -480,8 +480,10 @@ class FunctionalPyramidStatus:
                 raise ValueError(
                     "ACTIVE status requires health, pyramid_id, and version"
                 )
-            if not self.members:
+            if not self.member_repository_ids:
                 raise ValueError("ACTIVE status requires at least one member")
+            if len(set(self.member_repository_ids)) != len(self.member_repository_ids):
+                raise ValueError("ACTIVE status member identities must be distinct")
             if self.health is FunctionalPyramidHealth.VALID and self.findings:
                 raise ValueError("VALID Functional Pyramid status has no findings")
             if self.health is FunctionalPyramidHealth.DEGRADED and not self.findings:
@@ -489,7 +491,11 @@ class FunctionalPyramidStatus:
             return
         if self.health is not None:
             raise ValueError("inactive Functional Pyramid status has no health")
-        if self.pyramid_id is not None or self.version is not None or self.members:
+        if (
+            self.pyramid_id is not None
+            or self.version is not None
+            or self.member_repository_ids
+        ):
             raise ValueError("inactive Functional Pyramid status has no live instance")
         if self.findings:
             raise ValueError(
@@ -553,7 +559,6 @@ class FunctionalPyramidCandidateSelector:
 @_dataclass(frozen=True)
 class FunctionalPyramidCandidate:
     action: FunctionalPyramidAction
-    members: tuple[FunctionalPyramidMemberView, ...]
     activation_ready: bool
     validation_findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
     graph_findings: tuple[FunctionalPyramidPublicFinding, ...] = ()

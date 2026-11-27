@@ -883,6 +883,18 @@ composition and duplicate verification selectors; no SQL or transport-level
 filtering. Unit test pure selection and count invariants, then actual service
 and installed retrieval. I-01/04/12/15/18/42/43.
 
+**PUB-06 compact projection increment (OPEN).** The existing status,
+candidate and accepted-write carriers no longer expose declaration member
+inventories. Status reports member repository IDs; candidate validation
+returns the canonical public verdict and existing retained member facts
+separately to its transactional caller, with no second validation engine.
+Installer verification reads immutable accepted version membership from its
+existing read-only state capability; the installed probe obtains declaration
+references via the exact receipt, not the write response. This is an
+independent compact-projection increment, not completion of PUB-06's
+root-addressing/delivery obligations. Test lines +9. Integration and
+acceptance still require PUB-04 and PUB-07A; no gate is closed.
+
 **PUB-06 — Compact governance and end-to-end root addressing (API-01–04/23).** After
 PUB-04 and API-23 root-registry verification in PUB-01, change core/model/
 functional_pyramid.py, core/functional_pyramid.py, service/functional_pyramid.py,
