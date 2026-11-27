@@ -928,10 +928,17 @@ existing declaration/filesystem capability for the pure selection. Do not use
 `FunctionalPyramidService._repository_paths`: it addresses attached lifecycle
 stores for transactions, not repository roots. Resolve roots without opening
 every member store, crawling directories or creating a second registry. Pass the resolved repository and relative directory
-to the existing `resolve_functional_pyramid_directory_route` and project them
-in the canonical `FunctionalPyramidView` or non-ACTIVE participation result.
-Bind `_directory_page` to both the original address and resolved selection
-(FD-62, FD-88C); no independent route or authority resolver. The status API
+to the existing `resolve_functional_pyramid_directory_route`. Keep canonical
+`FunctionalDocumentRef`/`FunctionalDocumentPlacement` and route identity
+owner-relative. At the existing public projection owner, derive the root basis
+and `FunctionalPyramidPath` values through one pure registered-root coordinate
+function (FD-62). The canonical `FunctionalPyramidPlacementView` carries only
+public owner identities, layer and usable paths; do not reuse declaration
+carriers with changed field meanings or add duplicate member-relative copies.
+Reuse the projection for findings, ordinary orientation and non-ACTIVE
+selection. Construct the public view before encoded-size fitting. Bind
+`_directory_page` to the original address, resolved selection and projected
+root/path bindings (FD-62, FD-88C); no independent route or authority resolver. The status API
 is not a member-root discovery API. Do not expose absolute roots, namespace
 maps or private path-resolution state. Ordinary semantic identity/routing is
 not silently rewritten by this directory-only correction; audit other path
@@ -943,18 +950,25 @@ The directory answer is exactly:
 {
   "pyramid_id": "...",
   "version": 5,
-  "repository_id": "member",
-  "directory": "workflows/contract_integrity_audit",
+  "resolved_repository_id": "member",
+  "directory": {
+    "repository_id": "workspace",
+    "path": "projects/member/workflows/contract_integrity_audit"
+  },
   "status": "RESOLVED",
   "placements": [
     {
-      "declaring_repository_id": "...",
+      "declaring_repository_id": "member",
+      "document_repository_id": "member",
+      "layer": "P0",
       "document": {
-        "repository_id": "...",
-        "document_ref": "AGENTS.md",
-        "layer": "P0"
+        "repository_id": "workspace",
+        "path": "projects/member/AGENTS.md"
       },
-      "scope": "."
+      "scope": {
+        "repository_id": "workspace",
+        "path": "projects/member"
+      }
     }
   ],
   "declared_layers": ["P0"],
@@ -967,7 +981,8 @@ The directory answer is exactly:
 ```
 
 Public findings use exactly `reason`, `detail`, `recovery`, optional
-`repository_id`, optional `directory` and optional `placement`. The public
+`repository_id`, optional `directory` and optional `placement` using the
+canonical public path/placement coordinates in lifecycle §4.1. The public
 reason vocabulary and its fixed mapping are FD-88B. A public finding contains no
 `declaration_locator`, no internal reason enum and no authority payload. The
 service projects internal FD-71 findings into this carrier at the boundary; the
@@ -1015,7 +1030,7 @@ response budget, the answer returns the largest fitting prefix,
 `truncated=true`, one constant omission statement and `next_after`.
 `FunctionalPyramidDirectorySelector` accepts `after` and returns the next
 deterministic page for the same original address, resolved repository/directory,
-selection and declaration version. The token is opaque, versioned and uses the existing paging contract; a
+root basis and projected path bindings, selection and declaration version. The token is opaque, versioned and uses the existing paging contract; a
 stale token returns the paging stale-continuation failure rather than silently
 restarting. `unresolved` is complete on every page and is never truncated.
 

@@ -582,8 +582,15 @@ Strict nested roots are intentionally supported; only non-unique deepest
 ownership is ambiguous. Registered ownership precedes participation (including
 a nested registered repository in another instance or UNCONFIGURED/EXCLUDED);
 never combine ancestor and child governance merely by filesystem nesting.
-Return resolved repository and owner-relative directory, not redundant input
-path or absolute roots. The original address remains in the request. The
+Owner decision (2026-11-27): return the resolved owner and all governance
+locations in the outermost registered parent root's coordinates, regardless
+of whether the parent or member addressed the directory. This includes the
+selected directory, every document path, placement scope and finding directory;
+the member-root scope is its prefix from the parent, not `.`. The public
+placement/path carriers in lifecycle §4.1 are the sole projection; keep
+canonical owner-relative identities internal, never publish duplicate local
+and translated paths. Explicitly qualify references outside that root tree
+by their own registered root; never use absolute paths or traversal. The
 directory contract is distinct from automatic rewrites of semantic identity:
 audit ordinary surface/reference obtain, evidence admission, record scope,
 changed-scope reconsideration and hooks for the same namespace assumption;
@@ -625,11 +632,17 @@ classification scope and document authority remain independent.
   First close registry availability and alias/canonical path semantics, including
   actual registry-root composition and failure mapping. Prove nested --repo
   fixtures using installed MCP: parent-relative/member-relative equality after
-  all pages, exact member root '.', sibling and prefix-lookalike, three-level
-  nesting, equal-root ambiguity, unknown/missing root, escapes and symlink
+  all pages including identical root-basis addresses; member-root '.' becomes
+  its parent-root prefix, document/scope paths are directly readable from their
+  named basis, shared parent/sibling documents use the same root, unrelated
+  root trees have explicit own-root coordinates, findings and embedded
+  placements use the same projection, canonical authority and support identity
+  remain unchanged; sibling and prefix-lookalike, three-level nesting,
+  equal-root ambiguity, unknown/missing root, escapes and symlink
   aliases, excluded/unconfigured/other-instance child, no implicit participation,
   no union from sibling/parent, stale token after root/participation/selection
-  change, no internal leakage and no absolute root map. Keep existing graph,
+  change (including presentation root/path binding), no internal leakage and
+  no absolute root map or duplicate path inventory. Keep existing graph,
   member intent, canonical authority and effect semantics.
 - PUB-07 (11–14/19): exact accepted action effects, independent maturity and
   challenge disposition; surface CAS receipt/replay at existing transaction

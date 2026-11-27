@@ -137,7 +137,8 @@ ambiguous and rejected. Reject escaping paths and symlink aliases that would
 change the addressed repository boundary; do not infer unregistered roots or
 participation. If registry/root availability prevents a definitive selection,
 return operational unavailability rather than selecting the enclosing root.
-Translate the selected directory relative to that root (`.` for the root).
+Translate the selected directory relative to that root (`.` for the root)
+for the internal applicability computation.
 Determine that repository's own participation and instance, including explicit
 UNCONFIGURED/EXCLUDED or operational unavailability; never substitute the
 addressing repository's governance. For an ACTIVE owner, select every placement
@@ -148,7 +149,22 @@ files, never uses the file inventory to decide relevance, and never requires a
 semantic surface declaration.
 
 After selection, the resolver continues through FD-68 without a coverage
-classification branch. Root-totality is validated independently by FD-86;
+classification branch. For public location projection, choose the outermost
+registered canonical ancestor of the resolved owner as the root basis.
+This basis is independent of the caller's addressing origin and participation.
+Rebase each selected directory, document locator and placement scope from its
+actual owning or declaring root into that basis by canonical path-segment
+containment and relative-path composition. A nested member's internal `.`
+becomes its parent-root prefix, not the parent's `.`. Apply the same procedure
+to public finding coordinates and embedded governing placements. If an actual
+document or scope owner lies outside that tree, use its own outermost registered
+root as the explicitly qualified basis. Resolve no path by guessing, emit no
+`..` or absolute root, and do not claim a location when its root binding cannot
+be established. Unavailable coordinates retain typed public cause/recovery;
+never suppress an unresolved finding. Standalone status/candidate findings use
+the same per-coordinate root projection without an invented common ancestor.
+The projection changes addresses only; do not change selection, placement
+identity, document authority, declaration scopes, support or route identity. Root-totality is validated independently by FD-86;
 structural and operational defects remain typed under FD-71 and FD-91. Layer
 summaries are derived from the resolved selection under FD-86 rather than from
 directory inventory or a coverage state.
@@ -800,7 +816,8 @@ continuation token. `FunctionalPyramidDirectorySelector` accepts that token and
 returns the next deterministic page for the same directory and selection.
 `unresolved` is never truncated. The token is opaque, versioned and bound to the
 original addressing repository/directory, resolved repository/directory,
-selection and declaration version; changes to that binding invalidate the token.
+root basis and projected path bindings, selection and declaration version;
+changes to that binding invalidate the token.
 It carries no internal route, provenance or authority state. *(A7, A8, G1, L12)*
 
 **FD-89 — Cross-repository change propagation uses one dependency engine.**

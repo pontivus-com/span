@@ -136,8 +136,15 @@ participation and applicable governance; the caller need not translate a
 nested registered repository's path or discover its identifier first. The
 result is `FunctionalPyramidView`, `FunctionalPyramidParticipation` or
 `FunctionalPyramidUnavailable`. A successful directory result names the
-resolved repository and its repository-relative directory; the original
-request is already the caller's address. Invalid or ambiguous addresses are
+resolved repository and the selected directory in the outermost registered
+parent repository's coordinates (the repository itself if standalone).
+Every governing document location, placement scope and applicable finding
+directory in the same registered root tree uses that common root basis,
+including when the caller addresses the nested repository directly. Span
+returns usable root-relative paths, not member-relative fragments requiring
+caller concatenation. A governing reference outside that tree retains an
+explicit registered root basis of its own; no fictitious parent-relative
+path, absolute filesystem root or escape path is returned. Invalid or ambiguous addresses are
 rejected; inability to establish the owning registered repository is explicit
 unavailability, never a parent-governance fallback. Directory addressing is
 a point selection, not a request to enumerate nested members. Registration and
@@ -306,12 +313,31 @@ The nested carriers are exact:
   selected directory or `EvidenceScope`, the applicable placement identities
   and, for a multi-path semantic scope, the path or boundary that selected them.
   It is not serialized into a public answer.
+- `FunctionalPyramidPath` is the public location coordinate:
+  `repository_id: str` names the registered root from which `path: str` is
+  directly readable or selectable. File paths are normalized relative
+  whole-file locators; directory paths use the same normalization with
+  `.` permitted only for the basis root. It is an address, not a declaration
+  or authority identity.
+- `FunctionalPyramidPlacementView` is the canonical public placement
+  projection: `declaring_repository_id: str`, `document_repository_id: str`,
+  `layer: FunctionalPyramidLayer`, `document: FunctionalPyramidPath`,
+  `scope: FunctionalPyramidPath`. The first two identify actual owners;
+  the two paths carry usable locations, not an additional copy of the
+  owner-relative placement. The internal `FunctionalDocumentPlacement`
+  remains the canonical declaration/graph identity and is not serialized
+  as this result. The public placement projection is shared by views and
+  findings, with no transport-specific shape.
 - `FunctionalPyramidView` carries exactly one selection. For directory lookup,
-  `repository_id: str` identifies the resolved repository and `directory` is
-  its normalized repository-relative directory. For ordinary surface obtain,
+  `resolved_repository_id: str` identifies the owner and
+  `directory: FunctionalPyramidPath` identifies the selected directory in
+  the common root coordinates. For ordinary surface obtain,
   `semantic_scope` is set and the enclosing surface identifies the repository;
-  directory-only coordinates are absent. It also carries `placements`,
-  `unresolved`, `declared_layers`, and `absent_layers`.
+  directory-only coordinates are absent. Its governing placements use the
+  same root-relative public path projection. `placements` contains
+  `FunctionalPyramidPlacementView`; `unresolved`, `declared_layers` and
+  `absent_layers` retain their meanings. Canonical semantic scope and retained
+  identities are not re-keyed by presentation.
 
 An unresolved finding identifies a repository plus the applicable placement or
 whole-document coordinates. A structural finding without a placement still makes
@@ -353,9 +379,9 @@ parallel setup DTOs.
   `repository_id: str` and
   `declaration_refs: tuple[EvidenceRef, ...]`.
 - `FunctionalPyramidParticipation` carries `state: UNCONFIGURED | EXCLUDED`.
-  For directory lookup it also carries the resolved `repository_id: str` and
-  normalized `directory: str`; for ordinary surface obtain those coordinates
-  are absent because the enclosing surface identifies the subject.
+  For directory lookup it also carries `resolved_repository_id: str` and
+  `directory: FunctionalPyramidPath`; for ordinary surface obtain those
+  coordinates are absent because the enclosing surface identifies the subject.
 - `FunctionalPyramidParticipationEffect` carries
   `repository_id: str` and
   `state: UNCONFIGURED | EXCLUDED | ACTIVE`; it is the canonical per-repository
@@ -388,14 +414,15 @@ parallel setup DTOs.
   STALE_PYRAMID_VERSION`. The fixed internal-to-public mapping is FD-88B.
 - `FunctionalPyramidPublicFinding` carries
   `reason: FunctionalPyramidPublicReason`, optional `repository_id`, optional
-  normalized `directory`, optional `placement: FunctionalDocumentPlacement`
-  coordinates, plus non-empty `detail` and `recovery`. It never carries a
+  `directory: FunctionalPyramidPath`, optional
+  `placement: FunctionalPyramidPlacementView` coordinates, plus non-empty
+  `detail` and `recovery`. It never carries a
   `declaration_locator`, an internal reason enum, copied governing content,
   route, provenance or authority payload. Unused coordinates are absent.
 - `FunctionalPyramidValidationFinding` carries
   `reason: FunctionalPyramidPublicReason` restricted to `DECLARATION_INVALID`
   and the five lifecycle reasons, optional `repository_id`, `pyramid_id`,
-  `directory`, `expected_version`, and `current_version`, plus non-empty
+  `directory: FunctionalPyramidPath`, `expected_version`, and `current_version`, plus non-empty
   `detail` and `recovery`. It never carries `declaration_locator`.
   Unused coordinates are absent.
 - The internal `FunctionalPyramidFinding`,
