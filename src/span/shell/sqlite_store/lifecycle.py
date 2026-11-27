@@ -1241,7 +1241,11 @@ class LifecycleStore:
                 connection.execute(
                     "INSERT INTO verification_observations"
                     "(repository_id, run_id, observation_id) VALUES(?,?,?)",
-                    (run.facts.repository_id, run.facts.run_id.value, observation.value),
+                    (
+                        run.facts.repository_id,
+                        run.facts.run_id.value,
+                        observation.value,
+                    ),
                 )
             receipt = build_receipt(
                 command.identity,

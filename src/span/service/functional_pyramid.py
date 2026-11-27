@@ -1298,7 +1298,9 @@ class FunctionalPyramidService:
             )
 
         return DependencyEffectService(
-            store_for_repository=lambda repository_id: self._runtime(repository_id).store,
+            store_for_repository=lambda repository_id: self._runtime(
+                repository_id
+            ).store,
             registered_repository_ids=lambda: tuple(sorted(self._registered())),
             support_for_repository=self._support_for_repository,
             functional_route_impacts=self.changed_route_identities,

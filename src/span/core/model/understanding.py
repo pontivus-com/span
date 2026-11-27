@@ -319,7 +319,10 @@ class Challenge:
     def __post_init__(self) -> None:
         if self.facts.state is ChallengeState.RESOLVED and self.resolution is None:
             raise ValueError("a resolved challenge requires a resolution")
-        if self.facts.state is not ChallengeState.RESOLVED and self.resolution is not None:
+        if (
+            self.facts.state is not ChallengeState.RESOLVED
+            and self.resolution is not None
+        ):
             raise ValueError("only a resolved challenge carries a resolution")
         for ref in self.target_conclusions:
             if ref.understanding_id != self.facts.understanding_id:

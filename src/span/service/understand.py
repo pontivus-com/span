@@ -22,7 +22,10 @@ def accepted_dispositions(
             for disposition in challenge.dispositions
             if m.disposition_revision(disposition) == coordinate.challenge_revision
         )
-        if len(matches) != 1 or challenge.facts.understanding_id != effect.understanding_id:
+        if (
+            len(matches) != 1
+            or challenge.facts.understanding_id != effect.understanding_id
+        ):
             raise RecordingValidationError(
                 "the exact accepted challenge disposition is unavailable"
             )
