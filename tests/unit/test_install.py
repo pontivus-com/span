@@ -456,19 +456,27 @@ class OpencodeScopeTest(unittest.TestCase):
                 targets=(target,),
                 dry=False,
             )
+            foreign = root / "foreign-bin" / "span-mcp"
+            foreign.parent.mkdir()
+            foreign.write_text("#!/bin/sh\nexit 97\n")
+            foreign.chmod(0o755)
             previous = os.getcwd()
             os.chdir(root)
             try:
                 with (
-                    mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(config_home)}),
-                    mock.patch.object(
-                        cli_module.shutil, "which", return_value="/bin/span-mcp"
+                    mock.patch.dict(
+                        os.environ,
+                        {
+                            "XDG_CONFIG_HOME": str(config_home),
+                            "PATH": str(foreign.parent) + os.pathsep + os.environ["PATH"],
+                        },
                     ),
                     mock.patch.object(cli_module, "wire_codex_hooks", return_value={}),
                     mock.patch.object(
                         cli_module, "_hook_bin", return_value="/bin/hooks"
                     ),
                 ):
+                    self.assertEqual(shutil.which("span-mcp"), str(foreign))
                     registration = cli_module._register_hosts(
                         env,
                         "global",
@@ -493,7 +501,7 @@ class OpencodeScopeTest(unittest.TestCase):
                 "command"
             ]
             self.assertEqual(registration["opencode"]["status"], "merged")
-            self.assertEqual(command[0], "/bin/span-mcp")
+            self.assertEqual(command[0], str(env.bin_dir / "span-mcp"))
             self.assertIn("--repo", command)
             self.assertIn(str(target), command)
 
@@ -2629,6 +2637,18 @@ class SkillDeployTest(unittest.TestCase):
 class HostRegistrationInspectionTest(unittest.TestCase):
     """SPMCP-01: read-only, truthful host-registration discovery."""
 
+    def setUp(self):
+        fixture = tempfile.TemporaryDirectory()
+        self.addCleanup(fixture.cleanup)
+        root = pathlib.Path(fixture.name)
+        self.venv_python = root / "venv" / "bin" / "python"
+        self.venv_python.parent.mkdir(parents=True)
+        (self.venv_python.parent / "span-mcp").write_text("#!/bin/sh\n")
+        self.bin_dir = root / "bin"
+        self.bin_dir.mkdir()
+        self.span_mcp = self.bin_dir / "span-mcp"
+        self.span_mcp.symlink_to(self.venv_python.parent / "span-mcp")
+
     def test_claude_selection_flags_are_explicit(self):
         enabled = install.parse_args(["--with-claude"])
         disabled = install.parse_args(["--no-claude"])
@@ -2922,13 +2942,12 @@ class HostRegistrationInspectionTest(unittest.TestCase):
         from unittest.mock import patch
 
         expected = install.expected_span_command(
-            "/bin/span-mcp", "/d", [], host="opencode"
+            str(self.span_mcp), "/d", [], host="opencode"
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = self._config(tmp, expected)
             before = path.read_bytes()
             with (
-                patch.object(shutil, "which", return_value="/bin/span-mcp"),
                 patch(
                     "span.shell.install.verify.verify_installation",
                     return_value={"repos": []},
@@ -2936,10 +2955,11 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                 patch("span.shell.install.verify.check_skills"),
             ):
                 report = install.doctor(
-                    "/venv/bin/python",
+                    str(self.venv_python),
                     "/d",
                     [],
                     str(path),
+                    bin_dir=self.bin_dir,
                 )
             self.assertEqual(path.read_bytes(), before)
         self.assertEqual(report["opencode_registration"]["status"], "matched")
@@ -2956,7 +2976,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             repo = root / "repo"
             repo.mkdir()
             expected = install.expected_span_command(
-                "/bin/span-mcp", str(data_dir), [repo], host="opencode"
+                str(self.span_mcp), str(data_dir), [repo], host="opencode"
             )
             config = self._config(tmp, expected)
             (data_dir / "install.json").write_text(
@@ -2974,7 +2994,6 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             os.chdir(other_cwd)
             try:
                 with (
-                    patch.object(shutil, "which", return_value="/bin/span-mcp"),
                     patch(
                         "span.shell.install.verify.verify_installation",
                         return_value={"repos": []},
@@ -2985,10 +3004,11 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                     patch("span.shell.install.verify.check_skills"),
                 ):
                     report = install.doctor(
-                        "/venv/bin/python",
+                        str(self.venv_python),
                         str(data_dir),
                         [],
                         None,
+                        bin_dir=self.bin_dir,
                     )
             finally:
                 os.chdir(previous)
@@ -2996,7 +3016,7 @@ class HostRegistrationInspectionTest(unittest.TestCase):
         self.assertEqual(verify_installation.call_args.args[2], (repo,))
         self.assertEqual(
             inspect_claude.call_args.args[0],
-            install.expected_span_command("/bin/span-mcp", str(data_dir), [repo]),
+            install.expected_span_command(str(self.span_mcp), str(data_dir), [repo]),
         )
 
     def test_doctor_does_not_inspect_unrecorded_global_mcp_config(self):
@@ -3026,7 +3046,6 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             try:
                 with (
                     patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / "config")}),
-                    patch.object(shutil, "which", return_value="/bin/span-mcp"),
                     patch(
                         "span.shell.install.verify.verify_installation",
                         return_value={"repos": []},
@@ -3034,10 +3053,11 @@ class HostRegistrationInspectionTest(unittest.TestCase):
                     patch("span.shell.install.verify.check_skills"),
                 ):
                     report = install.doctor(
-                        "/venv/bin/python",
+                        str(self.venv_python),
                         str(data_dir),
                         [],
                         None,
+                        bin_dir=self.bin_dir,
                     )
             finally:
                 os.chdir(previous)
@@ -3058,14 +3078,18 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             )
             with self.assertRaises(SystemExit):
                 install.doctor(
-                    "/venv/bin/python", str(data_dir), [], None, dry_run=True
+                    str(self.venv_python),
+                    str(data_dir),
+                    [],
+                    None,
+                    dry_run=True,
+                    bin_dir=self.bin_dir,
                 )
 
     def test_codex_present_reports_manual_without_registry_query(self):
         from unittest.mock import patch
 
         with (
-            patch.object(shutil, "which", return_value="/bin/span-mcp"),
             patch(
                 "span.shell.install.verify.verify_installation",
                 return_value={"repos": []},
@@ -3082,10 +3106,11 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             ),
         ):
             report = install.doctor(
-                "/venv/bin/python",
+                str(self.venv_python),
                 "/d",
                 [],
                 None,
+                bin_dir=self.bin_dir,
             )
         self.assertEqual(report["codex_registration"]["status"], "manual")
         self.assertIn(
@@ -3097,7 +3122,6 @@ class HostRegistrationInspectionTest(unittest.TestCase):
         from unittest.mock import patch
 
         with (
-            patch.object(shutil, "which", return_value="/bin/span-mcp"),
             patch(
                 "span.shell.install.verify.verify_installation",
                 return_value={"repos": []},
@@ -3109,12 +3133,27 @@ class HostRegistrationInspectionTest(unittest.TestCase):
             ),
         ):
             report = install.doctor(
-                "/venv/bin/python",
+                str(self.venv_python),
                 "/d",
                 [],
                 None,
+                bin_dir=self.bin_dir,
             )
         self.assertEqual(report["codex_registration"]["status"], "skipped")
+
+    def test_doctor_rejects_link_to_different_runtime(self):
+        foreign = self.bin_dir.parent / "foreign-span-mcp"
+        foreign.write_text("#!/bin/sh\n")
+        self.span_mcp.unlink()
+        self.span_mcp.symlink_to(foreign)
+        with (
+            mock.patch("span.shell.install.verify.verify_installation") as verify,
+            self.assertRaisesRegex(SystemExit, "configured Span executable"),
+        ):
+            install.doctor(
+                str(self.venv_python), "/d", [], None, bin_dir=self.bin_dir
+            )
+        verify.assert_not_called()
 
     def test_verify_only_is_the_only_verification_flag(self):
         args = install.parse_args(["--verify-only"])

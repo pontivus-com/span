@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import shutil
 import sys
 import typing as _typing
 from dataclasses import dataclass as _dataclass
@@ -56,6 +55,8 @@ from span.shell.install.indexer import (
 )
 from span.shell.install.paths import (
     distribution_version,
+    expected_span_command,
+    exposed_console_script,
     git_rev,
     install_mode,
     opencode_plugin_path,
@@ -313,6 +314,7 @@ def _run_one_shot(env: _Environment) -> bool:
             env.targets,
             args.opencode_config,
             env.dry,
+            bin_dir=env.bin_dir,
         )
         return True
     if args.snapshot_census is not None:
@@ -511,15 +513,9 @@ def _provision_runtime(
 
 
 def _span_command(env: _Environment) -> list[str]:
-    resolved_mcp = shutil.which("span-mcp")
-    if resolved_mcp is None:
-        # Not yet on PATH in this process; the server entry needs an absolute
-        # path, so resolve the just-linked binary directly.
-        resolved_mcp = str(env.bin_dir / "span-mcp")
-    command = [resolved_mcp, "--data-dir", str(env.data_dir)]
-    for target in env.targets:
-        command += ["--repo", str(target)]
-    return command
+    return expected_span_command(
+        exposed_console_script(env.bin_dir, "span-mcp"), env.data_dir, env.targets
+    )
 
 
 def _host_command(command: list[str], host: str) -> list[str]:

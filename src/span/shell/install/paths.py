@@ -109,6 +109,11 @@ def git_rev(span_repo):
     return proc.stdout.strip()
 
 
+def exposed_console_script(bin_dir: str | Path, name: str) -> Path:
+    """Absolute configured console-script location, independent of PATH."""
+    return Path(bin_dir).absolute() / name
+
+
 def expected_span_command(span_mcp, data_dir, repos, host=None):
     """Installed invocation shape used for host-registration inspection."""
     command = [str(span_mcp), "--data-dir", str(data_dir)]

@@ -16,6 +16,7 @@ from span.shell.install.build_identity import (
 )
 from span.shell.install.paths import (
     distribution_version,
+    exposed_console_script,
     install_mode,
 )
 
@@ -241,8 +242,8 @@ def expose_binary(venv_dir, bin_dir, dry_run=False):
     # `span-install --verify-only`, so the command has to be on PATH
     # afterwards, exactly as it is after a package install.
     for name in ("span-mcp", "span-install", "span-hooks"):
-        src = Path(venv_dir) / "bin" / name
-        dst = Path(bin_dir) / name
+        src = Path(venv_dir).absolute() / "bin" / name
+        dst = exposed_console_script(bin_dir, name)
         print(f"+ link {dst} -> {src}")
         if dry_run:
             continue
@@ -250,6 +251,6 @@ def expose_binary(venv_dir, bin_dir, dry_run=False):
         if dst.is_symlink() or dst.exists():
             dst.unlink()
         dst.symlink_to(src)
-    resolved = shutil.which("span-mcp")
-    print(f"span-mcp resolves to: {resolved}")
-    return Path(bin_dir) / "span-mcp"
+    exposed = exposed_console_script(bin_dir, "span-mcp")
+    print(f"configured Span executable: {exposed}")
+    return exposed

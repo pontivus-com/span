@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -21,6 +20,7 @@ from span.shell.install.hosts import (
 )
 from span.shell.install.paths import (
     expected_span_command,
+    exposed_console_script,
 )
 from span.shell.install.receipt import (
     read_receipt,
@@ -163,13 +163,20 @@ def _opencode_plugin_report(scope, state, canonical_dir) -> dict[str, object]:
     }
 
 
-def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
+def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False, *, bin_dir):
     """Re-verify an existing installation without changing anything."""
     print("== span install doctor ==")
-    resolved = shutil.which("span-mcp")
-    print(f"span-mcp on PATH: {resolved}")
-    if resolved is None and not dry_run:
-        raise SystemExit("span-mcp not found on PATH")
+    exposed = exposed_console_script(bin_dir, "span-mcp")
+    expected = Path(venv_python).parent / "span-mcp"
+    if not dry_run and (
+        not exposed.is_file() or exposed.resolve() != expected.resolve()
+    ):
+        raise SystemExit(
+            "configured Span executable does not identify the requested runtime; "
+            "reinstall with the intended --bin-dir and --venv-dir"
+        )
+    resolved = str(exposed)
+    print(f"configured Span executable: {resolved}")
     receipt_path = Path(data_dir) / "install.json"
     receipt = read_receipt(data_dir) or {}
     receipt_targets = tuple(
@@ -189,7 +196,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     opencode_state = inspect_opencode_registration(
         selected_config,
         expected_span_command(
-            resolved if resolved is not None else "span-mcp",
+            resolved,
             data_dir,
             effective_repos,
             host="opencode",
@@ -198,7 +205,7 @@ def doctor(venv_python, data_dir, repos, opencode_config, dry_run=False):
     codex_state = inspect_codex_registration()
     claude_state = inspect_claude_registration(
         expected_span_command(
-            resolved if resolved is not None else "span-mcp",
+            resolved,
             data_dir,
             effective_repos,
         )
