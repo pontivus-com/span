@@ -11,12 +11,12 @@ never silently passes.
 
 from __future__ import annotations
 
-import hashlib as _hashlib
 import json as _json
 import os as _os
 import pathlib as _pathlib
 import shutil as _shutil
 import subprocess as _subprocess
+import sys as _sys
 import tempfile as _tempfile
 import unittest as _unittest
 
@@ -113,7 +113,6 @@ _GOVERNED_B_FILES = {
 }
 
 
-_SOURCE_SET = ("src", "pyproject.toml", "README.md")
 
 _EXPECTED_TOOLS = {"ask", "record", "reconsider"}
 
@@ -129,44 +128,6 @@ _NON_CURRENT_TOOLS = {
 }
 
 
-def _tree_digest(root):
-    files = []
-    for entry in _SOURCE_SET:
-        path = root / entry
-        if path.is_dir():
-            for dirpath, dirnames, filenames in _os.walk(path):
-                dirnames[:] = sorted(d for d in dirnames if d != "__pycache__")
-                for name in sorted(filenames):
-                    if name.endswith((".pyc", ".pyo")):
-                        continue
-                    files.append(_pathlib.Path(dirpath) / name)
-        elif path.is_file():
-            files.append(path)
-    digest = _hashlib.sha256()
-    for path in files:
-        digest.update(str(path.relative_to(root)).encode("utf-8"))
-        digest.update(b"\x00")
-        digest.update(path.read_bytes())
-        digest.update(b"\x00")
-    return digest.hexdigest()
-
-
-def _tree_revision(root):
-    try:
-        head = _subprocess.run(
-            ("git", "-C", str(root), "rev-parse", "HEAD"),
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        dirty = _subprocess.run(("git", "-C", str(root), "diff", "--quiet"), timeout=30)
-        if head.returncode != 0:
-            return "unknown"
-        return head.stdout.strip() + ("" if dirty.returncode == 0 else "-dirty")
-    except (OSError, _subprocess.SubprocessError):
-        return "unknown"
-
-
 def _ensure_isolated_exe(work):
     if _shutil.which("uv") is None:
         raise _unittest.SkipTest(
@@ -179,7 +140,7 @@ def _ensure_isolated_exe(work):
         srctree / "src",
         ignore=_shutil.ignore_patterns("__pycache__"),
     )
-    for name in ("pyproject.toml", "README.md", "setup.py"):
+    for name in ("pyproject.toml", "README.md", "setup.py", "MANIFEST.in"):
         _shutil.copy(repo_root / name, srctree / name)
     _shutil.copytree(
         repo_root / "scripts",
@@ -198,13 +159,15 @@ def _ensure_isolated_exe(work):
         repo_root / "integrations" / "hosts" / "opencode" / "span-hooks.js",
         plugin_dir / "span-hooks.js",
     )
-    identity = {
-        "source_revision": _tree_revision(repo_root),
-        "source_digest": _tree_digest(repo_root),
-    }
-    (srctree / "src" / "span" / "BUILD_IDENTITY").write_text(
-        _json.dumps(identity, sort_keys=True), encoding="utf-8"
+    _subprocess.run(
+        (_sys.executable, str(repo_root / "scripts/build_identity.py")),
+        check=True,
+        capture_output=True,
+        text=True,
     )
+    identity_path = repo_root / "src" / "span" / "BUILD_IDENTITY"
+    _shutil.copy(identity_path, srctree / "src" / "span" / "BUILD_IDENTITY")
+    identity = _json.loads(identity_path.read_text())
     venv = work / "iso-venv"
     _subprocess.run(
         ("uv", "venv", str(venv)), check=True, timeout=300, capture_output=True
@@ -531,6 +494,13 @@ dispose();
         self.assertEqual(len(entries["repo-b"]["bindings"]), 4)
         self.assertEqual(len(entries["repo-a"]["artifacts"]), 3)
         self.assertTrue(receipt["verify"]["acceptance_ok"])
+        self.assertEqual(
+            receipt["verify"]["build_identity"]["source_revision"].removesuffix("-dirty"),
+            receipt["span_rev"],
+        )
+        self.assertEqual(
+            receipt["verify"]["build_identity"]["revision_origin"], "packaged"
+        )
         for repo in receipt["verify"]["repos"]:
             self.assertEqual(
                 repo["functional_pyramid"]["participation"]["state"], "ACTIVE"

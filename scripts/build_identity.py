@@ -1,46 +1,38 @@
 #!/usr/bin/env python3
-"""Write ``src/span/BUILD_IDENTITY`` before a release build.
-
-The file records the source revision and a deterministic digest of the
-packaged source. ``span-install --verify-only`` reads it from an installed
-distribution so a built package can report the source it came from.
-
-The file is generated, not committed. Development installs without it fall
-back to a git probe or to ``unknown``.
-"""
+"""Generate or inspect the single packaging-time build identity."""
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import pathlib
 import subprocess
 import sys
 
+from sync_assets import asset_manifest
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SOURCE_SET = ("src", "pyproject.toml", "README.md")
-#: The generator's own output. It is excluded from the digest because a file
-#: cannot hash itself: including it made every run depend on the previous run's
-#: content, so the "source digest" drifted on every invocation and a checkout
-#: install could never match a clean build.
-IDENTITY_PATH = pathlib.Path("src") / "span" / "BUILD_IDENTITY"
+IDENTITY_PATH = ROOT / "src" / "span" / "BUILD_IDENTITY"
 
 
 def tree_digest() -> str:
-    files: list[pathlib.Path] = []
-    for entry in SOURCE_SET:
-        path = ROOT / entry
-        if path.is_dir():
-            for child in sorted(path.rglob("*")):
-                if child.is_file() and child.suffix not in {".pyc", ".pyo"}:
-                    if "__pycache__" not in child.parts:
-                        if child.relative_to(ROOT) == IDENTITY_PATH:
-                            continue
-                        files.append(child)
-        elif path.is_file():
-            files.append(path)
+    """Hash canonical packaged sources, not generated build staging."""
+    files = set((ROOT / "src" / "span").rglob("*.py"))
+    files.update(source for source, _ in asset_manifest())
+    files.update(
+        ROOT / name
+        for name in (
+            "pyproject.toml",
+            "README.md",
+            "setup.py",
+            "MANIFEST.in",
+            "scripts/build_identity.py",
+            "scripts/sync_assets.py",
+        )
+    )
     digest = hashlib.sha256()
-    for path in files:
+    for path in sorted(files):
         digest.update(str(path.relative_to(ROOT)).encode("utf-8"))
         digest.update(b"\x00")
         digest.update(path.read_bytes())
@@ -49,35 +41,60 @@ def tree_digest() -> str:
 
 
 def source_revision() -> str:
+    if not (ROOT / ".git").exists():
+        return "unknown"
     try:
         head = subprocess.run(
             ("git", "-C", str(ROOT), "rev-parse", "HEAD"),
             capture_output=True,
             text=True,
             timeout=30,
+            check=True,
         )
-        if head.returncode != 0:
-            return "unknown"
-        dirty = subprocess.run(
-            ("git", "-C", str(ROOT), "diff", "--quiet"),
+        status = subprocess.run(
+            ("git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=all"),
+            capture_output=True,
+            text=True,
             timeout=30,
+            check=True,
         )
-        return head.stdout.strip() + ("" if dirty.returncode == 0 else "-dirty")
     except (OSError, subprocess.SubprocessError):
         return "unknown"
+    return head.stdout.strip() + ("-dirty" if status.stdout else "")
+
+
+def build_identity() -> dict[str, str]:
+    digest = tree_digest()
+    revision = source_revision()
+    # An unchanged source distribution retains its producer's identity.
+    # Never borrow a surrounding Git checkout.
+    if not (ROOT / ".git").exists():
+        try:
+            retained = json.loads(IDENTITY_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            retained = None
+        if isinstance(retained, dict) and retained.get("source_digest") == digest:
+            recorded = retained.get("source_revision")
+            if isinstance(recorded, str) and recorded:
+                revision = recorded
+    return {"source_revision": revision, "source_digest": digest}
+
+
+def generate_identity() -> None:
+    IDENTITY_PATH.write_text(
+        json.dumps(build_identity(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> int:
-    identity = {
-        "source_revision": source_revision(),
-        "source_digest": tree_digest(),
-    }
-    target = ROOT / "src" / "span" / "BUILD_IDENTITY"
-    target.write_text(
-        json.dumps(identity, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    print(f"wrote {target.relative_to(ROOT)}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--inspect", action="store_true")
+    if parser.parse_args().inspect:
+        print(json.dumps(build_identity(), sort_keys=True))
+    else:
+        generate_identity()
+        print("Generated Span build identity")
     return 0
 
 

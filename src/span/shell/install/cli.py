@@ -406,8 +406,7 @@ def _sync_runtime_distribution(
     if extra_files:
         print(
             "warning: stale files in venv pip reinstall never removes: "
-            + ", ".join(extra_files)
-            + ". Recreate the venv to clear them."
+            + f"({len(extra_files)} files). Recreate the runtime environment to clear them."
         )
     source_venv_sync = {
         "in_sync_before_install": bool(in_sync),

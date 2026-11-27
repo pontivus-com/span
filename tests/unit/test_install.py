@@ -1797,6 +1797,15 @@ class Tier1MechanismTest(unittest.TestCase):
             target.write_text(content)
         venv = pathlib.Path(tmp) / "venv"
         site = venv / "lib" / "python3.12" / "site-packages" / "span"
+        from unittest.mock import patch
+
+        identity = {"source_revision": "a" * 40, "source_digest": "b" * 64}
+        expected = patch(
+            "span.shell.install.venv._source_identity", return_value=identity
+        )
+        expected.start()
+        self.addCleanup(expected.stop)
+        self.identity = identity
         return repo, venv / "bin" / "python", site
 
     def test_sync_check_passes_on_identical_tree(self):
@@ -1806,6 +1815,7 @@ class Tier1MechanismTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, python, site = self._tree(tmp, files)
             site.mkdir(parents=True)
+            (site / "BUILD_IDENTITY").write_text(json.dumps(self.identity))
             for rel, content in files.items():
                 dst = site / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1824,6 +1834,7 @@ class Tier1MechanismTest(unittest.TestCase):
             self.assertFalse(in_sync)
             self.assertEqual(extra, ())
             site.mkdir(parents=True)
+            (site / "BUILD_IDENTITY").write_text(json.dumps(self.identity))
             (site / "a.py").write_text("2\n")
             in_sync, _, _ = install.source_venv_in_sync(repo, python)
             self.assertFalse(in_sync)
@@ -1841,6 +1852,7 @@ class Tier1MechanismTest(unittest.TestCase):
             ok, _ = install.verify_installed(repo, python)
             self.assertFalse(ok)
             site.mkdir(parents=True)
+            (site / "BUILD_IDENTITY").write_text(json.dumps(self.identity))
             (site / "a.py").write_text("2\n")
             ok, _ = install.verify_installed(repo, python)
             self.assertFalse(ok)
@@ -1851,58 +1863,57 @@ class Tier1MechanismTest(unittest.TestCase):
             (site / "stale.py").write_text("old\n")
             ok, detail = install.verify_installed(repo, python)
             self.assertFalse(ok)
-            self.assertIn("stale.py", detail)
+            self.assertIn("obsolete runtime files", detail)
 
-    def test_verify_installed_distribution_mode_checks_version(self):
+    def test_distribution_sync_requires_same_build_at_same_version(self):
         import subprocess
         import tempfile
         from unittest.mock import patch
 
+        expected = {"source_revision": "a" * 40, "source_digest": "b" * 64}
         with tempfile.TemporaryDirectory() as tmp:
-            with patch(
-                "span.shell.install.venv.distribution_version", return_value="0.6.0"
+            with (
+                patch(
+                    "span.shell.install.venv.distribution_version", return_value="0.6.0"
+                ),
+                patch(
+                    "span.shell.install.venv.installed_build_identity",
+                    return_value=expected,
+                ),
             ):
-                match = subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="0.6.0\n"
-                )
-                with patch.object(subprocess, "run", return_value=match):
-                    ok, detail = install.verify_installed(tmp, "/venv/bin/python")
-                self.assertTrue(ok)
-                self.assertIn("0.6.0", detail)
-                drift = subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="0.5.0\n"
-                )
-                with patch.object(subprocess, "run", return_value=drift):
-                    ok, detail = install.verify_installed(tmp, "/venv/bin/python")
-                self.assertFalse(ok)
-                self.assertIn("0.5.0", detail)
+                for identity, succeeds in (
+                    (expected, True),
+                    ({**expected, "source_digest": "c" * 64}, False),
+                    (None, False),
+                ):
+                    with self.subTest(identity=identity):
+                        result = subprocess.CompletedProcess(
+                            args=[],
+                            returncode=0,
+                            stdout=json.dumps(["0.6.0", identity]),
+                        )
+                        with patch.object(subprocess, "run", return_value=result):
+                            ok, _ = install.verify_installed(tmp, "/venv/bin/python")
+                            self.assertEqual(ok, succeeds)
+                            in_sync, _, _ = install.distribution_venv_in_sync(
+                                "/venv/bin/python"
+                            )
+                            self.assertEqual(in_sync, succeeds)
 
-    def test_distribution_fast_path_compares_version(self):
-        import subprocess
+    def test_checkout_sync_rejects_missing_or_stale_build_identity(self):
         import tempfile
-        from unittest.mock import patch
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch(
-                "span.shell.install.venv.distribution_version", return_value="0.6.0"
-            ):
-                match = subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="0.6.0\n"
-                )
-                with patch.object(subprocess, "run", return_value=match):
-                    in_sync, _, extra = install.distribution_venv_in_sync(
-                        pathlib.Path(tmp) / "python"
-                    )
-                self.assertTrue(in_sync)
-                self.assertEqual(extra, ())
-                drift = subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="0.5.0\n"
-                )
-                with patch.object(subprocess, "run", return_value=drift):
-                    in_sync, _, _ = install.distribution_venv_in_sync(
-                        pathlib.Path(tmp) / "python"
-                    )
-                self.assertFalse(in_sync)
+            repo, python, site = self._tree(tmp, {"a.py": "1\n"})
+            site.mkdir(parents=True)
+            (site / "a.py").write_text("1\n")
+            self.assertFalse(install.source_venv_in_sync(repo, python)[0])
+            (site / "BUILD_IDENTITY").write_text(
+                json.dumps({**self.identity, "source_digest": "c" * 64})
+            )
+            self.assertFalse(install.source_venv_in_sync(repo, python)[0])
+            (site / "BUILD_IDENTITY").write_text(json.dumps(self.identity))
+            self.assertTrue(install.source_venv_in_sync(repo, python)[0])
 
     def test_clean_build_staging(self):
         import tempfile

@@ -8,8 +8,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from span.shell.install.constants import (
-    _VERSION_PROBE,
+from span.shell.build_identity import (
+    decode_build_identity,
+    installed_build_identity,
+    read_build_identity,
 )
 from span.shell.install.paths import (
     distribution_version,
@@ -68,62 +70,78 @@ def _has_venv_pip(venv_python, dry_run=False):
     return proc.returncode == 0
 
 
-def _hash_tree(root):
-    """Map relative .py paths to sha256 bytes (verify-fast-path)."""
-    out = {}
-    for path in sorted(root.rglob("*.py")):
-        try:
-            data = path.read_bytes()
-        except OSError:
-            continue
-        out[str(path.relative_to(root))] = hashlib.sha256(data).digest()
-    return out
+def _hash_tree(root: Path) -> dict[str, bytes]:
+    """Compare installed Python sources without skipping unreadable files."""
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).digest()
+        for path in sorted(root.rglob("*.py"))
+    }
 
 
-def source_venv_in_sync(span_repo, venv_python):
-    """Verify-fast-path ([design note E](docs/design-references.md#e) §9.2): compare source against venv.
+def _source_identity(span_repo: str | Path) -> dict[str, str] | None:
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(span_repo) / "scripts/build_identity.py"),
+                "--inspect",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return decode_build_identity(result.stdout)
 
-    Returns (in_sync, files_checked, extra_files). Every source file
-    must exist in the venv with identical bytes. Extra venv files
-    (stale remnants pip reinstall never removes) are reported, not
-    synced-away: they cannot be fixed by reinstalling, only by
-    recreating the venv, so they warn instead of forcing reinstall
-    loops. Missing venv tree or unreadable files count as drift.
-    """
+
+def source_venv_in_sync(
+    span_repo: str | Path, venv_python: str | Path
+) -> tuple[bool, int, tuple[str, ...]]:
+    """Prove observed build identity and installed source bytes agree."""
     venv_site = Path(venv_python).parent.parent / "lib"
     candidates = sorted(venv_site.glob("python*/site-packages/span"))
     if not candidates:
         return False, 0, ()
-    source = _hash_tree(Path(span_repo) / "src" / "span")
-    installed = _hash_tree(candidates[0])
-    if not source:
-        return False, 0, ()
-    extra = sorted(set(installed) - set(source))
-    in_sync = all(
-        name in installed and installed[name] == digest
-        for name, digest in source.items()
-    )
-    return in_sync, len(source), tuple(extra)
-
-
-def distribution_venv_in_sync(venv_python):
-    """Fast path for a distribution install: compare versions.
-
-    There is no source tree to hash, so the only meaningful equality is
-    "the runtime venv holds the distribution version this installer came
-    from". Returns the same three-tuple shape as
-    ``source_venv_in_sync`` so the caller stays single-shaped.
-    """
-    expected = distribution_version()
     try:
-        proc = subprocess.run(
-            [str(venv_python), "-c", _VERSION_PROBE],
-            capture_output=True,
-            text=True,
-        )
+        source = _hash_tree(Path(span_repo) / "src" / "span")
+        installed = _hash_tree(candidates[0])
     except OSError:
         return False, 0, ()
-    if proc.returncode != 0 or proc.stdout.strip() != expected:
+    expected = _source_identity(span_repo)
+    extra = tuple(sorted(set(installed) - set(source)))
+    in_sync = (
+        bool(source)
+        and expected is not None
+        and expected == read_build_identity(candidates[0])
+        and all(installed.get(name) == digest for name, digest in source.items())
+    )
+    return in_sync, len(source), extra
+
+
+def distribution_venv_in_sync(
+    venv_python: str | Path,
+) -> tuple[bool, int, tuple[str, ...]]:
+    """Require the same distribution version and actual packaged identity."""
+    expected = installed_build_identity()
+    if expected is None:
+        return False, 0, ()
+    probe = (
+        "import json; from importlib.metadata import version; "
+        "from span.shell.build_identity import installed_build_identity; "
+        "print(json.dumps([version('span-mcp'), installed_build_identity()]))"
+    )
+    try:
+        result = subprocess.run(
+            [str(venv_python), "-c", probe],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        actual = json.loads(result.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False, 0, ()
+    if actual != [distribution_version(), expected]:
         return False, 0, ()
     return True, 1, ()
 
@@ -174,45 +192,21 @@ def pip_install(venv_python, span_repo, dry_run=False):
     )
 
 
-def verify_installed(span_repo, venv_python):
-    """Post-install re-verification (tier-1 closeout).
-
-    Compares installed bytes against source AFTER pip runs: a stale
-    build cache or packaging quirk must fail loudly here, never ship
-    silently. Returns (ok, detail); callers fail closed on not-ok.
-
-    A distribution install has no source tree to compare, so the proof
-    is the runtime venv holding the exact version this installer came
-    from — still a positive check, never a skip.
-    """
+def verify_installed(
+    span_repo: str | Path, venv_python: str | Path
+) -> tuple[bool, str]:
+    """Use the same exact proof after installation as on the reuse path."""
     if install_mode(span_repo) == "distribution":
-        expected = distribution_version()
-        try:
-            proc = subprocess.run(
-                [str(venv_python), "-c", _VERSION_PROBE],
-                capture_output=True,
-                text=True,
-            )
-        except OSError as exc:
-            return False, f"cannot run the runtime venv: {exc}"
-        actual = proc.stdout.strip()
-        if proc.returncode != 0 or not actual:
-            return False, "span-mcp is not installed in the runtime venv"
-        if actual != expected:
-            return False, (
-                f"runtime venv has span-mcp {actual}, " f"expected {expected}"
-            )
-        return True, f"span-mcp {actual} installed from the distribution"
+        in_sync, _, _ = distribution_venv_in_sync(venv_python)
+        if in_sync:
+            return True, f"span-mcp {distribution_version()} build verified"
+        return False, "installed build differs or cannot be verified; reinstall the requested Span build"
     in_sync, checked, extra = source_venv_in_sync(span_repo, venv_python)
     if not in_sync:
-        return False, (
-            f"installed tree does not match source " f"({checked} files checked)"
-        )
+        return False, "installed build differs or cannot be verified; reinstall the requested Span build"
     if extra:
-        return False, (
-            "stale files installed that source does not contain: " + ", ".join(extra)
-        )
-    return True, f"{checked} files match source"
+        return False, "obsolete runtime files remain; recreate the runtime environment"
+    return True, f"{checked} files match source and build identity"
 
 
 def expose_binary(venv_dir, bin_dir, dry_run=False):

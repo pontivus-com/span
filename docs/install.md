@@ -80,7 +80,10 @@ python3 scripts/install-span.py \
 ```
 
 A source checkout installs the runtime from that checkout. A package install
-uses the released package and its bundled lifecycle guidance.
+uses the released package and its bundled lifecycle guidance. Verification
+reports the revision observed in the installed build. Matching version numbers
+alone do not establish that two builds are identical. If the build cannot be
+verified, reinstall the requested revision and verify again.
 
 ## Verify the installation
 
@@ -96,6 +99,10 @@ registration information Span can inspect without changing the installation.
 
 When run without `--repo`, it uses the repository bindings retained in the
 current install receipt when those bindings are available.
+
+After installer-driven MCP registration changes, reconnect or restart the
+coding-agent host. If the complete Span tool set is not available, start a
+fresh session. Registration alone is not proof of live tool availability.
 
 A successful verification means Span is operational for the repository. It does
 **not** mean Span already understands the repository.

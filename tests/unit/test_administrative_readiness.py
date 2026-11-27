@@ -423,6 +423,15 @@ class ActivationGuidanceTest(unittest.TestCase):
             ):
                 graph = probe_active_functional_pyramid(data, {"a": root})
             self.assertEqual(graph["status"], "unavailable")
+            with patch.object(
+                readiness,
+                "_retained_instances",
+                side_effect=ValueError("PRIVATE_DIAGNOSTIC_SENTINEL"),
+            ):
+                graph = probe_active_functional_pyramid(data, {"a": root})
+            self.assertEqual(graph["status"], "unavailable")
+            self.assertNotIn("PRIVATE_DIAGNOSTIC_SENTINEL", json.dumps(graph))
+            self.assertIn("verify again", graph["action"])
 
 
 class InstallVerifyTest(unittest.TestCase):
