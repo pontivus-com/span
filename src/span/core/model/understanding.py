@@ -115,6 +115,46 @@ class CurationState(_enum.Enum):
     CURATED = "CURATED"
 
 
+class RevisionEffectAction(_enum.Enum):
+    """The exact action accepted by an understanding transition."""
+
+    CREATE = "CREATE"
+    ADD = "ADD"
+    CONFIRM = "CONFIRM"
+    CORRECT = "CORRECT"
+    REPLACE = "REPLACE"
+    WITHDRAW = "WITHDRAW"
+    CURATE = "CURATE"
+
+
+@_dataclass(frozen=True)
+class AcceptedRevisionEffect:
+    """Immutable action fact, independent of subsequent support or maturity."""
+
+    action: RevisionEffectAction
+    ref: ConclusionRevisionRef
+    changed: bool
+    maturity: CurationState | None
+    replaced_ref: ConclusionRevisionRef | None = None
+
+    def __post_init__(self) -> None:
+        if not self.changed and self.action is not RevisionEffectAction.CONFIRM:
+            raise ValueError("only confirmation may be unchanged")
+        if (self.maturity is None) != (self.action is RevisionEffectAction.WITHDRAW):
+            raise ValueError("withdrawal alone has no reuse maturity")
+        if (self.replaced_ref is not None) != (
+            self.action is RevisionEffectAction.REPLACE
+        ):
+            raise ValueError("replacement alone names the replaced revision")
+        if self.replaced_ref is not None and (
+            self.replaced_ref.understanding_id != self.ref.understanding_id
+            or self.replaced_ref.conclusion_id == self.ref.conclusion_id
+        ):
+            raise ValueError(
+                "replacement must name another lineage in the same understanding"
+            )
+
+
 class CurationOrigin(_enum.Enum):
     """How an immutable curation disposition was established."""
 

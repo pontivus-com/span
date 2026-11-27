@@ -110,7 +110,9 @@ def verification_covers(
 
 def _verification_group(
     view: m.VerificationView,
-) -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...], str, str, str, tuple[str, ...]]:
+) -> tuple[
+    tuple[str, ...], tuple[tuple[str, ...], ...], str, str, str, tuple[str, ...]
+]:
     run = view.run
     refs = tuple(
         sorted(
@@ -142,7 +144,9 @@ def select_verification(
 ) -> tuple[tuple[m.VerificationView, ...], tuple[m.VerificationView, ...]]:
     """Latest recorded and latest CURRENT per outcome, with ties and history."""
     groups: dict[
-        tuple[tuple[str, ...], tuple[tuple[str, ...], ...], str, str, str, tuple[str, ...]],
+        tuple[
+            tuple[str, ...], tuple[tuple[str, ...], ...], str, str, str, tuple[str, ...]
+        ],
         list[m.VerificationView],
     ] = {}
     for view in candidates:

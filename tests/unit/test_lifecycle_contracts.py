@@ -327,6 +327,58 @@ class ReceiptDecisionTest(unittest.TestCase):
             receipt_decision(receipt, _identity("sub-other"), receipt.content_digest)
 
 
+class AcceptedRevisionEffectTest(unittest.TestCase):
+    def test_create_effect_is_exact_and_round_trips(self):
+        transition = create_understanding(
+            m.UnderstandingId("u-1"), _create_command(), _context(), NOW
+        )
+        effect = transition.revision_effects[0]
+        self.assertEqual(effect.action, m.RevisionEffectAction.CREATE)
+        self.assertEqual(effect.ref, transition.new_version.conclusions[0])
+        self.assertEqual(effect.maturity, m.CurationState.CAPTURED)
+        self.assertTrue(effect.changed)
+        self.assertEqual(
+            m.from_canonical(m.AcceptedRevisionEffect, m.to_canonical(effect)), effect
+        )
+
+    def test_replacement_records_exact_old_and_new_lineages(self):
+        understanding, version, revisions = _created()
+        old = version.conclusions[0]
+        transition = apply_update(
+            understanding,
+            version,
+            revisions,
+            _update_command(replace=(_replace(old),)),
+            _context(),
+            LATER,
+        )
+        self.assertEqual(
+            transition.revision_effects,
+            (
+                m.AcceptedRevisionEffect(
+                    m.RevisionEffectAction.REPLACE,
+                    transition.new_version.conclusions[0],
+                    True,
+                    m.CurationState.CAPTURED,
+                    old,
+                ),
+            ),
+        )
+
+    def test_gap_only_update_does_not_restate_membership_as_effects(self):
+        understanding, version, revisions = _created()
+        transition = apply_update(
+            understanding,
+            version,
+            revisions,
+            _update_command(gaps=(m.GapDraft(question="Why?", basis="Unknown"),)),
+            _context(),
+            LATER,
+        )
+        self.assertEqual(transition.revision_effects, ())
+        self.assertEqual(transition.new_version.conclusions, version.conclusions)
+
+
 class CreateUnderstandingTest(unittest.TestCase):
     def test_question_context_uses_bound_target(self):
         understanding, version, revisions = _created()

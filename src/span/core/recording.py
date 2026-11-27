@@ -56,8 +56,11 @@ from span.core.model.understanding import (
     ChallengeDispositionRecord,
     ChallengeResolution,
     ChallengeState,
+    AcceptedRevisionEffect,
     CurationDisposition,
     CurationOrigin,
+    CurationState,
+    RevisionEffectAction,
     ResolvedChallengeRecord,
     UnresolvedChallengeRecord,
     ConclusionRevision,
@@ -133,6 +136,7 @@ class UnderstandingTransition:
     new_conclusions: tuple[ConclusionRevision, ...]
     challenge_effects: tuple[ChallengeEffect, ...] = ()
     curations: tuple[CurationDisposition, ...] = ()
+    revision_effects: tuple[AcceptedRevisionEffect, ...] = ()
 
 
 def receipt_content_decision(
@@ -336,6 +340,12 @@ def create_understanding(
         understanding=understanding,
         new_version=version,
         new_conclusions=tuple(revisions),
+        revision_effects=tuple(
+            AcceptedRevisionEffect(
+                RevisionEffectAction.CREATE, ref, True, CurationState.CAPTURED
+            )
+            for ref in refs
+        ),
     )
 
 
@@ -444,7 +454,7 @@ def _apply_action(
     by_lineage: dict[ConclusionId, ConclusionRevisionRef],
     latest: dict[ConclusionId, ConclusionRevisionNumber],
     revisions: list[ConclusionRevision],
-) -> None:
+) -> tuple[ConclusionRevisionRef, RevisionEffectAction, ConclusionRevisionRef | None]:
     if isinstance(action, ProposedConclusion):
         conclusion_id = action.conclusion_id
         if conclusion_id in by_lineage or conclusion_id in latest:
@@ -472,7 +482,7 @@ def _apply_action(
             revisions=revisions,
         )
         membership.append(ref)
-        return
+        return ref, RevisionEffectAction.ADD, None
     if isinstance(action, (ConfirmConclusion, CorrectConclusion)):
         old_ref = _require_current(by_lineage, action.conclusion_id)
         if not evidence_scope_contains(understanding_scope, action.scope):
@@ -498,7 +508,12 @@ def _apply_action(
             revisions=revisions,
         )
         _replace_membership(membership, action.conclusion_id, ref)
-        return
+        kind = (
+            RevisionEffectAction.CONFIRM
+            if isinstance(action, ConfirmConclusion)
+            else RevisionEffectAction.CORRECT
+        )
+        return ref, kind, None
     if isinstance(action, ReplaceConclusion):
         old_current = _require_current(by_lineage, action.old.conclusion_id)
         if action.old != old_current:
@@ -536,7 +551,7 @@ def _apply_action(
         ]
         membership.append(ref)
         by_lineage.pop(action.old.conclusion_id, None)
-        return
+        return ref, RevisionEffectAction.REPLACE, action.old
     if isinstance(action, WithdrawConclusion):
         _require_current(by_lineage, action.conclusion_id)
         revision = _revision_for(
@@ -559,7 +574,7 @@ def _apply_action(
             revisions=revisions,
         )
         _replace_membership(membership, action.conclusion_id, ref)
-        return
+        return ref, RevisionEffectAction.WITHDRAW, None
     raise RecordingValidationError(
         f"unhandled conclusion action: {type(action).__name__}"
     )
@@ -631,6 +646,39 @@ def _curation_effects(
     return tuple(effects)
 
 
+def _accepted_revision_effects(
+    actions: list[
+        tuple[ConclusionRevisionRef, RevisionEffectAction, ConclusionRevisionRef | None]
+    ],
+    curations: tuple[CurationDisposition, ...],
+) -> tuple[AcceptedRevisionEffect, ...]:
+    curated = {item.ref for item in curations}
+    effects = [
+        AcceptedRevisionEffect(
+            action=action,
+            ref=ref,
+            changed=True,
+            maturity=(
+                None
+                if action is RevisionEffectAction.WITHDRAW
+                else (
+                    CurationState.CURATED if ref in curated else CurationState.CAPTURED
+                )
+            ),
+            replaced_ref=replaced,
+        )
+        for ref, action, replaced in actions
+    ]
+    effects.extend(
+        AcceptedRevisionEffect(
+            RevisionEffectAction.CURATE, item.ref, True, CurationState.CURATED
+        )
+        for item in curations
+        if item.origin is CurationOrigin.EXPLICIT
+    )
+    return tuple(effects)
+
+
 def apply_update(
     current_understanding: Understanding,
     current_version: UnderstandingVersion,
@@ -681,16 +729,19 @@ def apply_update(
         + command.replace
         + command.withdraw
     )
+    accepted = []
     for action in actions:
-        _apply_action(
-            action,
-            understanding_id=current_understanding.understanding_id,
-            version_number=new_version_number,
-            understanding_scope=current_version.scope,
-            membership=membership,
-            by_lineage=by_lineage,
-            latest=latest,
-            revisions=revisions,
+        accepted.append(
+            _apply_action(
+                action,
+                understanding_id=current_understanding.understanding_id,
+                version_number=new_version_number,
+                understanding_scope=current_version.scope,
+                membership=membership,
+                by_lineage=by_lineage,
+                latest=latest,
+                revisions=revisions,
+            )
         )
     gaps = current_version.gaps if command.gaps is None else _gap_values(command.gaps)
     new_version = UnderstandingVersion(
@@ -737,6 +788,7 @@ def apply_update(
         new_conclusions=tuple(revisions),
         challenge_effects=effects,
         curations=curations,
+        revision_effects=_accepted_revision_effects(accepted, curations),
     )
 
 

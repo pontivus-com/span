@@ -71,9 +71,7 @@ def _distribution(
         for qualification in evaluations
         for conclusion in qualification.conclusions
         if conclusion.evaluation.state is m.SupportState.CURRENT
-        and store.find_curation(
-            conclusion.ref, as_of_version=qualification.version
-        )
+        and store.find_curation(conclusion.ref, as_of_version=qualification.version)
         is not None
     )
     return selection.status_distribution(
