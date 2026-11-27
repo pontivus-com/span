@@ -436,9 +436,7 @@ class FunctionalPyramidService:
         assert pyramid_id is not None
         assert version is not None
         try:
-            if not self._declarations.directory_exists(
-                owner, directory
-            ):
+            if not self._declarations.directory_exists(owner, directory):
                 raise RecordingValidationError(
                     f"Functional Pyramid directory does not exist: {selector.directory!r}",
                     public_identity=selector.directory,
