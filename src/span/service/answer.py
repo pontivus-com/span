@@ -35,6 +35,7 @@ from span.service.continuation import (
 from span.service.evidence import EvidenceService
 from span.service.ids import server_context_id
 from span.service.support import SupportService
+from span.service.understand import UnderstandService
 from span.service.surface_status import compose_surface_status, covers_path
 
 __all__ = ["AnswerService", "gap_recovery"]
@@ -74,6 +75,7 @@ class AnswerService:
         *,
         store: LifecycleStorePort,
         support: SupportService,
+        understand: UnderstandService,
         evidence: EvidenceService,
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
@@ -84,6 +86,7 @@ class AnswerService:
     ) -> None:
         self._store = store
         self._support = support
+        self._understand = understand
         self._evidence = evidence
         self._policy = policy
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
@@ -610,138 +613,9 @@ class AnswerService:
         self,
         selector: m.UnderstandingSnapshotSelector | m.ReceiptRetrievalSelector,
     ) -> m.AskResult:
-        self._store.require_repository(selector.repository_id)
         if isinstance(selector, m.UnderstandingSnapshotSelector):
-            understanding = self._store.find_understanding(selector.understanding_id)
-            if understanding is None:
-                raise RecordingValidationError(
-                    f"unknown understanding: {selector.understanding_id!r}",
-                    public_identity=selector.understanding_id,
-                    public_cause=(
-                        "the exact understanding "
-                        f"{selector.understanding_id!r} does not exist"
-                    ),
-                )
-            version_number = (
-                understanding.current_version.value
-                if selector.version is None
-                else selector.version
-            )
-            if selector.version is None:
-                # A missing current row is retained-state unavailability.
-                version = self._store.get_version(
-                    selector.understanding_id, version_number
-                )
-            else:
-                selected_version = self._store.find_version(
-                    selector.understanding_id, version_number
-                )
-                if selected_version is None:
-                    identity = f"{selector.understanding_id}@{version_number}"
-                    raise RecordingValidationError(
-                        f"unknown understanding version: {identity}",
-                        public_identity=identity,
-                        public_cause=(
-                            f"the exact understanding version {identity!r} "
-                            "does not exist"
-                        ),
-                    )
-                version = selected_version
-            if understanding.repository_id != selector.repository_id:
-                raise RecordingValidationError(
-                    "selected understanding belongs to another repository"
-                )
-            return self._snapshot(understanding, version)
-        key = m.RecordingKey(
-            repository_id=selector.repository_id,
-            request_id=m.RequestId(selector.request_id),
-        )
-        receipt = self._store.get_receipt(key)
-        if receipt is None:
-            raise RecordingValidationError(
-                f"no receipt for request {selector.request_id!r}"
-            )
-        try:
-            verification_runs = tuple(
-                self._store.get_verification_run(run_id.value)
-                for run_id in receipt.accepted_verification_run_ids
-            )
-        except self._store.operational_errors:
-            return m.Unavailable(
-                operation="ask",
-                failure="accepted receipt references unavailable retained history",
-                recovery=(
-                    "report the unavailable history and preserve the receipt; "
-                    "do not repeat the historical write"
-                ),
-            )
-        return m.RetrievedReceipt(
-            receipt=receipt,
-            verification_runs=verification_runs,
-        )
-
-    def _snapshot(
-        self, understanding: m.Understanding, version: m.UnderstandingVersion
-    ) -> m.RetrievedUnderstanding:
-        identity = understanding.understanding_id.value
-        curations = self._store.get_curations(identity, as_of_version=version.version)
-        curated = {item.ref for item in curations}
-        conclusions = tuple(
-            self._audit_revision(revision, curated)
-            for revision in self._store.get_version_conclusions(
-                identity, version.version.value
-            )
-        )
-        return m.RetrievedUnderstanding(
-            repository_id=understanding.repository_id,
-            surface=understanding.surface,
-            understanding_id=version.understanding_id,
-            version=version.version,
-            question=version.question,
-            scope=version.scope,
-            created_at=version.created_at,
-            provenance=version.provenance,
-            previous_version=version.previous_version,
-            surface_boundary_version=version.surface_boundary_version,
-            gaps=version.gaps,
-            conclusions=conclusions,
-            challenges=tuple(
-                challenge
-                for challenge in self._store.get_challenges(identity)
-                if challenge.target_version == version.version
-            ),
-            curations=curations,
-        )
-
-    def _audit_revision(
-        self,
-        revision: m.ConclusionRevision,
-        curated: set[m.ConclusionRevisionRef],
-    ) -> m.AuditConclusion:
-        ref = m.ConclusionRevisionRef(
-            understanding_id=revision.understanding_id,
-            conclusion_id=revision.conclusion_id,
-            revision=revision.revision,
-        )
-        bases = tuple(
-            self._support.support_basis(item) for item in revision.content.support
-        )
-        qualification: m.SupportQualification | m.SupportUnavailable | None = None
-        if isinstance(revision.content, m.SupportedConclusion):
-            try:
-                qualification = self._support.qualify_support(
-                    self._support.evaluate_revision(ref)
-                )
-            except (OSError, ValueError) + self._store.operational_errors:
-                qualification = m.SupportUnavailable(
-                    "live support evaluation is unavailable"
-                )
-        maturity = (
-            m.CurationState.CURATED if ref in curated else m.CurationState.CAPTURED
-        )
-        return m.audit_conclusion(
-            revision, bases, maturity=maturity, qualification=qualification
-        )
+            return self._understand.snapshot(selector)
+        return self._understand.receipt(selector)
 
     def _pending_curation(
         self,

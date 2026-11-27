@@ -12,6 +12,7 @@ from span.core import model as m
 from span.core.recording import RecordingValidationError
 from span.shell.filesystem_evidence import FilesystemEvidenceSource
 from span.service.answer import AnswerService
+from span.service.understand import UnderstandService
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.continuation import ContinuationCursor, encode_continuation
 from span.service.evidence import EvidenceService
@@ -85,6 +86,7 @@ class AnswerServiceTest(unittest.TestCase):
         self.service = AnswerService(
             store=self.store,
             support=self.support,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             functional_pyramid_orientation=_unconfigured_orientation,
         )
@@ -210,6 +212,9 @@ class AnswerServiceTest(unittest.TestCase):
         return AnswerService(
             store=selected_store,
             support=selected_support,
+            understand=UnderstandService(
+                store=selected_store, support=selected_support
+            ),
             evidence=EvidenceService(store=selected_store, evidence=self.evidence),
             policy=m.ServiceBoundsPolicy(
                 default_query_bounds=bounds,
@@ -267,6 +272,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = AnswerService(
             store=self.store,
             support=self.support,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             functional_pyramid_orientation=orientation,
         )
@@ -1265,6 +1271,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = AnswerService(
             store=self.store,
             support=self.support,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             functional_pyramid_orientation=orientation,
         )
@@ -1346,6 +1353,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = AnswerService(
             store=self.store,
             support=support,
+            understand=UnderstandService(store=self.store, support=support),
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             functional_pyramid_orientation=lambda _repository_id, _surface, scope: (
                 unresolved(scope)
@@ -1387,6 +1395,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = AnswerService(
             store=self.store,
             support=self.support,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             functional_pyramid_orientation=orientation,
         )
@@ -1432,6 +1441,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = AnswerService(
             store=self.store,
             support=self.support,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             functional_pyramid_orientation=orientation,
         )
@@ -1785,6 +1795,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = AnswerService(
             store=self.store,
             support=self.support,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             policy=policy,
             functional_pyramid_orientation=_unconfigured_orientation,
@@ -1877,6 +1888,7 @@ class AnswerServiceTest(unittest.TestCase):
         return AnswerService(
             store=self.store,
             support=self.support,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=EvidenceService(
                 store=self.store, evidence=self.evidence, clock=clock
             ),
@@ -2036,6 +2048,7 @@ class AnswerServiceTest(unittest.TestCase):
         service = AnswerService(
             store=self.store,
             support=self.support,
+            understand=UnderstandService(store=self.store, support=self.support),
             evidence=EvidenceService(store=self.store, evidence=self.evidence),
             policy=m.ServiceBoundsPolicy(
                 default_query_bounds=bounds,

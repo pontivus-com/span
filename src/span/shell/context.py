@@ -185,14 +185,15 @@ def compose_context(
         evidence=evidence_service,
         policy=policy,
     )
+    understand = UnderstandService(store=store, support=support)
     answer = AnswerService(
         store=store,
         support=support,
+        understand=understand,
         evidence=evidence_service,
         policy=policy,
         functional_pyramid_orientation=functional_pyramid.orientation,
     )
-    understand = UnderstandService(store=store, support=support)
     return ServiceContext(
         repository_id=repository_id,
         root=runtime.root,

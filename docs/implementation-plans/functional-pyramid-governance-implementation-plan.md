@@ -718,6 +718,14 @@ audit and receipt projection, full PUB-01 audit, schema transition, and
 all acceptance evidence remain open. This candidate is not permission
 to close PUB-01, PUB-02 or proceed to deployment.
 
+**PUB-02 exact retrieval owner reconciliation (OPEN).** CI 45956749986
+passed formatting and stopped at the typing ratchet: the older internal
+UnderstandService retained the obsolete snapshot constructor. Move all
+snapshot and receipt selection/composition into that existing owner and
+inject the same service instance into AnswerService from shell composition.
+Update the existing internal retrieval test and all direct test compositions;
+no second snapshot producer or compatibility view. Test lines +16.
+
 **PUB-02 snapshot increment (OPEN).** Replace raw conclusion revisions and
 version-wide internal support in exact snapshot delivery with the canonical
 AuditConclusion supported/withdrawn union. Resolve recorded basis through
