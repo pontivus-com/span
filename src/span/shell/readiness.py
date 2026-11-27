@@ -79,7 +79,15 @@ def probe_store(
     try:
         connection = _sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     except _sqlite3.Error:
-        return StoreReadiness(repository_id, path, True, None, None, False, "restore repository store access")
+        return StoreReadiness(
+            repository_id,
+            path,
+            True,
+            None,
+            None,
+            False,
+            "restore repository store access",
+        )
     try:
         tables = {
             str(row[0])
@@ -107,7 +115,15 @@ def probe_store(
             if row is not None:
                 bound_root = str(row[0])
     except _sqlite3.Error:
-        return StoreReadiness(repository_id, path, True, None, None, False, "restore repository store access")
+        return StoreReadiness(
+            repository_id,
+            path,
+            True,
+            None,
+            None,
+            False,
+            "restore repository store access",
+        )
     finally:
         connection.close()
     if version != SCHEMA_VERSION:
@@ -165,7 +181,13 @@ def probe_functional_pyramid_installation_store(
     try:
         connection = _sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     except _sqlite3.Error:
-        return {"status": "unavailable", "path": str(path), "schema_version": None, "ready": False, "action": "restore installation store access"}
+        return {
+            "status": "unavailable",
+            "path": str(path),
+            "schema_version": None,
+            "ready": False,
+            "action": "restore installation store access",
+        }
     try:
         row = connection.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
@@ -488,7 +510,11 @@ def _active_declaration_report(
 def _retained_instances(
     data_dir: str | _pathlib.Path, repository_ids: tuple[str, ...]
 ) -> tuple[
-    tuple[_m.FunctionalPyramidId, _m.FunctionalPyramidVersion, tuple[_m.FunctionalPyramidMemberView, ...]],
+    tuple[
+        _m.FunctionalPyramidId,
+        _m.FunctionalPyramidVersion,
+        tuple[_m.FunctionalPyramidMemberView, ...],
+    ],
     ...,
 ]:
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
@@ -515,7 +541,9 @@ def _retained_instances(
             if repository_id not in {member.repository_id for member in members}:
                 raise ValueError("inconsistent retained ACTIVE membership")
             for member in members:
-                participation = _functional_pyramid_participation(data_dir, member.repository_id)
+                participation = _functional_pyramid_participation(
+                    data_dir, member.repository_id
+                )
                 if (
                     participation.get("state") != "ACTIVE"
                     or participation.get("pyramid_id") != identity.value
@@ -555,7 +583,10 @@ def _active_instance_report(
             not readiness.ready
             or root is None
             or not _pathlib.Path(root).is_dir()
-            or (selected is not None and _pathlib.Path(selected).resolve() != _pathlib.Path(root).resolve())
+            or (
+                selected is not None
+                and _pathlib.Path(selected).resolve() != _pathlib.Path(root).resolve()
+            )
         ):
             raise ValueError(f"registered ACTIVE member unavailable: {repository_id}")
         canonical_root = str(_pathlib.Path(root).resolve())
@@ -617,29 +648,41 @@ def _active_instance_report(
         return tuple(m.from_canonical(m.AuthorityBinding, item) for item in raw)
 
     _, authority_findings = resolve_document_authorities(
-        members, tuple(declarations), frozenset(roots),
+        members,
+        tuple(declarations),
+        frozenset(roots),
         is_servable=lambda repository_id, locator: FilesystemEvidenceSource(
             repository_id, roots[repository_id]
         ).is_servable(repository_id, locator),
         load_bindings=load_bindings,
     )
     health, structural = _fp.evaluate_functional_pyramid_health(
-        members, tuple(declarations), frozenset(roots), tuple(findings) + authority_findings
+        members,
+        tuple(declarations),
+        frozenset(roots),
+        tuple(findings) + authority_findings,
     )
     unavailable = any(
         finding.reason is m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE
         for finding in structural
     )
-    status = "unavailable" if unavailable else (
-        "valid" if health is m.FunctionalPyramidHealth.VALID else "invalid"
+    status = (
+        "unavailable"
+        if unavailable
+        else ("valid" if health is m.FunctionalPyramidHealth.VALID else "invalid")
     )
     return {
         "status": status,
         "members": member_reports,
         "findings": [finding.reason.value for finding in structural],
         "action": (
-            "restore the registered ACTIVE member repository" if unavailable else
-            None if status == "valid" else "correct the ACTIVE declaration graph before acceptance"
+            "restore the registered ACTIVE member repository"
+            if unavailable
+            else (
+                None
+                if status == "valid"
+                else "correct the ACTIVE declaration graph before acceptance"
+            )
         ),
     }
 
@@ -667,10 +710,14 @@ def probe_active_functional_pyramid(
                 report = _active_instance_report(data_dir, roots_by_repository, members)
             except (OSError, ValueError, _sqlite3.Error) as exc:
                 report = {
-                    "status": "unavailable", "members": [], "findings": [],
+                    "status": "unavailable",
+                    "members": [],
+                    "findings": [],
                     "action": f"restore registered ACTIVE member access: {exc}",
                 }
-            instances.append({**report, "pyramid_id": identity.value, "version": version.value})
+            instances.append(
+                {**report, "pyramid_id": identity.value, "version": version.value}
+            )
         if retained != _retained_instances(data_dir, ids):
             raise ValueError("ACTIVE membership changed during observation")
     except (OSError, ValueError, _sqlite3.Error) as exc:
@@ -682,23 +729,32 @@ def probe_active_functional_pyramid(
             "action": f"restore complete registered ACTIVE observation: {exc}",
         }
     status = next(
-        (status for status in ("unavailable", "invalid", "valid")
-         if any(instance["status"] == status for instance in instances)),
+        (
+            status
+            for status in ("unavailable", "invalid", "valid")
+            if any(instance["status"] == status for instance in instances)
+        ),
         "not_active",
     )
     return {
         "status": status,
         "instances": instances,
         "members": [
-            member for instance in instances
+            member
+            for instance in instances
             for member in _typing.cast(list[dict[str, object]], instance["members"])
         ],
         "findings": [
-            finding for instance in instances
+            finding
+            for instance in instances
             for finding in _typing.cast(list[str], instance["findings"])
         ],
         "action": next(
-            (instance["action"] for instance in instances if instance["status"] == status),
+            (
+                instance["action"]
+                for instance in instances
+                if instance["status"] == status
+            ),
             None,
         ),
     }
@@ -962,7 +1018,10 @@ def _repository_facts(
         "declarations": declarations,
         "participation": _functional_pyramid_participation(data_dir, repository_id),
         "provenance": probe_governed_provenance(
-            data_dir, repository_id, canonical_root, pending_setup=pending_setup,
+            data_dir,
+            repository_id,
+            canonical_root,
+            pending_setup=pending_setup,
             receipt_context=receipt_context,
         ),
     }
@@ -997,44 +1056,78 @@ def project_activation_guidance(
     if not store.get("ready") or state == "UNAVAILABLE":
         return {
             "status": "unavailable",
-            "action": store.get("action") or participation.get("action") or "restore registered store access",
+            "action": store.get("action")
+            or participation.get("action")
+            or "restore registered store access",
         }
     if state == "EXCLUDED":
         return {"status": "not_required", "action": None}
     if state == "ACTIVE":
         instances = _typing.cast(list[dict[str, object]], active.get("instances", []))
         instance = next(
-            (item for item in instances
-             if item.get("pyramid_id") == participation.get("pyramid_id")
-             and item.get("version") == participation.get("version")),
+            (
+                item
+                for item in instances
+                if item.get("pyramid_id") == participation.get("pyramid_id")
+                and item.get("version") == participation.get("version")
+            ),
             None,
         )
         if instance is None or instance.get("status") == "unavailable":
-            return {"status": "unavailable", "action": active.get("action") or "restore complete ACTIVE membership observation"}
+            return {
+                "status": "unavailable",
+                "action": active.get("action")
+                or "restore complete ACTIVE membership observation",
+            }
         members = _typing.cast(list[dict[str, object]], instance["members"])
         for member in members:
             peer = peers.get(str(member["repository_id"]))
             if peer is None:
-                return {"status": "unavailable", "action": "restore complete ACTIVE member observation"}
+                return {
+                    "status": "unavailable",
+                    "action": "restore complete ACTIVE member observation",
+                }
             observed = _typing.cast(dict[str, object], peer["participation"])
             if (
                 observed.get("state") != "ACTIVE"
                 or observed.get("pyramid_id") != instance["pyramid_id"]
                 or observed.get("version") != instance["version"]
             ):
-                return {"status": "unavailable", "action": "repeat verification of consistent ACTIVE membership"}
+                return {
+                    "status": "unavailable",
+                    "action": "repeat verification of consistent ACTIVE membership",
+                }
             peer_declarations = _typing.cast(dict[str, object], peer["declarations"])
             peer_provenance = _typing.cast(dict[str, object], peer["provenance"])
-            if not peer_declarations.get("valid") or peer_provenance.get("state") == "PROVENANCE_MISMATCH":
-                return {"status": "requires_repair", "action": "repair the retained ACTIVE declarations or governed provenance"}
+            if (
+                not peer_declarations.get("valid")
+                or peer_provenance.get("state") == "PROVENANCE_MISMATCH"
+            ):
+                return {
+                    "status": "requires_repair",
+                    "action": "repair the retained ACTIVE declarations or governed provenance",
+                }
         if instance.get("status") != "valid":
             return {"status": "requires_repair", "action": instance.get("action")}
         return {"status": "not_required", "action": None}
     accepted = receipt.get(ACCEPTED)
-    if state == "UNCONFIGURED" and isinstance(accepted, dict) and repository_id in accepted:
-        return {"status": "requires_governed_install", "action": "run span-install with the repository classification input"}
-    if not declarations.get("valid") or provenance.get("state") == "PROVENANCE_MISMATCH":
-        return {"status": "requires_repair", "action": "repair the configured declarations or governed provenance"}
+    if (
+        state == "UNCONFIGURED"
+        and isinstance(accepted, dict)
+        and repository_id in accepted
+    ):
+        return {
+            "status": "requires_governed_install",
+            "action": "run span-install with the repository classification input",
+        }
+    if (
+        not declarations.get("valid")
+        or provenance.get("state") == "PROVENANCE_MISMATCH"
+    ):
+        return {
+            "status": "requires_repair",
+            "action": "repair the configured declarations or governed provenance",
+        }
     return {"status": "not_required", "action": None}
 
 
@@ -1050,28 +1143,41 @@ def observe_repositories(
     expanded = dict(roots)
     for member in _typing.cast(list[dict[str, object]], active.get("members", [])):
         expanded.setdefault(str(member["repository_id"]), str(member["canonical_root"]))
-    reports = []
-    peers = {}
+    reports: list[dict[str, object]] = []
+    peers: dict[str, dict[str, object]] = {}
     for repository_id, root in expanded.items():
         canonical_root = str(_pathlib.Path(root).resolve())
         readiness = probe_store(data_dir, repository_id).payload()
         if readiness.get("ready") and readiness.get("bound_root") != canonical_root:
-            readiness.update(ready=False, action="restore the registered repository root")
+            readiness.update(
+                ready=False, action="restore the registered repository root"
+            )
         facts = _repository_facts(
-            data_dir, repository_id, canonical_root,
-            pending_setup=pending_setup, receipt_context=receipt,
+            data_dir,
+            repository_id,
+            canonical_root,
+            pending_setup=pending_setup,
+            receipt_context=receipt,
         )
         peers[repository_id] = facts
-        reports.append({
-            "locator": str(root), "canonical_root": canonical_root,
-            "store": readiness, "provider": probe_structural(data_dir, repository_id),
-            "functional_pyramid": facts,
-        })
+        reports.append(
+            {
+                "locator": str(root),
+                "canonical_root": canonical_root,
+                "store": readiness,
+                "provider": probe_structural(data_dir, repository_id),
+                "functional_pyramid": facts,
+            }
+        )
     for report in reports:
         facts = _typing.cast(dict[str, object], report["functional_pyramid"])
         facts["activation_readiness"] = project_activation_guidance(
-            str(facts["repository_id"]), facts,
-            _typing.cast(dict[str, object], report["store"]), active, receipt, peers,
+            str(facts["repository_id"]),
+            facts,
+            _typing.cast(dict[str, object], report["store"]),
+            active,
+            receipt,
+            peers,
         )
     return reports
 
@@ -1088,9 +1194,16 @@ def probe_functional_pyramid_repository(
 
     roots = {repository_id: root}
     active = probe_active_functional_pyramid(data_dir, roots)
-    return _typing.cast(dict[str, object], observe_repositories(
-        data_dir, roots, active, read_receipt(data_dir) or {}, pending_setup=pending_setup
-    )[0]["functional_pyramid"])
+    return _typing.cast(
+        dict[str, object],
+        observe_repositories(
+            data_dir,
+            roots,
+            active,
+            read_receipt(data_dir) or {},
+            pending_setup=pending_setup,
+        )[0]["functional_pyramid"],
+    )
 
 
 def probe_structural(

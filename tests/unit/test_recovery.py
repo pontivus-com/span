@@ -494,8 +494,17 @@ class GovernedRecoveryTests(unittest.TestCase):
         from span.shell.install.receipt import read_receipt
 
         for existing in (False, True):
-            for target in ("pointer", "generated", "repository", "installation", "receipt"):
-                with self.subTest(existing=existing, target=target), tempfile.TemporaryDirectory() as tmp:
+            for target in (
+                "pointer",
+                "generated",
+                "repository",
+                "installation",
+                "receipt",
+            ):
+                with (
+                    self.subTest(existing=existing, target=target),
+                    tempfile.TemporaryDirectory() as tmp,
+                ):
                     fixture = self._fixture(pathlib.Path(tmp), existing=existing)
                     data, _, _, _, _, _, _ = fixture
                     self._publish(fixture, 5)
@@ -505,9 +514,12 @@ class GovernedRecoveryTests(unittest.TestCase):
                     def interrupt_file(path, *args):
                         file_restore(path, *args)
                         selected = (
-                            target == "pointer" and path.name == "structural-indexer.json"
-                            or target == "generated" and ".span" in path.parts
-                            or target == "receipt" and path.name == "install.json"
+                            target == "pointer"
+                            and path.name == "structural-indexer.json"
+                            or target == "generated"
+                            and ".span" in path.parts
+                            or target == "receipt"
+                            and path.name == "install.json"
                         )
                         if selected:
                             raise RuntimeError("interrupted file restore")
@@ -515,21 +527,33 @@ class GovernedRecoveryTests(unittest.TestCase):
                     def interrupt_db(path, *args):
                         database_restore(path, *args)
                         if (
-                            target == "repository" and path.name == "repo-a.db"
-                            or target == "installation" and path.name == "functional-pyramid.db"
+                            target == "repository"
+                            and path.name == "repo-a.db"
+                            or target == "installation"
+                            and path.name == "functional-pyramid.db"
                         ):
                             raise RuntimeError("interrupted database restore")
 
                     with (
-                        mock.patch.object(governed_recovery, "_restore_file", side_effect=interrupt_file),
-                        mock.patch.object(governed_recovery, "_restore_database", side_effect=interrupt_db),
+                        mock.patch.object(
+                            governed_recovery,
+                            "_restore_file",
+                            side_effect=interrupt_file,
+                        ),
+                        mock.patch.object(
+                            governed_recovery,
+                            "_restore_database",
+                            side_effect=interrupt_db,
+                        ),
                         self.assertRaisesRegex(RuntimeError, "interrupted"),
                     ):
                         self._restore(fixture)
                     if target != "receipt":
                         pending = read_receipt(data)["pending_governed_initialization"]
                         snapshot = pending["restore_intent"]["snapshot"]
-                        self.assertEqual(self._restore(fixture).pre_restore_backup, snapshot)
+                        self.assertEqual(
+                            self._restore(fixture).pre_restore_backup, snapshot
+                        )
                     self._assert_restored(fixture)
 
     def test_recovery_conflicts_before_mutating_independent_or_unowned_state(self):

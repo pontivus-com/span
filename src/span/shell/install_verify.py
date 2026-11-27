@@ -109,7 +109,9 @@ def _acceptance(
 ) -> bool:
     from span.shell.install.governed import PENDING
 
-    facts = [typing.cast(dict[str, object], repo["functional_pyramid"]) for repo in repos]
+    facts = [
+        typing.cast(dict[str, object], repo["functional_pyramid"]) for repo in repos
+    ]
     repositories_accept = all(
         bool(typing.cast(dict[str, object], repo["store"]).get("ready"))
         and bool(typing.cast(dict[str, object], fact["declarations"]).get("valid"))
@@ -127,13 +129,17 @@ def _acceptance(
             isinstance(entries, dict)
             and set(entries).issubset(selected)
             and all(
-                typing.cast(dict[str, object], fact["provenance"]).get("state") == "PROVENANCE_MATCH"
-                for fact in facts if fact["repository_id"] in entries
+                typing.cast(dict[str, object], fact["provenance"]).get("state")
+                == "PROVENANCE_MATCH"
+                for fact in facts
+                if fact["repository_id"] in entries
             )
         )
     return (
-        pending_ok and bool(installation.get("ready"))
-        and active.get("status") in ("valid", "not_active") and repositories_accept
+        pending_ok
+        and bool(installation.get("ready"))
+        and active.get("status") in ("valid", "not_active")
+        and repositories_accept
     )
 
 
@@ -150,9 +156,11 @@ def project_final_receipt(
         return
     active = typing.cast(dict[str, object], report["active_functional_pyramid"])
     installation = typing.cast(dict[str, object], report["functional_pyramid"])
-    roots = {
-        str(typing.cast(dict[str, object], repo["functional_pyramid"])["repository_id"]):
-        str(repo["canonical_root"]) for repo in repos
+    roots: dict[str, str | pathlib.Path] = {
+        str(
+            typing.cast(dict[str, object], repo["functional_pyramid"])["repository_id"]
+        ): str(repo["canonical_root"])
+        for repo in repos
     }
     if active != probe_active_functional_pyramid(data_dir, roots):
         raise ValueError("ACTIVE observations changed before receipt publication")
@@ -161,16 +169,25 @@ def project_final_receipt(
         facts = typing.cast(dict[str, object], repo["functional_pyramid"])
         repository_id = str(facts["repository_id"])
         facts["provenance"] = probe_governed_provenance(
-            data_dir, repository_id, str(repo["canonical_root"]), receipt_context=receipt
+            data_dir,
+            repository_id,
+            str(repo["canonical_root"]),
+            receipt_context=receipt,
         )
         peers[repository_id] = facts
     for repo in repos:
         facts = typing.cast(dict[str, object], repo["functional_pyramid"])
         facts["activation_readiness"] = project_activation_guidance(
-            str(facts["repository_id"]), facts, typing.cast(dict[str, object], repo["store"]),
-            active, receipt, peers,
+            str(facts["repository_id"]),
+            facts,
+            typing.cast(dict[str, object], repo["store"]),
+            active,
+            receipt,
+            peers,
         )
-    report["acceptance_ok"] = _acceptance(installation, active, repos, receipt, set(roots))
+    report["acceptance_ok"] = _acceptance(
+        installation, active, repos, receipt, set(roots)
+    )
     if strict and not report["acceptance_ok"]:
         raise ValueError("finalized receipt candidate failed governed acceptance")
 
@@ -191,7 +208,12 @@ def main(argv=None):
         data_dir, roots_by_repository, active, receipt, pending_setup=args.pending_setup
     )
     acceptance_ok = _acceptance(
-        installation, active, repos, receipt, set(roots_by_repository), pending_setup=args.pending_setup
+        installation,
+        active,
+        repos,
+        receipt,
+        set(roots_by_repository),
+        pending_setup=args.pending_setup,
     )
     print(
         json.dumps(

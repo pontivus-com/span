@@ -1,6 +1,6 @@
 # Functional Pyramid governance — Beta 5 implementation plan
 
-**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-02 candidate implementation under test; S-FIELD-03–04 remain open.
+**Status:** Initial governed installation/public projection implemented and CI-verified at `261d055b4c2bbdba781358d500ba288a48cb750d`; S-FIELD-01 verified at `49f43b8798fd`; S-FIELD-02 and S-FIELD-03 implemented in candidate; final verification and S-FIELD-04 remain open.
 **Historical baseline:** `pontivus-com/span`, `release/1.0.0-beta5`, `8ea0ba291867dd3433373e00069af97df655088d`. **Field-remediation baseline:** `261d055b4c2bbdba781358d500ba288a48cb750d`.  
 **Authority:** G7–G8, F1/F4/F5/F7/F11/F12/F14, L4/L7/L8/L12–L16, amended FD-88A–C/FD-93/FD-94 and TD §§17, 17.1, 17.2, 20, 21. The plan implements these documents; it does not own another product design. The release programme remains the historical/release-gate record.  
 **Governance and historical evidence:** This tracked plan is the single current Functional Pyramid implementation plan, superseding the previously local `.context/functional-pyramid-governance-implementation-plan.md`. The local plan was not available in Git for inspection; preserve its historical evidence and reconcile any independent outstanding obligations with the tracked release record before execution. It is not a second active plan. Do not infer completion from this document.
@@ -313,8 +313,15 @@ participation write. No operator reconstruction of internal provenance.
 
 ### S-FIELD-03 — Correct observational initialization guidance
 
-**Status:** OPEN. **Owner:** existing readiness and installed verifier
+**Status:** IMPLEMENTED IN CANDIDATE, VERIFICATION OPEN. **Owner:** existing readiness and installed verifier
 projection; depends on S-FIELD-02 for restore-intent guidance.
+
+Diagnostic run [45924116947](https://github.com/pontivus-com/span/actions/runs/45924116947)
+passed 165 focused tests and 30 subtests on the formatted tree. Apply its six
+Black corrections and fix both collection typing errors at their declarations.
+The measured test-line ratchet grows from 34,759 to 35,091 (+332 lines),
+covering readiness, finalized receipt agreement and restore interruption tests;
+no architectural gate or delivery limit changes. Full installed CI is required.
 
 Implement the TD §17.2 projection using existing observed state and complete
 active membership, with the exact documented status/action behavior. Remove

@@ -176,9 +176,7 @@ def resolve_document_authorities(
         if key in bindings:
             continue
         if key not in evaluated_documents:
-            if not is_servable(
-                document.repository_id, document.document_ref
-            ):
+            if not is_servable(document.repository_id, document.document_ref):
                 unavailable_documents.add(key)
             evaluated_documents.add(key)
         if key in unavailable_documents:
@@ -1714,7 +1712,9 @@ class FunctionalPyramidService:
                 repository_id
             ).evidence.is_servable(repository_id, locator),
             load_bindings=lambda repository_id: tuple(
-                self._runtime(repository_id).store.load_authority_bindings(repository_id)
+                self._runtime(repository_id).store.load_authority_bindings(
+                    repository_id
+                )
             ),
         )
 

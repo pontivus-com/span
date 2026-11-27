@@ -102,9 +102,7 @@ class StoreProbeTest(unittest.TestCase):
             self.assertEqual(report["declarations"]["status"], "absent")
             self.assertTrue(report["declarations"]["valid"])
             self.assertEqual(report["participation"]["state"], "UNAVAILABLE")
-            self.assertEqual(
-                report["activation_readiness"]["status"], "unavailable"
-            )
+            self.assertEqual(report["activation_readiness"]["status"], "unavailable")
             self.assertEqual(list(data.iterdir()), [])
             self.assertFalse(any(root.rglob("*")))
 
@@ -214,14 +212,32 @@ class ActivationGuidanceTest(unittest.TestCase):
     def _member(self, data, root):
         root.mkdir()
         (root / "foundation.md").write_text("# Foundation")
-        document = {"repository_id": root.name, "document_ref": "foundation.md", "layer": "P0"}
+        document = {
+            "repository_id": root.name,
+            "document_ref": "foundation.md",
+            "layer": "P0",
+        }
         source = root / "declaration.json"
-        source.write_text(json.dumps({
-            "version": 3, "source_id": f"{root.name}:repository",
-            "kind": "repository", "scope": ".",
-            "documents": [{"repository_id": root.name, "document_ref": "foundation.md"}],
-            "placements": [{"document": document, "scope": ".", "governing_placements": ["ROOT"]}],
-        }))
+        source.write_text(
+            json.dumps(
+                {
+                    "version": 3,
+                    "source_id": f"{root.name}:repository",
+                    "kind": "repository",
+                    "scope": ".",
+                    "documents": [
+                        {"repository_id": root.name, "document_ref": "foundation.md"}
+                    ],
+                    "placements": [
+                        {
+                            "document": document,
+                            "scope": ".",
+                            "governing_placements": ["ROOT"],
+                        }
+                    ],
+                }
+            )
+        )
         binding = m.AuthorityBinding(
             evidence_ref=m.EvidenceRef(
                 evidence_id=m.EvidenceId(f"{root.name}-foundation"),
@@ -232,20 +248,28 @@ class ActivationGuidanceTest(unittest.TestCase):
             authority_kind=m.AuthorityKind.REPOSITORY_RULE,
             status=m.AuthorityStatus.ACCEPTED,
         )
-        store = LifecycleStore(data / f"{root.name}.db", retention=DEFAULT_LIFECYCLE_RETENTION)
+        store = LifecycleStore(
+            data / f"{root.name}.db", retention=DEFAULT_LIFECYCLE_RETENTION
+        )
         try:
-            store.register_repository(root.name, str(root.resolve()), authority_bindings=(binding,))
+            store.register_repository(
+                root.name, str(root.resolve()), authority_bindings=(binding,)
+            )
         finally:
             store.close()
         return m.FunctionalPyramidMemberView(
             repository_id=root.name,
-            declaration_refs=(m.EvidenceRef(
-                evidence_id=m.EvidenceId(f"{root.name}-declaration"),
-                repository_id=root.name,
-                source_kind=m.EvidenceSourceKind.CONFIGURATION,
-                locator="declaration.json",
-                revision_or_fingerprint=hashlib.sha256(source.read_bytes()).hexdigest(),
-            ),),
+            declaration_refs=(
+                m.EvidenceRef(
+                    evidence_id=m.EvidenceId(f"{root.name}-declaration"),
+                    repository_id=root.name,
+                    source_kind=m.EvidenceSourceKind.CONFIGURATION,
+                    locator="declaration.json",
+                    revision_or_fingerprint=hashlib.sha256(
+                        source.read_bytes()
+                    ).hexdigest(),
+                ),
+            ),
         )
 
     def _activate(self, store, name, members):
@@ -253,10 +277,15 @@ class ActivationGuidanceTest(unittest.TestCase):
         version = m.FunctionalPyramidVersion(1)
         with store.transaction() as transaction:
             transaction.write_pyramid_version(
-                pyramid_id=identity, version=version, content_digest=m.ContentDigest("digest"),
-                committed_at=datetime.datetime.now(datetime.timezone.utc), members=members,
+                pyramid_id=identity,
+                version=version,
+                content_digest=m.ContentDigest("digest"),
+                committed_at=datetime.datetime.now(datetime.timezone.utc),
+                members=members,
             )
-            transaction.set_current_pyramid(pyramid_id=identity, version=version, members=members)
+            transaction.set_current_pyramid(
+                pyramid_id=identity, version=version, members=members
+            )
 
     def test_ordinary_excluded_and_explicit_governed_intent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -267,21 +296,36 @@ class ActivationGuidanceTest(unittest.TestCase):
             store = self._installation(data)
             try:
                 report = probe_functional_pyramid_repository(data, "repo", root)
-                self.assertEqual(report["activation_readiness"], {"status": "not_required", "action": None})
+                self.assertEqual(
+                    report["activation_readiness"],
+                    {"status": "not_required", "action": None},
+                )
                 with store.transaction() as transaction:
                     transaction.set_excluded("repo", True)
                 report = probe_functional_pyramid_repository(data, "repo", root)
                 self.assertEqual(report["participation"]["state"], "EXCLUDED")
-                self.assertEqual(report["activation_readiness"], {"status": "not_required", "action": None})
+                self.assertEqual(
+                    report["activation_readiness"],
+                    {"status": "not_required", "action": None},
+                )
                 with store.transaction() as transaction:
                     transaction.set_excluded("repo", False)
-                receipt = {"install_version": INSTALL_VERSION, "repos": [str(root)], "host_registration": {},
-                           "governed_initialization": {"repo": {"root": str(root)}}}
+                receipt = {
+                    "install_version": INSTALL_VERSION,
+                    "repos": [str(root)],
+                    "host_registration": {},
+                    "governed_initialization": {"repo": {"root": str(root)}},
+                }
                 # Exercise the projection with explicit retained intent rather than manufacturing provenance.
                 from span.shell.readiness import project_activation_guidance
+
                 guidance = project_activation_guidance(
-                    "repo", probe_functional_pyramid_repository(data, "repo", root),
-                    {"ready": True}, {}, receipt, {},
+                    "repo",
+                    probe_functional_pyramid_repository(data, "repo", root),
+                    {"ready": True},
+                    {},
+                    receipt,
+                    {},
                 )
                 self.assertEqual(guidance["status"], "requires_governed_install")
             finally:
@@ -293,12 +337,25 @@ class ActivationGuidanceTest(unittest.TestCase):
             root, data = base / "repo", base / "data"
             root.mkdir()
             data.mkdir()
-            for pending in ({"backup_manifest_digest": "digest"}, {"accepted_pyramid_id": "p"}, {"restore_intent": {"backup": "backup"}}):
+            for pending in (
+                {"backup_manifest_digest": "digest"},
+                {"accepted_pyramid_id": "p"},
+                {"restore_intent": {"backup": "backup"}},
+            ):
                 with self.subTest(pending=pending):
-                    write_receipt(data, {"install_version": INSTALL_VERSION, "repos": [str(root)], "host_registration": {},
-                                         "pending_governed_initialization": pending})
+                    write_receipt(
+                        data,
+                        {
+                            "install_version": INSTALL_VERSION,
+                            "repos": [str(root)],
+                            "host_registration": {},
+                            "pending_governed_initialization": pending,
+                        },
+                    )
                     before = (data / "install.json").read_bytes()
-                    guidance = probe_functional_pyramid_repository(data, "repo", root)["activation_readiness"]
+                    guidance = probe_functional_pyramid_repository(data, "repo", root)[
+                        "activation_readiness"
+                    ]
                     self.assertEqual(guidance["status"], "pending_recovery")
                     if "restore_intent" in pending:
                         self.assertIn("--restore-backup", guidance["action"])
@@ -321,13 +378,29 @@ class ActivationGuidanceTest(unittest.TestCase):
             selected = {"a": roots["a"], "c": roots["c"]}
             graph = probe_active_functional_pyramid(data, selected)
             self.assertEqual(graph["status"], "valid", graph)
-            self.assertEqual({frozenset(member["repository_id"] for member in instance["members"]) for instance in graph["instances"]}, {frozenset(("a", "b")), frozenset(("c",))})
+            self.assertEqual(
+                {
+                    frozenset(member["repository_id"] for member in instance["members"])
+                    for instance in graph["instances"]
+                },
+                {frozenset(("a", "b")), frozenset(("c",))},
+            )
             report = probe_functional_pyramid_repository(data, "a", roots["a"])
-            self.assertEqual(report["activation_readiness"], {"status": "not_required", "action": None})
+            self.assertEqual(
+                report["activation_readiness"],
+                {"status": "not_required", "action": None},
+            )
             (roots["b"] / "declaration.json").write_text("{invalid")
             report = probe_functional_pyramid_repository(data, "a", roots["a"])
-            self.assertEqual(report["activation_readiness"]["status"], "requires_repair")
-            self.assertEqual(probe_functional_pyramid_repository(data, "c", roots["c"])["activation_readiness"]["status"], "not_required")
+            self.assertEqual(
+                report["activation_readiness"]["status"], "requires_repair"
+            )
+            self.assertEqual(
+                probe_functional_pyramid_repository(data, "c", roots["c"])[
+                    "activation_readiness"
+                ]["status"],
+                "not_required",
+            )
             roots["b"].rename(base / "unavailable")
             report = probe_functional_pyramid_repository(data, "a", roots["a"])
             self.assertEqual(report["activation_readiness"]["status"], "unavailable")
@@ -343,8 +416,11 @@ class ActivationGuidanceTest(unittest.TestCase):
             self._activate(store, "first", (member,))
             store.close()
             from span.shell import readiness
+
             actual = readiness._retained_instances(data, ("a",))
-            with patch.object(readiness, "_retained_instances", side_effect=[actual, ()]):
+            with patch.object(
+                readiness, "_retained_instances", side_effect=[actual, ()]
+            ):
                 graph = probe_active_functional_pyramid(data, {"a": root})
             self.assertEqual(graph["status"], "unavailable")
 
