@@ -587,7 +587,7 @@ class AnswerService:
             ):
                 continue
             try:
-                detailed = self._support.evaluate_verification(run.run_id.value)
+                detailed = self._support.evaluate_verification(run.facts.run_id.value)
                 qualification: m.VerificationQualification | m.SupportUnavailable = (
                     self._support.qualify_verification(detailed)
                 )

@@ -230,6 +230,7 @@ from span.core.model.support import (  # noqa: F401
 from span.core.model.understanding import (  # noqa: F401
     Challenge,
     ChallengeDispositionRecord,
+    disposition_revision,
     ChallengeResolution,
     ChallengeResolutionFacts,
     ChallengeDispositionDecision,
@@ -656,6 +657,7 @@ __all__ = [
     "ReconsiderRequest",
     "command_support_dependencies",
     "ChallengeDispositionRecord",
+    "disposition_revision",
     "UnresolvedChallengeRecord",
     "ResolvedChallengeRecord",
     "UnderstandingSnapshotSelector",

@@ -266,17 +266,12 @@ class ChallengeFacts:
 
 @_dataclass(frozen=True)
 class ChallengeResolution:
-    """Evidence-backed settlement recorded with the resulting understanding."""
+    """Complete evidence-backed settlement, not a delivery slice."""
 
-    reasoning: str
-    resulting_understanding_id: UnderstandingId
-    resulting_version: UnderstandingVersionNumber
+    facts: ChallengeResolutionFacts
     conclusions: tuple[ConclusionRevisionRef, ...] = ()
     withdrawn: tuple[ConclusionRevisionRef, ...] = ()
     evidence: tuple[EvidenceRef, ...] = ()
-
-    def __post_init__(self) -> None:
-        _require_non_empty("ChallengeResolution.reasoning", self.reasoning)
 
 
 @_dataclass(frozen=True)
@@ -301,12 +296,8 @@ class UnresolvedChallengeRecord:
 class ResolvedChallengeRecord:
     """One accepted resolution at its exact challenge revision."""
 
-    challenge_revision: ChallengeRevision
-    resolution: "ChallengeResolution"
-    recorded_at: _datetime.datetime
-
-    def __post_init__(self) -> None:
-        _require_aware("ResolvedChallengeRecord.recorded_at", self.recorded_at)
+    decision: ChallengeDispositionDecision
+    resolution: ChallengeResolution
 
 
 ChallengeDispositionRecord = _typing.Union[
@@ -317,31 +308,28 @@ ChallengeDispositionRecord = _typing.Union[
 
 @_dataclass(frozen=True)
 class Challenge:
-    """An explicit dispute bound to exact understanding/conclusion revisions."""
+    """Complete recorded dispute and disposition history."""
 
-    challenge_id: ChallengeId
-    understanding_id: UnderstandingId
-    target_version: UnderstandingVersionNumber
+    facts: ChallengeFacts
     target_conclusions: tuple[ConclusionRevisionRef, ...]
-    reason: str
     evidence: tuple[EvidenceRef, ...]
-    provenance: str
-    challenge_revision: ChallengeRevision
-    state: ChallengeState
-    created_at: _datetime.datetime
     resolution: ChallengeResolution | None = None
     dispositions: tuple[ChallengeDispositionRecord, ...] = ()
 
     def __post_init__(self) -> None:
-        _require_non_empty("Challenge.reason", self.reason)
-        _require_aware("Challenge.created_at", self.created_at)
-        if self.state is ChallengeState.RESOLVED and self.resolution is None:
+        if self.facts.state is ChallengeState.RESOLVED and self.resolution is None:
             raise ValueError("a resolved challenge requires a resolution")
-        if self.state is not ChallengeState.RESOLVED and self.resolution is not None:
+        if self.facts.state is not ChallengeState.RESOLVED and self.resolution is not None:
             raise ValueError("only a resolved challenge carries a resolution")
         for ref in self.target_conclusions:
-            if ref.understanding_id != self.understanding_id:
+            if ref.understanding_id != self.facts.understanding_id:
                 raise ValueError("challenge target crosses understandings")
+
+
+def disposition_revision(record: ChallengeDispositionRecord) -> ChallengeRevision:
+    if isinstance(record, ResolvedChallengeRecord):
+        return record.decision.challenge_revision
+    return record.challenge_revision
 
 
 @_dataclass(frozen=True)
@@ -384,11 +372,7 @@ class ChallengeView:
 
 def challenge_resolution_view(value: ChallengeResolution) -> ChallengeResolutionView:
     return ChallengeResolutionView(
-        facts=ChallengeResolutionFacts(
-            reasoning=value.reasoning,
-            resulting_understanding_id=value.resulting_understanding_id,
-            resulting_version=value.resulting_version,
-        ),
+        facts=value.facts,
         conclusions=value.conclusions,
         withdrawn=value.withdrawn,
         evidence=value.evidence,
@@ -402,10 +386,7 @@ def accepted_challenge_disposition(
         return AcceptedUnresolvedChallengeDisposition(challenge_id, record)
     return AcceptedResolvedChallengeDisposition(
         challenge_id=challenge_id,
-        decision=ChallengeDispositionDecision(
-            challenge_revision=record.challenge_revision,
-            recorded_at=record.recorded_at,
-        ),
+        decision=record.decision,
         resolution=challenge_resolution_view(record.resolution),
     )
 
@@ -415,26 +396,17 @@ def challenge_view(value: Challenge) -> ChallengeView:
     resolution = value.resolution
     if resolution is not None and any(
         isinstance(record, ResolvedChallengeRecord)
-        and record.challenge_revision == value.challenge_revision
+        and record.decision.challenge_revision == value.facts.challenge_revision
         and record.resolution == resolution
         for record in value.dispositions
     ):
         resolution = None
     return ChallengeView(
-        facts=ChallengeFacts(
-            challenge_id=value.challenge_id,
-            understanding_id=value.understanding_id,
-            target_version=value.target_version,
-            reason=value.reason,
-            provenance=value.provenance,
-            challenge_revision=value.challenge_revision,
-            state=value.state,
-            created_at=value.created_at,
-        ),
+        facts=value.facts,
         target_conclusions=value.target_conclusions,
         evidence=value.evidence,
         dispositions=tuple(
-            accepted_challenge_disposition(value.challenge_id, record)
+            accepted_challenge_disposition(value.facts.challenge_id, record)
             for record in value.dispositions
         ),
         resolution=(

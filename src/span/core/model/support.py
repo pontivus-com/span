@@ -13,7 +13,6 @@ from dataclasses import dataclass as _dataclass
 from span.core.model.verification import (
     VerificationRun,
     VerificationRunFacts,
-    verification_facts,
 )
 from span.core.model.functional_pyramid import (
     FunctionalPyramidId,
@@ -329,7 +328,7 @@ def verification_view(
     qualification: VerificationQualification | SupportUnavailable | None,
 ) -> VerificationView:
     return VerificationView(
-        facts=verification_facts(run),
+        facts=run.facts,
         observations=run.observations,
         environment_limitations=run.environment_limitations,
         qualification=qualification,

@@ -879,10 +879,10 @@ class LifecycleService:
         return m.VerificationRecorded(
             receipt_selector=self._receipt_selector(receipt),
             committed_at=receipt.committed_at,
-            run_id=run.run_id,
-            command=run.command,
-            scenario=run.scenario,
-            outcome=run.outcome,
+            run_id=run.facts.run_id,
+            command=run.facts.command,
+            scenario=run.facts.scenario,
+            outcome=run.facts.outcome,
             qualification=qualification,
         )
 

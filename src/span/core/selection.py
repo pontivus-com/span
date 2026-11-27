@@ -98,9 +98,9 @@ def immediate_children(
 def verification_covers(
     run: m.VerificationRun, repository_id: str, scope: m.EvidenceScope
 ) -> bool:
-    if run.repository_id != repository_id:
+    if run.facts.repository_id != repository_id:
         return False
-    outer = run.scope.scope
+    outer = run.facts.scope.scope
     if any(ref.repository_id != repository_id for ref in outer.evidence_refs):
         return False
     if any(ref.repository_id != repository_id for ref in scope.evidence_refs):
