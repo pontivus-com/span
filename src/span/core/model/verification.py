@@ -81,6 +81,29 @@ class ProposedVerificationRun:
 
 
 @_dataclass(frozen=True)
+class VerificationRunFacts:
+    """Fixed immutable execution facts shared by retained runs and delivery."""
+
+    run_id: VerificationRunId
+    repository_id: str
+    scope: VerificationScope
+    command: str | None
+    scenario: str | None
+    outcome: VerificationOutcome
+    observed_at: _datetime.datetime
+    observer: str
+    provenance: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("VerificationRun.repository_id", self.repository_id)
+        if not self.command and not self.scenario:
+            raise ValueError("a verification run requires a command or scenario")
+        _require_non_empty("VerificationRun.observer", self.observer)
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("VerificationRun.observed_at must be aware")
+
+
+@_dataclass(frozen=True)
 class VerificationRun:
     """One immutable accepted execution, independent of semantic submission."""
 

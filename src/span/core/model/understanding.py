@@ -261,6 +261,47 @@ class ChallengeState(_enum.Enum):
 
 
 @_dataclass(frozen=True)
+class ChallengeResolutionFacts:
+    """Immutable reasoning and resulting version, independent of delivery."""
+
+    reasoning: str
+    resulting_understanding_id: UnderstandingId
+    resulting_version: UnderstandingVersionNumber
+
+    def __post_init__(self) -> None:
+        _require_non_empty("ChallengeResolution.reasoning", self.reasoning)
+
+
+@_dataclass(frozen=True)
+class ChallengeDispositionDecision:
+    """Exact acceptance coordinate for a resolved challenge disposition."""
+
+    challenge_revision: ChallengeRevision
+    recorded_at: _datetime.datetime
+
+    def __post_init__(self) -> None:
+        _require_aware("ResolvedChallengeRecord.recorded_at", self.recorded_at)
+
+
+@_dataclass(frozen=True)
+class ChallengeFacts:
+    """Fixed recorded dispute facts, independent of collection delivery."""
+
+    challenge_id: ChallengeId
+    understanding_id: UnderstandingId
+    target_version: UnderstandingVersionNumber
+    reason: str
+    provenance: str
+    challenge_revision: ChallengeRevision
+    state: ChallengeState
+    created_at: _datetime.datetime
+
+    def __post_init__(self) -> None:
+        _require_non_empty("Challenge.reason", self.reason)
+        _require_aware("Challenge.created_at", self.created_at)
+
+
+@_dataclass(frozen=True)
 class ChallengeResolution:
     """Evidence-backed settlement recorded with the resulting understanding."""
 

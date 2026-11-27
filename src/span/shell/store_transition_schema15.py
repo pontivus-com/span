@@ -84,19 +84,23 @@ def _factor(
 
 
 def verification_payload(value: object) -> dict[str, object]:
-    return _factor(
+    payload = _factor(
         value, "VerificationRun", "facts", "VerificationRunFacts", _VERIFICATION_FIELDS
     )
+    m.from_canonical(m.VerificationRunFacts, payload["facts"])
+    return payload
 
 
 def _resolution(value: object) -> dict[str, object]:
-    return _factor(
+    payload = _factor(
         value,
         "ChallengeResolution",
         "facts",
         "ChallengeResolutionFacts",
         _RESOLUTION_FIELDS,
     )
+    m.from_canonical(m.ChallengeResolutionFacts, payload["facts"])
+    return payload
 
 
 def _disposition(value: object) -> dict[str, object]:
@@ -109,12 +113,14 @@ def _disposition(value: object) -> dict[str, object]:
         "ChallengeDispositionDecision",
         _DISPOSITION_FIELDS,
     )
+    m.from_canonical(m.ChallengeDispositionDecision, payload["decision"])
     payload["resolution"] = _resolution(payload["resolution"])
     return payload
 
 
 def challenge_payload(value: object) -> dict[str, object]:
     payload = _factor(value, "Challenge", "facts", "ChallengeFacts", _CHALLENGE_FIELDS)
+    m.from_canonical(m.ChallengeFacts, payload["facts"])
     if payload.get("resolution") is not None:
         payload["resolution"] = _resolution(payload["resolution"])
     payload["dispositions"] = [

@@ -2011,7 +2011,17 @@ class PubSchemaTransitionTest(unittest.TestCase):
         ):
             with self.subTest(carrier=type(value).__name__):
                 source = m.to_canonical(value)
-                self.assertEqual(restore(convert(source)), source)
+                staged = convert(source)
+                self.assertEqual(restore(staged), source)
+                if isinstance(value, m.VerificationRun):
+                    facts = m.from_canonical(m.VerificationRunFacts, staged["facts"])
+                    self.assertEqual(facts.run_id, value.run_id)
+                    self.assertEqual(facts.scope, value.scope)
+                    self.assertEqual(facts.outcome, value.outcome)
+                else:
+                    challenge_facts = m.from_canonical(m.ChallengeFacts, staged["facts"])
+                    self.assertEqual(challenge_facts.challenge_id, value.challenge_id)
+                    self.assertEqual(challenge_facts.state, value.state)
 
     def test_staging_rejects_repeatable_conversion_loss(self):
         from span.shell import store_transition_schema15 as migration
