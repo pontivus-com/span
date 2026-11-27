@@ -188,7 +188,9 @@ def protect_setup(
             _conflict("selected authority configuration or indexer pointer changed")
         saved = pending.get("backup")
         if "backup_manifest_digest" in pending:
-            required_names = set(_database_names(pending)) | set(_generated_files(pending))
+            required_names = set(_database_names(pending)) | set(
+                _generated_files(pending)
+            )
             _verified_manifest(
                 Path(governed._string(saved)),
                 data_dir,
