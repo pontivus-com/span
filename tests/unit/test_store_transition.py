@@ -2046,6 +2046,28 @@ class PubSchemaTransitionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.AcceptedDependencyEffects((effect, effect))
 
+    def test_staging_rejects_lost_retained_index(self):
+        from span.shell import store_transition_schema15 as migration
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            paths = st.TransitionPaths(base / "data", "demo")
+            paths.transition_dir.mkdir(parents=True)
+            _schema14_store(paths.archive, base / "demo")
+            with sqlite3.connect(paths.archive) as connection:
+                connection.execute(
+                    "UPDATE meta SET value='15' WHERE key='schema_version'"
+                )
+                connection.execute(
+                    "CREATE INDEX retained_receipt_index"
+                    " ON record_receipts(canonical_json)"
+                )
+            migration.stage_schema15(paths)
+            with sqlite3.connect(paths.staging) as connection:
+                connection.execute("DROP INDEX retained_receipt_index")
+            with self.assertRaisesRegex(st.TransitionError, "SQLite catalog"):
+                migration.verify_schema15_staging(paths)
+
     def test_staging_rejects_repeatable_conversion_loss(self):
         from span.shell import store_transition_schema15 as migration
 
@@ -2080,7 +2102,10 @@ class PubSchemaTransitionTest(unittest.TestCase):
         from span.shell.sqlite_store.functional_pyramid import (
             FunctionalPyramidInstallationStore,
         )
-        from span.shell.store_transition_schema15 import stage_installation_schema1
+        from span.shell.store_transition_schema15 import (
+            stage_installation_schema1,
+            verify_installation_schema1_staging,
+        )
 
         with tempfile.TemporaryDirectory() as tmp:
             paths = st.TransitionPaths(pathlib.Path(tmp), "installation")
@@ -2138,6 +2163,16 @@ class PubSchemaTransitionTest(unittest.TestCase):
                         ],
                         0,
                     )
+
+            with sqlite3.connect(paths.staging) as connection:
+                connection.execute("DROP TABLE delivery_cursors")
+                connection.execute(
+                    "CREATE TABLE delivery_cursors("
+                    "cursor_id TEXT PRIMARY KEY, selection_id TEXT NOT NULL,"
+                    "position_json TEXT NOT NULL)"
+                )
+            with self.assertRaisesRegex(st.TransitionError, "SQLite catalog"):
+                verify_installation_schema1_staging(paths)
 
 
 if __name__ == "__main__":

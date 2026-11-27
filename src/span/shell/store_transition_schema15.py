@@ -462,17 +462,37 @@ def _verify_table(
             raise TransitionError(f"migration changed retained cells in {table}")
 
 
+def _catalog(
+    connection: _sqlite3.Connection,
+) -> frozenset[tuple[str, str, str, str | None]]:
+    return frozenset(
+        (str(kind), str(name), str(table), sql if sql is None else str(sql))
+        for kind, name, table, sql in connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master"
+        )
+    )
+
+
 def _verify_copy(
     paths: TransitionPaths,
     version: str,
     transforms: dict[str, tuple[str, _Callable[[object], object]]],
-    added_tables: frozenset[str],
+    added_ddl: tuple[str, ...],
 ) -> None:
     old = _connect_read_only(paths.archive)
     new = _connect_read_only(paths.staging)
     try:
         if _integrity(new) != "ok":
             raise TransitionError("staged database failed integrity check")
+        expected = _sqlite3.connect(":memory:")
+        try:
+            for statement in added_ddl:
+                expected.execute(statement)
+            added_tables = frozenset(_table_names(expected))
+            if _catalog(new) != _catalog(old) | _catalog(expected):
+                raise TransitionError("migration changed the expected SQLite catalog")
+        finally:
+            expected.close()
         original_tables = frozenset(_table_names(old))
         if frozenset(_table_names(new)) != original_tables | added_tables:
             raise TransitionError("migration changed retained table inventory")
@@ -502,7 +522,7 @@ def verify_schema15_staging(paths: TransitionPaths) -> None:
             "challenges": ("canonical_json", _restore_challenge),
             "record_receipts": ("canonical_json", _restore_receipt),
         },
-        frozenset(),
+        (),
     )
 
 
@@ -516,5 +536,5 @@ def verify_installation_schema1_staging(paths: TransitionPaths) -> None:
                 _restore_installation_dependencies,
             )
         },
-        frozenset({"delivery_selections", "delivery_cursors", "addressed_requests"}),
+        SCHEMA2_DDL,
     )
