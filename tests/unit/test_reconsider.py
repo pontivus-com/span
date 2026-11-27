@@ -1102,7 +1102,9 @@ class ReconsiderServiceTest(unittest.TestCase):
         self.assertEqual(result.challenge.state, m.ChallengeState.OPEN)
         self.assertEqual(result.receipt_selector.request_id, "req-challenge")
         self.assertEqual(result.committed_at, NOW)
-        self.assertEqual(tuple(item.ref for item in result.prior_conclusions), (target,))
+        self.assertEqual(
+            tuple(item.ref for item in result.prior_conclusions), (target,)
+        )
         content = result.prior_conclusions[0].content
         assert isinstance(content, m.SupportedAuditContent)
         self.assertEqual(content.statement, "It does something.")

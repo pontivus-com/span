@@ -409,8 +409,23 @@ class FunctionalPyramidService:
         | m.FunctionalPyramidView
     ):
         """Resolve one exact repository-relative directory through current state."""
+        try:
+            owner, directory = self._declarations.directory_owner(
+                selector.repository_id, selector.directory
+            )
+        except ValueError as exc:
+            raise RecordingValidationError(
+                "directory ownership cannot be resolved",
+                public_identity=selector.directory,
+                public_cause="select a directory with one registered repository owner",
+            ) from exc
+        except (OSError, FunctionalPyramidRepositoryUnavailable):
+            return m.FunctionalPyramidUnavailable(
+                failure="Registered repository roots cannot be resolved",
+                recovery="restore the registered repository and retry",
+            )
         participation, pyramid_id, version, members = self._active_participation(
-            m.FunctionalPyramidSelector(repository_id=selector.repository_id)
+            m.FunctionalPyramidSelector(repository_id=owner)
         )
         if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
             if selector.after is not None:
@@ -422,7 +437,7 @@ class FunctionalPyramidService:
         assert version is not None
         try:
             if not self._declarations.directory_exists(
-                selector.repository_id, selector.directory
+                owner, directory
             ):
                 raise RecordingValidationError(
                     f"Functional Pyramid directory does not exist: {selector.directory!r}",
@@ -434,15 +449,15 @@ class FunctionalPyramidService:
                 pyramid_id=pyramid_id,
                 version=version,
                 members=context.current_members,
-                repository_id=selector.repository_id,
-                directory=selector.directory,
+                repository_id=owner,
+                directory=directory,
                 declarations=context.declarations,
                 available_repositories=context.available,
                 authority_bindings=context.authority_bindings,
                 declaration_findings=context.findings,
             )
             return self._directory_page(
-                selector, resolution.view, context.current_members
+                selector, resolution.view, context.current_members, owner
             )
         except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
@@ -455,12 +470,14 @@ class FunctionalPyramidService:
         selector: m.FunctionalPyramidDirectorySelector,
         view: m.FunctionalPyramidView,
         members: tuple[m.FunctionalPyramidMemberView, ...],
+        owner: str,
     ) -> m.FunctionalPyramidView | m.FunctionalPyramidUnavailable:
         """Return a version-bound, size-bounded page of the same live projection."""
         version = question_digest(
             "functional-pyramid-directory",
             selector.repository_id,
             selector.directory,
+            owner,
             payload_digest(m.to_canonical(members)).value,
             payload_digest(m.to_canonical(view)).value,
         )

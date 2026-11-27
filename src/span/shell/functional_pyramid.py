@@ -8,6 +8,7 @@ import json as _json
 import pathlib as _pathlib
 import typing as _typing
 
+from span.core import containment
 from span.core import functional_pyramid as _fp
 from span.core import model as m
 from span.ports.functional_pyramid import (
@@ -32,8 +33,13 @@ from span.service.functional_pyramid import FunctionalPyramidService
 class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
     """Read strict declarations from registered repository roots."""
 
-    def __init__(self, repository_root: _typing.Callable[[str], str]) -> None:
+    def __init__(
+        self,
+        repository_root: _typing.Callable[[str], str],
+        registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
+    ) -> None:
         self._repository_root = repository_root
+        self._registered_repository_ids = registered_repository_ids
 
     def _source(self, repository_id: str) -> FilesystemEvidenceSource:
         try:
@@ -62,6 +68,19 @@ class FilesystemFunctionalPyramidDeclarations(FunctionalPyramidDeclarationPort):
                 "Functional Pyramid bootstrap violates the Version-2 contract"
             ) from exc
         return result.evidence_ref, bootstrap
+
+    def directory_owner(self, repository_id: str, directory: str) -> tuple[str, str]:
+        roots = {
+            identity: str(_pathlib.Path(self._repository_root(identity)).resolve())
+            for identity in self._registered_repository_ids()
+        }
+        if repository_id not in roots:
+            raise ValueError("unknown registered repository")
+        origin = _pathlib.Path(roots[repository_id])
+        selected = (origin / directory).resolve()
+        if not selected.is_relative_to(origin):
+            raise ValueError("directory is outside its requested repository")
+        return containment.registered_path_owner(roots, str(selected))
 
     def directory_exists(self, repository_id: str, directory: str) -> bool:
         root = _pathlib.Path(self._repository_root(repository_id)).resolve()
@@ -130,6 +149,7 @@ def open_functional_pyramid_service(
     data_dir: str | _pathlib.Path,
     *,
     repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
+    repository_root: _typing.Callable[[str], str],
     registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
     policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
 ) -> _typing.Iterator[FunctionalPyramidService | None]:
@@ -150,6 +170,7 @@ def open_functional_pyramid_service(
                 state=state,
                 policy=policy,
                 repository_runtime=repository_runtime,
+                repository_root=repository_root,
                 registered_repository_ids=registered_repository_ids,
                 repository_paths=lambda repository_ids: tuple(
                     (repository_id, str(root / f"{repository_id}.db"))
@@ -164,6 +185,7 @@ def compose_functional_pyramid_service(
     *,
     state: FunctionalPyramidStatePort,
     repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
+    repository_root: _typing.Callable[[str], str],
     registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
     repository_paths: _typing.Callable[[tuple[str, ...]], tuple[tuple[str, str], ...]],
     clock: _typing.Callable[[], _datetime.datetime] | None = None,
@@ -173,7 +195,7 @@ def compose_functional_pyramid_service(
     """Compose the one installation-wide Functional Pyramid service."""
     return FunctionalPyramidService(
         declarations=FilesystemFunctionalPyramidDeclarations(
-            lambda repository_id: repository_runtime(repository_id).root
+            repository_root, registered_repository_ids
         ),
         authority=_InstallationAuthorityResolver(repository_runtime),
         state=state,

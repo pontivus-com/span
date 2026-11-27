@@ -6,6 +6,7 @@ import datetime
 import unittest
 from unittest import mock
 
+from span.core import containment
 from span.core import model as m
 from span.core.recording import RecordingConflict, RecordingValidationError
 from span.ports.functional_pyramid import (
@@ -125,6 +126,7 @@ class _Declarations:
             ),
         ] = {}
         self.calls: list[tuple[str, m.EvidenceRequest]] = []
+        self.roots = {"repo-a": "/repos/repo-a", "repo-b": "/repos/repo-b"}
         self.directories: dict[str, set[str]] = {
             "repo-a": {".", "src", "src/service"},
             "repo-b": {".", "src"},
@@ -135,6 +137,11 @@ class _Declarations:
     ) -> tuple[m.EvidenceRef, m.FunctionalPyramidBootstrap] | None:
         del repository_id
         return self.bootstrap
+
+    def directory_owner(self, repository_id: str, directory: str) -> tuple[str, str]:
+        root = self.roots[repository_id]
+        target = root if directory == "." else f"{root}/{directory}"
+        return containment.registered_path_owner(self.roots, target)
 
     def directory_exists(self, repository_id: str, directory: str) -> bool:
         return directory in self.directories.get(repository_id, set())
@@ -572,6 +579,29 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             tuple(placement.document.document_ref for placement in view.placements),
             ("docs/foundation.md", "docs/design.md"),
         )
+
+    def test_nested_directory_uses_child_participation(self) -> None:
+        self.declarations.roots["repo-b"] = "/repos/repo-a/nested"
+        self.admin_service.record(
+            request_id=m.RequestId("activate-child"),
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._install_v3("repo-b", local_scope="src"),),
+        )
+        parent = self.admin_service.directory(
+            m.FunctionalPyramidDirectorySelector("repo-a", "nested/src")
+        )
+        child = self.admin_service.directory(
+            m.FunctionalPyramidDirectorySelector("repo-b", "src")
+        )
+        self.assertIsInstance(child, m.FunctionalPyramidView)
+        self.assertEqual(parent, child)
+
+    def test_equal_registered_roots_are_ambiguous(self) -> None:
+        self.declarations.roots["repo-b"] = self.declarations.roots["repo-a"]
+        with self.assertRaises(RecordingValidationError):
+            self.admin_service.directory(
+                m.FunctionalPyramidDirectorySelector("repo-a", "src")
+            )
 
     def test_directory_continuation_recovers_every_placement(self) -> None:
         intent = self._install_v3("repo-a")

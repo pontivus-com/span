@@ -7,6 +7,7 @@ may overlap; a member may belong to any number of declared surfaces.
 
 from __future__ import annotations
 
+import pathlib as _pathlib
 import typing as _typing
 
 from span.core.model.primitives import EvidenceScope
@@ -129,3 +130,25 @@ def containing_surfaces(
         if surface.key != member and surface_contains(surface, member)
     )
     return order_surfaces(keys)
+
+
+def registered_path_owner(
+    roots: _typing.Mapping[str, str], target: str
+) -> tuple[str, str]:
+    """Select the deepest registered root, rejecting ambiguous equal roots."""
+    path = _pathlib.PurePath(target)
+    candidates: list[tuple[int, str, str]] = []
+    for repository_id, root in roots.items():
+        base = _pathlib.PurePath(root)
+        if path.is_relative_to(base):
+            candidates.append(
+                (len(base.parts), repository_id, path.relative_to(base).as_posix())
+            )
+    if not candidates:
+        raise ValueError("path is outside registered repositories")
+    depth = max(item[0] for item in candidates)
+    owners = [item for item in candidates if item[0] == depth]
+    if len(owners) != 1:
+        raise ValueError("path has ambiguous registered repository ownership")
+    _, repository_id, relative = owners[0]
+    return repository_id, relative

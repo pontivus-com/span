@@ -208,7 +208,9 @@ class UnderstandService:
             )
         }
         if any(ref not in revisions for ref in refs):
-            raise RecordingValidationError("selected historical revision is unavailable")
+            raise RecordingValidationError(
+                "selected historical revision is unavailable"
+            )
         return tuple(self._audit_revision(revisions[ref], curated) for ref in refs)
 
     def _snapshot(
