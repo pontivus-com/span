@@ -21,6 +21,14 @@ from span.core.model.primitives import (
 from span.core.model.support import SupportState
 
 
+class ChangeReason(_enum.Enum):
+    """Why a surface appears in a reconsideration result (FD-20)."""
+
+    CONTAINMENT = "containment"
+    DIRECT = "direct"
+    INDIRECT = "indirect"
+
+
 class SurfaceKind(_enum.Enum):
     """The granularity a surface is declared or derived at (FD-1)."""
 
@@ -67,6 +75,33 @@ class SurfaceKey:
     def __post_init__(self) -> None:
         _constraints.validate_structural_rules(self)
         _require_repository_relative("SurfaceKey.locator", self.locator)
+
+
+@_dataclass(frozen=True)
+class AcceptedDependencyEffect:
+    """Immutable accepted owner, revision and per-revision causes (FD-20)."""
+
+    surface: SurfaceKey
+    ref: ConclusionRevisionRef
+    reasons: tuple[ChangeReason, ...]
+
+    def __post_init__(self) -> None:
+        if not self.reasons or len(set(self.reasons)) != len(self.reasons):
+            raise ValueError("accepted dependency causes must be nonempty and distinct")
+        if ChangeReason.CONTAINMENT in self.reasons:
+            raise ValueError("containment alone is a surface cause, not a revision cause")
+
+
+@_dataclass(frozen=True)
+class AcceptedDependencyEffects:
+    """The complete ordered accepted dependency selection, before live qualification."""
+
+    effects: tuple[AcceptedDependencyEffect, ...]
+
+    def __post_init__(self) -> None:
+        refs = tuple(item.ref for item in self.effects)
+        if len(set(refs)) != len(refs):
+            raise ValueError("accepted dependency effects require distinct refs")
 
 
 @_dataclass(frozen=True)

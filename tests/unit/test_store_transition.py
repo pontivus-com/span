@@ -2025,6 +2025,27 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     self.assertEqual(challenge_facts.challenge_id, value.challenge_id)
                     self.assertEqual(challenge_facts.state, value.state)
 
+    def test_accepted_dependency_coordinates_are_strict_and_round_trip(self):
+        ref = m.ConclusionRevisionRef(
+            m.UnderstandingId("u"),
+            m.ConclusionId("c"),
+            m.ConclusionRevisionNumber(1),
+        )
+        surface = m.SurfaceKey("demo", m.SurfaceKind.FILE, "src/a.py")
+        effect = m.AcceptedDependencyEffect(
+            surface, ref, (m.ChangeReason.DIRECT, m.ChangeReason.INDIRECT)
+        )
+        selection = m.AcceptedDependencyEffects((effect,))
+        self.assertEqual(
+            m.from_canonical(m.AcceptedDependencyEffects, m.to_canonical(selection)),
+            selection,
+        )
+        for causes in ((), (m.ChangeReason.CONTAINMENT,), (m.ChangeReason.DIRECT,) * 2):
+            with self.subTest(causes=causes), self.assertRaises(ValueError):
+                m.AcceptedDependencyEffect(surface, ref, causes)
+        with self.assertRaises(ValueError):
+            m.AcceptedDependencyEffects((effect, effect))
+
     def test_staging_rejects_repeatable_conversion_loss(self):
         from span.shell import store_transition_schema15 as migration
 

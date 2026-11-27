@@ -49,6 +49,7 @@ from span.core.model.support import (
     VerificationQualification,
 )
 from span.core.model.surfaces import (
+    ChangeReason,
     Surface,
     SurfaceKey,
     SurfaceReference,
@@ -75,14 +76,6 @@ class GapReason(_enum.Enum):
     UNVERIFIABLE = "unverifiable"
     PENDING_CURATION = "pending_curation"
     UNASSESSED = "unassessed"
-
-
-class ChangeReason(_enum.Enum):
-    """Why a surface appears in a reconsideration result (FD-20)."""
-
-    CONTAINMENT = "containment"
-    DIRECT = "direct"
-    INDIRECT = "indirect"
 
 
 @_dataclass(frozen=True)

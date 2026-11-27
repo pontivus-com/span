@@ -245,10 +245,7 @@ def receipt_payload(value: object) -> dict[str, object]:
         raise TransitionError("historical receipt lacks accepted identity")
     effect: object
     if len(runs) == 1 and not (understanding_ids or challenges or dependents):
-        effect = {
-            "$type": "AcceptedVerificationEffect",
-            "run_id": m.to_canonical(runs[0]),
-        }
+        effect = m.to_canonical(m.AcceptedVerificationEffect(runs[0]))
     else:
         effect = _historical(
             understanding_versions=tuple(
@@ -282,7 +279,7 @@ def installation_dependency_payload(value: object) -> object:
     )
     if refs:
         return _historical(dependent_effect_refs=refs)
-    return {"$type": "AcceptedDependencyEffects", "effects": []}
+    return m.to_canonical(m.AcceptedDependencyEffects(()))
 
 
 def _historical_detail(value: object) -> m.HistoricalAcceptanceDetailUnavailable:
@@ -311,9 +308,8 @@ def _restore_receipt(value: object) -> dict[str, object]:
     dependents: tuple[m.ConclusionRevisionRef, ...] = ()
     runs: tuple[m.VerificationRunId, ...]
     if isinstance(effect, dict) and effect.get("$type") == "AcceptedVerificationEffect":
-        if set(effect) != {"$type", "run_id"}:
-            raise TransitionError("unexpected accepted verification detail")
-        runs = (m.from_canonical(m.VerificationRunId, effect["run_id"]),)
+        accepted = m.from_canonical(m.AcceptedVerificationEffect, effect)
+        runs = (accepted.run_id,)
     else:
         historical = _historical_detail(effect)
         understanding_ids = tuple(
@@ -340,7 +336,10 @@ def _restore_receipt(value: object) -> dict[str, object]:
 
 
 def _restore_installation_dependencies(value: object) -> object:
-    if value == {"$type": "AcceptedDependencyEffects", "effects": []}:
+    if isinstance(value, dict) and value.get("$type") == "AcceptedDependencyEffects":
+        accepted = m.from_canonical(m.AcceptedDependencyEffects, value)
+        if accepted.effects:
+            raise TransitionError("historical empty effect set gained accepted causes")
         return []
     detail = _historical_detail(value)
     if (

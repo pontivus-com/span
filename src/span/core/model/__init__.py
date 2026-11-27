@@ -298,6 +298,7 @@ from span.core.model.verification import (  # noqa: F401
 )
 from span.core.model.recording import (  # noqa: F401
     ContentDigest,
+    AcceptedVerificationEffect,
     ReceiptDecision,
     ReceiptDecisionKind,
     RecordReceipt,
@@ -316,6 +317,9 @@ from span.core.model.outcomes import (  # noqa: F401
     VerificationRecorded,
 )
 from span.core.model.surfaces import (  # noqa: F401
+    AcceptedDependencyEffect,
+    AcceptedDependencyEffects,
+    ChangeReason,
     PendingConclusionRef,
     StaleConclusionRef,
     Surface,
@@ -337,7 +341,6 @@ from span.core.model.answers import (  # noqa: F401
     Answer,
     AnswerGroup,
     AskResult,
-    ChangeReason,
     Changed,
     ChangedConclusion,
     ChangedSurface,
@@ -579,6 +582,9 @@ __all__ = [
     "VerificationRun",
     "VerificationRunFacts",
     "ContentDigest",
+    "AcceptedVerificationEffect",
+    "AcceptedDependencyEffect",
+    "AcceptedDependencyEffects",
     "RecordingIdentity",
     "RecordingKey",
     "RequestBinding",

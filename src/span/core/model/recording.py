@@ -73,6 +73,13 @@ class RequestBinding:
 
 
 @_dataclass(frozen=True)
+class AcceptedVerificationEffect:
+    """The exact accepted execution identity, independent of live qualification."""
+
+    run_id: VerificationRunId
+
+
+@_dataclass(frozen=True)
 class RecordReceipt:
     """Immutable evidence that one recording submission committed."""
 
