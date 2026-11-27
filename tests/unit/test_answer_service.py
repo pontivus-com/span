@@ -468,7 +468,12 @@ class AnswerServiceTest(unittest.TestCase):
         child_status = result.status.descendants[0]
         self.assertEqual(child_status.surface, child)
         self.assertEqual(child_status.stale, 1)
-        self.assertEqual(child_status.stale_refs[0].ref.conclusion_id.value, "c-2")
+        self.assertFalse(hasattr(child_status, "stale_refs"))
+        child_result = self._ask("svc", None)
+        assert isinstance(child_result, m.Answer)
+        self.assertEqual(
+            child_result.status.stale_refs[0].ref.conclusion_id.value, "c-2"
+        )
 
     def test_ranged_support_ignores_an_unrelated_edit(self) -> None:
         (self.root / "src/a.py").write_text("one\ntwo\nthree\n", encoding="utf-8")
@@ -1043,7 +1048,8 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(result.status.pending, 0)
         self.assertEqual(result.status.pending_refs, ())
         self.assertEqual(result.status.descendants, ())
-        self.assertEqual(result.status.unexamined, 0)
+        self.assertIsNone(result.status.unexamined)
+        self.assertIsInstance(result.status.subject, m.QuestionStatusSubject)
 
     def test_exact_question_without_membership_is_unassessed(self) -> None:
         result = self.service.ask(
@@ -1640,9 +1646,13 @@ class AnswerServiceTest(unittest.TestCase):
             for index in range(100)
         )
         status = m.SurfaceStatus(
-            surface=m.SurfaceKey(
-                repository_id="repo-1", kind=m.SurfaceKind.FILE, locator="src/a.py"
+            subject=m.SurfaceStatusSubject(
+                m.SurfaceKey(
+                    repository_id="repo-1", kind=m.SurfaceKind.FILE, locator="src/a.py"
+                )
             ),
+            unexamined=0,
+            unexamined_limited=False,
             current=1,
             stale=len(refs),
             stale_refs=refs,
@@ -1700,7 +1710,11 @@ class AnswerServiceTest(unittest.TestCase):
         )
         gap = m.Gap(
             surface=surface,
-            status=m.SurfaceStatus(surface=surface),
+            status=m.SurfaceStatus(
+                subject=m.SurfaceStatusSubject(surface),
+                unexamined=0,
+                unexamined_limited=False,
+            ),
             functional_pyramid=m.FunctionalPyramidParticipation(
                 m.FunctionalPyramidParticipationState.UNCONFIGURED
             ),

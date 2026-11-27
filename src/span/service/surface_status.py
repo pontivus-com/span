@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace as _replace
-
 from span.core import model as m
 from span.core import selection
 from span.ports.lifecycle import LifecycleStorePort
@@ -12,28 +10,33 @@ from span.service.evidence import EvidenceService
 
 
 def compose_surface_status(
-    surface: m.SurfaceKey,
+    subject: m.StatusSubject,
     *,
     store: LifecycleStorePort,
     support: SupportService,
     evidence: EvidenceService,
     selected: tuple[m.Understanding, ...] | None = None,
 ) -> m.SurfaceStatus:
-    if selected is not None:
-        return _distribution(surface, selected, store=store, support=support)
+    surface = subject.surface
+    if not isinstance(subject, m.SurfaceStatusSubject):
+        if selected is None:
+            raise ValueError("exact status requires its selected population")
+        return _distribution(subject, selected, store=store, support=support)
     all_understandings = tuple(store.list_understandings(surface.repository_id))
     own = tuple(item for item in all_understandings if item.surface == surface)
     examined = _examined_scopes(all_understandings, store=store)
     surfaces = store.list_surfaces(surface.repository_id)
     children = selection.immediate_children(surface, surfaces)
     summaries = tuple(
-        _surface_distribution(
-            child,
-            tuple(item for item in all_understandings if item.surface == child),
-            examined,
-            store=store,
-            support=support,
-            evidence=evidence,
+        selection.summarize_surface(
+            _surface_distribution(
+                child,
+                tuple(item for item in all_understandings if item.surface == child),
+                examined,
+                store=store,
+                support=support,
+                evidence=evidence,
+            )
         )
         for child in children
     )
@@ -49,11 +52,13 @@ def compose_surface_status(
 
 
 def _distribution(
-    surface: m.SurfaceKey,
+    subject: m.StatusSubject,
     understandings: tuple[m.Understanding, ...],
     *,
     store: LifecycleStorePort,
     support: SupportService,
+    coverage: tuple[int, bool] | None = None,
+    descendants: tuple[m.SurfaceStatusSummary, ...] = (),
 ) -> m.SurfaceStatus:
     evaluations = tuple(
         support.evaluate_version(
@@ -71,7 +76,9 @@ def _distribution(
         )
         is not None
     )
-    return selection.status_distribution(surface, evaluations, curated)
+    return selection.status_distribution(
+        subject, evaluations, curated, coverage=coverage, descendants=descendants
+    )
 
 
 def _surface_distribution(
@@ -82,16 +89,17 @@ def _surface_distribution(
     store: LifecycleStorePort,
     support: SupportService,
     evidence: EvidenceService,
-    descendants: tuple[m.SurfaceStatus, ...] = (),
+    descendants: tuple[m.SurfaceStatusSummary, ...] = (),
 ) -> m.SurfaceStatus:
-    distribution = _distribution(surface, understandings, store=store, support=support)
-    unexamined, limited = _unexamined(
+    coverage = _unexamined(
         surface, understandings, examined, store=store, evidence=evidence
     )
-    return _replace(
-        distribution,
-        unexamined=unexamined,
-        unexamined_limited=limited,
+    return _distribution(
+        m.SurfaceStatusSubject(surface),
+        understandings,
+        store=store,
+        support=support,
+        coverage=coverage,
         descendants=descendants,
     )
 
@@ -162,4 +170,3 @@ def _unexamined(
         ):
             unexamined += 1
     return unexamined, True
-

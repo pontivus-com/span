@@ -29,7 +29,12 @@ FP_UNCONFIGURED = m.FunctionalPyramidParticipation(
 
 
 def status(surface: m.SurfaceKey = KEY) -> m.SurfaceStatus:
-    return m.SurfaceStatus(surface=surface, current=1)
+    return m.SurfaceStatus(
+        subject=m.SurfaceStatusSubject(surface),
+        unexamined=0,
+        unexamined_limited=False,
+        current=1,
+    )
 
 
 class SurfaceCarrierTest(unittest.TestCase):
@@ -73,11 +78,24 @@ class SurfaceCarrierTest(unittest.TestCase):
             understanding_version=m.UnderstandingVersionNumber(1),
         )
         with self.assertRaises(ValueError):
-            m.SurfaceStatus(surface=KEY, pending=1)
+            m.SurfaceStatus(
+                subject=m.SurfaceStatusSubject(KEY),
+                unexamined=0,
+                unexamined_limited=False,
+                pending=1,
+            )
         with self.assertRaises(ValueError):
-            m.SurfaceStatus(surface=KEY, pending=0, pending_refs=(ref,))
+            m.SurfaceStatus(
+                subject=m.SurfaceStatusSubject(KEY),
+                unexamined=0,
+                unexamined_limited=False,
+                pending=0,
+                pending_refs=(ref,),
+            )
         pending_status = m.SurfaceStatus(
-            surface=KEY,
+            subject=m.SurfaceStatusSubject(KEY),
+            unexamined=0,
+            unexamined_limited=False,
             pending=1,
             pending_refs=(ref,),
         )
@@ -94,16 +112,33 @@ class SurfaceCarrierTest(unittest.TestCase):
             state=m.SupportState.REASSESSMENT_REQUIRED,
         )
         with self.assertRaises(ValueError):
-            m.SurfaceStatus(surface=KEY, stale=1)
+            m.SurfaceStatus(
+                subject=m.SurfaceStatusSubject(KEY),
+                unexamined=0,
+                unexamined_limited=False,
+                stale=1,
+            )
         with self.assertRaises(ValueError):
-            m.SurfaceStatus(surface=KEY, stale=0, stale_refs=(ref,))
+            m.SurfaceStatus(
+                subject=m.SurfaceStatusSubject(KEY),
+                unexamined=0,
+                unexamined_limited=False,
+                stale=0,
+                stale_refs=(ref,),
+            )
         with self.assertRaises(ValueError):
             m.StaleConclusionRef(
                 ref=ref.ref,
                 understanding_version=ref.understanding_version,
                 state=m.SupportState.CURRENT,
             )
-        status = m.SurfaceStatus(surface=KEY, stale=1, stale_refs=(ref,))
+        status = m.SurfaceStatus(
+            subject=m.SurfaceStatusSubject(KEY),
+            unexamined=0,
+            unexamined_limited=False,
+            stale=1,
+            stale_refs=(ref,),
+        )
         self.assertEqual(status.stale_refs, (ref,))
 
     def test_status_unavailability_has_reason_and_roundtrips(self):
@@ -122,11 +157,25 @@ class SurfaceCarrierTest(unittest.TestCase):
             m.SurfaceStatusUnavailable("")
 
     def test_status_counts_are_non_negative(self) -> None:
-        m.SurfaceStatus(surface=KEY)
+        m.SurfaceStatus(
+            subject=m.SurfaceStatusSubject(KEY),
+            unexamined=0,
+            unexamined_limited=False,
+        )
         with self.assertRaises(ValueError):
-            m.SurfaceStatus(surface=KEY, stale=-1)
+            m.SurfaceStatus(
+                subject=m.SurfaceStatusSubject(KEY),
+                unexamined=0,
+                unexamined_limited=False,
+                stale=-1,
+            )
         with self.assertRaises(ValueError):
-            m.SurfaceStatus(surface=KEY, current=True)
+            m.SurfaceStatus(
+                subject=m.SurfaceStatusSubject(KEY),
+                unexamined=0,
+                unexamined_limited=False,
+                current=True,
+            )
 
 
 class AnswerCarrierTest(unittest.TestCase):

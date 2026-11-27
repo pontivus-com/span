@@ -3414,7 +3414,7 @@ class LifecycleServiceTest(unittest.TestCase):
             return_value=("src/a.py", "src/unexamined.py"),
         ):
             status = compose_surface_status(
-                service_key,
+                m.SurfaceStatusSubject(service_key),
                 store=self.store,
                 support=self.support,
                 evidence=self.evidence_service,
@@ -3431,14 +3431,18 @@ class LifecycleServiceTest(unittest.TestCase):
             self.assertIsInstance(answer_result, m.Answer)
             self.assertEqual(answer_result.status.unexamined, 0)
         unrelated = compose_surface_status(
-            m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/unexamined.py"),
+            m.SurfaceStatusSubject(
+                m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/unexamined.py")
+            ),
             store=self.store,
             support=self.support,
             evidence=self.evidence_service,
         )
         self.assertEqual(unrelated.unexamined, 1)
         covered = compose_surface_status(
-            m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/a.py"),
+            m.SurfaceStatusSubject(
+                m.SurfaceKey("repo-1", m.SurfaceKind.FILE, "src/a.py")
+            ),
             store=self.store,
             support=self.support,
             evidence=self.evidence_service,

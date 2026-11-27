@@ -6,9 +6,12 @@ from span.core import containment, model as m
 
 
 def status_distribution(
-    surface: m.SurfaceKey,
+    subject: m.StatusSubject,
     evaluations: tuple[m.UnderstandingSupport, ...],
     curated: frozenset[m.ConclusionRevisionRef],
+    *,
+    coverage: tuple[int, bool] | None = None,
+    descendants: tuple[m.SurfaceStatusSummary, ...] = (),
 ) -> m.SurfaceStatus:
     current = 0
     pending: list[m.PendingConclusionRef] = []
@@ -27,13 +30,30 @@ def status_distribution(
                     m.PendingConclusionRef(conclusion.ref, qualification.version)
                 )
     return m.SurfaceStatus(
-        surface=surface,
+        subject=subject,
         current=current,
         pending=len(pending),
         pending_refs=tuple(pending),
         stale=len(stale),
         stale_refs=tuple(stale),
         unassessed=sum(not item.conclusions for item in evaluations),
+        unexamined=None if coverage is None else coverage[0],
+        unexamined_limited=None if coverage is None else coverage[1],
+        descendants=descendants,
+    )
+
+
+def summarize_surface(status: m.SurfaceStatus) -> m.SurfaceStatusSummary:
+    if status.unexamined is None or status.unexamined_limited is None:
+        raise ValueError("only an ordinary surface has a child summary")
+    return m.SurfaceStatusSummary(
+        surface=status.subject.surface,
+        current=status.current,
+        pending=status.pending,
+        stale=status.stale,
+        unassessed=status.unassessed,
+        unexamined=status.unexamined,
+        unexamined_limited=status.unexamined_limited,
     )
 
 

@@ -160,8 +160,19 @@ class AnswerService:
             understandings = tuple(
                 item for item in understandings if item.question == selected_question
             )
+        subject: m.StatusSubject
+        if selected_understanding is not None:
+            subject = m.UnderstandingStatusSubject(
+                surface,
+                selected_understanding.understanding_id,
+                selected_understanding.current_version,
+            )
+        elif selected_question is not None:
+            subject = m.QuestionStatusSubject(surface, selected_question)
+        else:
+            subject = m.SurfaceStatusSubject(surface)
         status = compose_surface_status(
-            surface,
+            subject,
             store=self._store,
             support=self._support,
             evidence=self._evidence,

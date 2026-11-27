@@ -14,6 +14,7 @@ from dataclasses import field as _field
 from span.core.schema import constraints as _constraints
 from span.core.model.primitives import (
     ConclusionRevisionRef,
+    UnderstandingId,
     UnderstandingVersionNumber,
     _require_non_empty,
 )
@@ -157,30 +158,88 @@ class StaleConclusionRef:
 
 
 @_dataclass(frozen=True)
-class SurfaceStatus:
-    """The reported distribution over one surface (L2 surface status)."""
+class SurfaceStatusSubject:
+    surface: SurfaceKey
+
+
+@_dataclass(frozen=True)
+class QuestionStatusSubject:
+    surface: SurfaceKey
+    question: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("status question", self.question)
+
+
+@_dataclass(frozen=True)
+class UnderstandingStatusSubject:
+    surface: SurfaceKey
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+
+
+StatusSubject = _typing.Union[
+    SurfaceStatusSubject, QuestionStatusSubject, UnderstandingStatusSubject
+]
+
+
+@_dataclass(frozen=True)
+class SurfaceStatusSummary:
+    """One immediate child's distribution; exact refs are obtained at its owner."""
 
     surface: SurfaceKey
+    current: int
+    pending: int
+    stale: int
+    unassessed: int
+    unexamined: int
+    unexamined_limited: bool
+
+    def __post_init__(self) -> None:
+        _validate_counts(
+            self.current, self.pending, self.stale, self.unassessed, self.unexamined
+        )
+
+
+def _validate_counts(*values: int) -> None:
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for value in values
+    ):
+        raise ValueError("status counts must be non-negative integers")
+
+
+@_dataclass(frozen=True)
+class SurfaceStatus:
+    """The distribution over exactly the selected semantic population (FD-28)."""
+
+    subject: StatusSubject
     current: int = 0
     pending: int = 0
     pending_refs: tuple[PendingConclusionRef, ...] = ()
     stale: int = 0
     stale_refs: tuple[StaleConclusionRef, ...] = ()
     unassessed: int = 0
-    unexamined: int = 0
-    unexamined_limited: bool = False
-    descendants: tuple[SurfaceStatus, ...] = ()
+    unexamined: int | None = None
+    unexamined_limited: bool | None = None
+    descendants: tuple[SurfaceStatusSummary, ...] = ()
+
+    @property
+    def surface(self) -> SurfaceKey:
+        return self.subject.surface
 
     def __post_init__(self) -> None:
-        for name, value in (
-            ("current", self.current),
-            ("pending", self.pending),
-            ("stale", self.stale),
-            ("unassessed", self.unassessed),
-            ("unexamined", self.unexamined),
+        _validate_counts(self.current, self.pending, self.stale, self.unassessed)
+        if isinstance(self.subject, SurfaceStatusSubject):
+            if self.unexamined is None or self.unexamined_limited is None:
+                raise ValueError("ordinary surface status requires boundary coverage")
+            _validate_counts(self.unexamined)
+        elif (
+            self.unexamined is not None
+            or self.unexamined_limited is not None
+            or self.descendants
         ):
-            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise ValueError(f"SurfaceStatus.{name} must be a non-negative int")
+            raise ValueError("exact membership status has no boundary coverage")
         if len(self.pending_refs) != self.pending:
             raise ValueError(
                 "SurfaceStatus.pending_refs must name every and only pending conclusion"
@@ -189,6 +248,16 @@ class SurfaceStatus:
             raise ValueError(
                 "SurfaceStatus.stale_refs must name every and only stale conclusion"
             )
+        refs = tuple(item.ref for item in self.pending_refs + self.stale_refs)
+        if len(set(refs)) != len(refs):
+            raise ValueError("status revision references must be unique")
+        if isinstance(self.subject, UnderstandingStatusSubject):
+            for item in self.pending_refs + self.stale_refs:
+                if (
+                    item.ref.understanding_id != self.subject.understanding_id
+                    or item.understanding_version != self.subject.version
+                ):
+                    raise ValueError("status reference is outside selected version")
 
 
 @_dataclass(frozen=True)

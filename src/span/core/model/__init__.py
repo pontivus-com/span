@@ -314,6 +314,11 @@ from span.core.model.surfaces import (  # noqa: F401
     SurfaceKind,
     SurfaceReference,
     SurfaceStatus,
+    SurfaceStatusSubject,
+    QuestionStatusSubject,
+    UnderstandingStatusSubject,
+    StatusSubject,
+    SurfaceStatusSummary,
     SurfaceStatusUnavailable,
 )
 from span.core.model.answers import (  # noqa: F401
@@ -614,6 +619,11 @@ __all__ = [
     "SurfaceKind",
     "SurfaceReference",
     "SurfaceStatus",
+    "SurfaceStatusSubject",
+    "QuestionStatusSubject",
+    "UnderstandingStatusSubject",
+    "StatusSubject",
+    "SurfaceStatusSummary",
     "SurfaceStatusUnavailable",
     "PendingConclusionRef",
     "StaleConclusionRef",

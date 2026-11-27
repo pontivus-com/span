@@ -847,7 +847,7 @@ class LifecycleService:
             owner = self._store.get_understanding(understanding_id).surface
             status: m.SurfaceStatus | m.SurfaceStatusUnavailable = (
                 compose_surface_status(
-                    owner,
+                    m.SurfaceStatusSubject(owner),
                     store=self._store,
                     support=self._support,
                     evidence=self._evidence,
