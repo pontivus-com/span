@@ -454,6 +454,31 @@ The longest function is 131 lines, below the existing 141-line ceiling.
 The temporary diagnostic workflow is removed before final full CI. Simulated
 host catalogue observations do not establish live authenticated delivery.
 
+Closeout review of `6d66e89ad222`: [CI 45935891140](https://github.com/pontivus-com/span/actions/runs/45935891140)
+passed 1,035 tests with 2 failed acceptance-matrix checks (FA-73–75 were
+unmapped and the ordinal assertion stopped at FA-72). It did not establish
+acceptance. Review findings F01–F12 also identified inconsistent exact-build
+proof, unproven host reachability, private administrative diagnostics and lost
+public coordinates. The follow-up retains the initial requested identity until
+receipt publication, requires identical installed sources without obsolete
+files, reports catalogue uncertainty rather than live readiness, uses existing
+typed rejection/public finding owners, and retains public document coordinates.
+The matrix now requires all 75 cases with live executable references. The
+prior discriminator test now requires rejection plus file/item coordinates and
+exclusion of internal type names; its rejection contract is not relaxed.
+
+[Diagnostic 45943190670](https://github.com/pontivus-com/span/actions/runs/45943190670)
+passed 196 focused tests, 41 subtests, 15 host tests, Ruff and zero-error
+typing on `aab049f3426b`. Test lines measured 35,221; the added authority
+provider diagnostic regression contributes 21 lines, for a candidate
+ratchet of 35,242 (+102 over 35,140).
+All other architectural ceilings remain unchanged; longest function measured
+131 lines. Final CI must establish the exact candidate and confirm the
+measured ratchet. The temporary workflow is removed. The adapter cannot
+attest a live authenticated connection from catalogue names; native delivery
+evidence remains OPEN. Exhaustive operator-output and recovery-boundary
+acceptance, independent review and DCO sign-off remain OPEN.
+
 ### S-FIELD-04 — Exact-candidate regression and acceptance closeout
 
 **Status:** OPEN. Depends on S-FIELD-01–03 and S-FIELD-05–07.

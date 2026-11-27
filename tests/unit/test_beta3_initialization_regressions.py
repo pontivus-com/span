@@ -75,6 +75,27 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                     self.assertNotIn(expected_type, message)
                     self.assertNotIn("$type", message)
 
+    def test_authority_provider_failure_keeps_public_locator_not_diagnostics(self):
+        from span.shell.install.preflight import validate_authority_files
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp) / "repo-a"
+            repo.mkdir()
+            with (
+                mock.patch(
+                    "span.shell.filesystem_evidence.FilesystemEvidenceSource.read_exact",
+                    side_effect=OSError("PRIVATE_DIAGNOSTIC_SENTINEL"),
+                ),
+                self.assertRaises(SystemExit) as caught,
+            ):
+                validate_authority_files(
+                    (repo,), {}, {"repo-a": (self._binding(),)}
+                )
+            message = str(caught.exception)
+            self.assertIn("repo-a/docs/authority.md", message)
+            self.assertIn("restore access and retry", message)
+            self.assertNotIn("PRIVATE_DIAGNOSTIC_SENTINEL", message)
+
     def test_repository_qualified_authority_file_grammar(self):
         args = install.parse_args(
             [
