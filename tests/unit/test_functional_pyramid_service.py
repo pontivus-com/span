@@ -6,7 +6,6 @@ import datetime
 import unittest
 from unittest import mock
 
-from span.core import containment
 from span.core import model as m
 from span.core.recording import RecordingConflict, RecordingValidationError
 from span.ports.functional_pyramid import (
@@ -16,6 +15,7 @@ from span.ports.functional_pyramid import (
 from span.ports.structural import StaleContinuationError
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY, encoded_size
 from span.service.functional_pyramid import FunctionalPyramidService
+from span.shell.filesystem_evidence import FilesystemRegisteredRoots
 
 
 def _ref(repository_id: str, locator: str) -> m.EvidenceRef:
@@ -137,11 +137,6 @@ class _Declarations:
     ) -> tuple[m.EvidenceRef, m.FunctionalPyramidBootstrap] | None:
         del repository_id
         return self.bootstrap
-
-    def directory_owner(self, repository_id: str, directory: str) -> tuple[str, str]:
-        root = self.roots[repository_id]
-        target = root if directory == "." else f"{root}/{directory}"
-        return containment.registered_path_owner(self.roots, target)
 
     def directory_exists(self, repository_id: str, directory: str) -> bool:
         return directory in self.directories.get(repository_id, set())
@@ -285,7 +280,10 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             declarations=self.declarations,
             authority=_Authority(),
             state=self.state,
-            registered_repository_ids=lambda: ("repo-a", "repo-b"),
+            registered_roots=FilesystemRegisteredRoots(
+                self.declarations.roots.__getitem__,
+                lambda: tuple(sorted(self.declarations.roots)),
+            ),
             repository_paths=lambda repository_ids: tuple(
                 (repository_id, f"/stores/{repository_id}.db")
                 for repository_id in sorted(repository_ids)

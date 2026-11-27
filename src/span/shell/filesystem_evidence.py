@@ -17,7 +17,9 @@ import datetime as _datetime
 import os as _os
 import pathlib as _pathlib
 import posixpath as _posixpath
+import typing as _typing
 
+from span.core import containment
 from span.core import model as m
 from span.shell.evidence_source import EvidenceSourceBase
 
@@ -34,6 +36,34 @@ def is_probably_text(path: _pathlib.Path) -> bool:
             return b"\x00" not in handle.read(_PROBE_BYTES)
     except OSError:
         return False
+
+
+class FilesystemRegisteredRoots:
+    """Resolve filesystem facts against the installation's existing registry."""
+
+    def __init__(
+        self,
+        repository_root: _typing.Callable[[str], str],
+        registered_repository_ids: _typing.Callable[[], tuple[str, ...]],
+    ) -> None:
+        self._repository_root = repository_root
+        self._registered_repository_ids = registered_repository_ids
+
+    def repository_ids(self) -> tuple[str, ...]:
+        return self._registered_repository_ids()
+
+    def root(self, repository_id: str) -> str:
+        return str(_pathlib.Path(self._repository_root(repository_id)).resolve())
+
+    def resolve(self, repository_id: str, path: str) -> tuple[str, str]:
+        roots = {identity: self.root(identity) for identity in self.repository_ids()}
+        if repository_id not in roots:
+            raise ValueError("unknown registered repository")
+        origin = _pathlib.Path(roots[repository_id])
+        selected = (origin / path).resolve()
+        if not selected.is_relative_to(origin):
+            raise ValueError("path is outside its requested repository")
+        return containment.registered_path_owner(roots, str(selected))
 
 
 class FilesystemEvidenceSource(EvidenceSourceBase):

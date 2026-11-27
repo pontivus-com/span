@@ -22,6 +22,7 @@ from span.core.recording import (
     receipt_content_decision,
 )
 from span.core.rejection import RejectionCauseKind
+from span.ports.evidence import RegisteredRepositoryRoots
 from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidDeclarationPort,
@@ -251,7 +252,7 @@ class FunctionalPyramidService:
         declarations: FunctionalPyramidDeclarationPort,
         authority: LifecycleAuthorityResolver,
         state: FunctionalPyramidStatePort | None = None,
-        registered_repository_ids: _typing.Callable[[], tuple[str, ...]] | None = None,
+        registered_roots: RegisteredRepositoryRoots | None = None,
         repository_paths: _RepositoryPaths | None = None,
         repository_runtime: (
             _typing.Callable[[str], FunctionalPyramidRepositoryRuntime] | None
@@ -264,7 +265,7 @@ class FunctionalPyramidService:
         self._declarations = declarations
         self._authority = authority
         self._state = state
-        self._registered_repository_ids = registered_repository_ids
+        self._registered_roots = registered_roots
         self._repository_paths = repository_paths
         self._repository_runtime = repository_runtime
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
@@ -275,10 +276,13 @@ class FunctionalPyramidService:
             raise ValueError("Functional Pyramid state service is not configured")
         return self._state
 
-    def _registered(self) -> frozenset[str]:
-        if self._registered_repository_ids is None:
+    def _roots(self) -> RegisteredRepositoryRoots:
+        if self._registered_roots is None:
             raise ValueError("Functional Pyramid repository registry is not configured")
-        return frozenset(self._registered_repository_ids())
+        return self._registered_roots
+
+    def _registered(self) -> frozenset[str]:
+        return frozenset(self._roots().repository_ids())
 
     def registered_repository_ids(self) -> tuple[str, ...]:
         """Return the exact installation registry used by Functional Pyramid state."""
@@ -410,7 +414,7 @@ class FunctionalPyramidService:
     ):
         """Resolve one exact repository-relative directory through current state."""
         try:
-            owner, directory = self._declarations.directory_owner(
+            owner, directory = self._roots().resolve(
                 selector.repository_id, selector.directory
             )
         except ValueError as exc:

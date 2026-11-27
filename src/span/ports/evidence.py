@@ -22,6 +22,16 @@ from span.core.model import (
 )
 
 
+class RegisteredRepositoryRoots(_typing.Protocol):
+    """Registered root facts and canonical path ownership, without store access."""
+
+    def repository_ids(self) -> tuple[str, ...]: ...
+
+    def root(self, repository_id: str) -> str: ...
+
+    def resolve(self, repository_id: str, path: str) -> tuple[str, str]: ...
+
+
 @_typing.runtime_checkable
 class EvidenceSource(_typing.Protocol):
     def inventory_evidence(

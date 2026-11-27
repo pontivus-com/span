@@ -47,10 +47,6 @@ class FunctionalPyramidDeclarationPort(_typing.Protocol):
         """Return the conventional bootstrap, or None when it is absent."""
         ...
 
-    def directory_owner(self, repository_id: str, directory: str) -> tuple[str, str]:
-        """Resolve a requested directory against registered repository roots."""
-        ...
-
     def directory_exists(self, repository_id: str, directory: str) -> bool:
         """Whether one canonical repository-relative directory currently exists."""
         ...

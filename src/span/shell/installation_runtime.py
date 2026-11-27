@@ -13,6 +13,7 @@ from span.shell.context import (
     compose_context,
     open_repository_runtime,
 )
+from span.shell.filesystem_evidence import FilesystemRegisteredRoots
 from span.shell.functional_pyramid import open_functional_pyramid_service
 from span.shell.mcp import ServiceContext
 from span.shell.sqlite_store.lifecycle import LifecycleStoreError
@@ -34,7 +35,10 @@ class InstallationRuntime:
     ) -> None:
         self._data_dir = _pathlib.Path(data_dir)
         self._repository_locator = repository_locator
-        self._registered_repository_ids = registered_repository_ids
+        self.registered_roots = FilesystemRegisteredRoots(
+            lambda identity: canonical_root_from_config(repository_locator(identity)),
+            registered_repository_ids,
+        )
         self._policy = policy
         self._runtimes: dict[str, RepositoryRuntime] = {}
         self._contexts: dict[str, ServiceContext] = {}
@@ -116,10 +120,7 @@ def open_installation_runtime(
         with open_functional_pyramid_service(
             data_dir,
             repository_runtime=runtime.repository_runtime,
-            repository_root=lambda identity: canonical_root_from_config(
-                repository_locator(identity)
-            ),
-            registered_repository_ids=registered_repository_ids,
+            registered_roots=runtime.registered_roots,
             policy=policy,
         ) as functional_pyramid:
             runtime.bind_functional_pyramid(functional_pyramid)
