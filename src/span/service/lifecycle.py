@@ -226,7 +226,10 @@ class LifecycleService:
             raise RecordingValidationError(
                 "only a service or domain surface has a mutable boundary"
             )
-        if wire.action is m.SurfaceAction.UPDATE and self._store.find_surface(surface.key) is None:
+        if (
+            wire.action is m.SurfaceAction.UPDATE
+            and self._store.find_surface(surface.key) is None
+        ):
             raise RecordingValidationError(
                 f"unknown surface: {surface.key.locator}",
                 public_identity=surface.key.locator,
@@ -235,7 +238,9 @@ class LifecycleService:
         try:
             receipt = self._store.record_surface(
                 m.RecordingKey(wire.bound_repository_id, m.RequestId(wire.request_id)),
-                digest, surface, wire.action,
+                digest,
+                surface,
+                wire.action,
                 expected_boundary_version=wire.expected_boundary_version,
             )
             return self._accepted_surface(receipt)
@@ -252,20 +257,27 @@ class LifecycleService:
             receipt.key.repository_id, receipt.key.request_id.value
         )
 
-    def _accepted_unavailable(self, receipt: m.RecordReceipt) -> m.AcceptedDetailUnavailable:
+    def _accepted_unavailable(
+        self, receipt: m.RecordReceipt
+    ) -> m.AcceptedDetailUnavailable:
         return m.AcceptedDetailUnavailable(
             self._receipt_selector(receipt),
             receipt.committed_at,
             m.unavailable_acceptance(receipt),
         )
 
-    def _accepted_surface(self, receipt: m.RecordReceipt) -> m.SurfaceDeclared | m.AcceptedDetailUnavailable:
+    def _accepted_surface(
+        self, receipt: m.RecordReceipt
+    ) -> m.SurfaceDeclared | m.AcceptedDetailUnavailable:
         effect = receipt.accepted_effect
         if not isinstance(effect, m.AcceptedSurfaceEffect):
             return self._accepted_unavailable(receipt)
         return m.SurfaceDeclared(
-            self._receipt_selector(receipt), receipt.committed_at,
-            effect.action, effect.surface, effect.boundary_version,
+            self._receipt_selector(receipt),
+            receipt.committed_at,
+            effect.action,
+            effect.surface,
+            effect.boundary_version,
         )
 
     def _flat_conclusion(
@@ -808,7 +820,9 @@ class LifecycleService:
         try:
             owner = self._store.get_understanding(effect.understanding_id.value).surface
             dispositions = accepted_dispositions(self._store, effect)
-            surfaces, contexts = self._effects.retained_effects(effect.dependent_effects)
+            surfaces, contexts = self._effects.retained_effects(
+                effect.dependent_effects
+            )
         except (OSError, RecordingValidationError) + self._store.operational_errors:
             return self._accepted_unavailable(receipt)
         return m.UnderstandingRecorded(
@@ -835,7 +849,9 @@ class LifecycleService:
                     self._support.evaluate_revision(effect.ref)
                 )
             except (OSError,) + self._store.operational_errors:
-                qualification = m.SupportUnavailable("revision support evaluation is unavailable")
+                qualification = m.SupportUnavailable(
+                    "revision support evaluation is unavailable"
+                )
         return m.RecordedRevisionEffect(effect, qualification)
 
     def qualify_verification(

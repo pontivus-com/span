@@ -13,7 +13,11 @@ from span.core.model.primitives import (
 )
 from span.core.model.effects import ChangedSurface
 from span.core.model.investigation import InvestigationContextRef
-from span.core.model.recording import AcceptedRevisionEffect, RecordReceipt, RevisionEffectAction
+from span.core.model.recording import (
+    AcceptedRevisionEffect,
+    RecordReceipt,
+    RevisionEffectAction,
+)
 from span.core.model.support import (
     SupportUnavailable,
     SupportQualification,

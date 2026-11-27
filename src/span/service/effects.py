@@ -153,7 +153,9 @@ class DependencyEffectService:
         self, effects: m.AcceptedDependencyEffects
     ) -> tuple[tuple[m.ChangedSurface, ...], tuple[m.InvestigationContextRef, ...]]:
         """Project the original immutable coordinates, never rediscover the set."""
-        affected: dict[m.SurfaceKey, list[m.ChangedConclusion | m.EffectDisposition]] = {}
+        affected: dict[
+            m.SurfaceKey, list[m.ChangedConclusion | m.EffectDisposition]
+        ] = {}
         for effect in effects.effects:
             affected.setdefault(effect.surface, []).append(
                 self._retained_effect(effect)
@@ -161,10 +163,16 @@ class DependencyEffectService:
         surfaces = tuple(
             m.ChangedSurface(
                 surface=surface,
-                reasons=tuple(sorted(
-                    {reason for item in affected[surface] for reason in item.reasons},
-                    key=lambda reason: reason.value,
-                )),
+                reasons=tuple(
+                    sorted(
+                        {
+                            reason
+                            for item in affected[surface]
+                            for reason in item.reasons
+                        },
+                        key=lambda reason: reason.value,
+                    )
+                ),
                 conclusions=tuple(affected[surface]),
             )
             for surface in containment.order_surfaces(affected)
@@ -183,20 +191,34 @@ class DependencyEffectService:
         try:
             understanding = store.get_understanding(ref.understanding_id.value)
             if understanding.surface != effect.surface:
-                return self._unavailable_effect(effect, "accepted surface cannot be verified")
-            current = store.get_version(ref.understanding_id.value, understanding.current_version.value)
+                return self._unavailable_effect(
+                    effect, "accepted surface cannot be verified"
+                )
+            current = store.get_version(
+                ref.understanding_id.value, understanding.current_version.value
+            )
             successor = _support_rules.retained_successor(
-                ref, current.conclusions,
-                store.accepted_understanding_effects(ref.understanding_id)
-                if not any(item.conclusion_id == ref.conclusion_id for item in current.conclusions)
-                else (),
+                ref,
+                current.conclusions,
+                (
+                    store.accepted_understanding_effects(ref.understanding_id)
+                    if not any(
+                        item.conclusion_id == ref.conclusion_id
+                        for item in current.conclusions
+                    )
+                    else ()
+                ),
             )
             if successor is None:
-                return self._unavailable_effect(effect, "accepted successor cannot be verified")
+                return self._unavailable_effect(
+                    effect, "accepted successor cannot be verified"
+                )
             revision = self._conclusion_revision(successor, owner)
             if isinstance(revision.content, m.WithdrawnConclusion):
                 return m.EffectDisposition(
-                    ref, effect.reasons, m.EffectDispositionState.WITHDRAWN,
+                    ref,
+                    effect.reasons,
+                    m.EffectDispositionState.WITHDRAWN,
                     f"recorded withdrawal {successor.label}",
                 )
             support = self._support_state(successor, owner)
@@ -206,7 +228,9 @@ class DependencyEffectService:
                     and support.state is m.SupportState.CURRENT
                 ):
                     return m.EffectDisposition(
-                        ref, effect.reasons, m.EffectDispositionState.SUPERSEDED,
+                        ref,
+                        effect.reasons,
+                        m.EffectDispositionState.SUPERSEDED,
                         f"verified successor {successor.label}",
                     )
                 return self._unavailable_effect(
@@ -217,12 +241,17 @@ class DependencyEffectService:
                 and support.state is m.SupportState.CURRENT
             ):
                 return m.EffectDisposition(
-                    ref, effect.reasons, m.EffectDispositionState.CURRENT,
-                    "pinned revision has verified current support", support=support,
+                    ref,
+                    effect.reasons,
+                    m.EffectDispositionState.CURRENT,
+                    "pinned revision has verified current support",
+                    support=support,
                 )
             return m.ChangedConclusion(ref, current.version, effect.reasons, support)
         except (OSError, RecordingValidationError) + store.operational_errors:
-            return self._unavailable_effect(effect, "retained effect detail is unavailable")
+            return self._unavailable_effect(
+                effect, "retained effect detail is unavailable"
+            )
 
     @staticmethod
     def _unavailable_effect(
@@ -632,7 +661,9 @@ class DependencyEffectService:
         for surface in surfaces:
             repository_id = surface.surface.repository_id
             for conclusion in surface.conclusions:
-                if isinstance(conclusion, m.ChangedConclusion) and self._is_actionable(conclusion):
+                if isinstance(conclusion, m.ChangedConclusion) and self._is_actionable(
+                    conclusion
+                ):
                     actionable.setdefault(repository_id, []).append(conclusion)
 
         pending: list[tuple[str, ContextBinding, tuple[str, ...], tuple[str, ...]]] = []
@@ -766,7 +797,9 @@ class DependencyEffectService:
         repository_id: str | None = None,
     ) -> m.ConclusionRevision:
         store = self._store_for_repository(
-            repository_id if repository_id is not None else self._repository_for_ref(ref)
+            repository_id
+            if repository_id is not None
+            else self._repository_for_ref(ref)
         )
         for revision in store.get_conclusions(ref.understanding_id.value):
             if (

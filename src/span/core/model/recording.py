@@ -195,7 +195,9 @@ class AcceptedChallengeOpeningEffect:
             ref.understanding_id != self.understanding_id
             for ref in self.target_conclusions
         ):
-            raise ValueError("accepted challenge opening crosses understanding identity")
+            raise ValueError(
+                "accepted challenge opening crosses understanding identity"
+            )
 
 
 @_dataclass(frozen=True)

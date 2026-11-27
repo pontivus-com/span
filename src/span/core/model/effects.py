@@ -79,5 +79,3 @@ class ChangedSurface:
             raise ValueError("ChangedSurface requires at least one reason")
         if len(set(self.reasons)) != len(self.reasons):
             raise ValueError("ChangedSurface reasons must be distinct")
-
-

@@ -399,10 +399,16 @@ class LifecycleStore:
     ) -> m.Surface:
         """Apply one compare-and-set boundary update, preserving history."""
         with _transaction(self._connection) as connection:
-            return self._update_surface_in(connection, surface, expected_boundary_version=expected_boundary_version)
+            return self._update_surface_in(
+                connection, surface, expected_boundary_version=expected_boundary_version
+            )
 
     def _update_surface_in(
-        self, connection: _sqlite3.Connection, surface: m.Surface, *, expected_boundary_version: int
+        self,
+        connection: _sqlite3.Connection,
+        surface: m.Surface,
+        *,
+        expected_boundary_version: int,
     ) -> m.Surface:
         key = surface.key
         row = connection.execute(
@@ -476,13 +482,18 @@ class LifecycleStore:
                 accepted = self._put_surface_in(connection, surface)
             else:
                 if expected_boundary_version is None:
-                    raise RecordingValidationError("surface update requires expected version")
+                    raise RecordingValidationError(
+                        "surface update requires expected version"
+                    )
                 accepted = self._update_surface_in(
-                    connection, surface,
+                    connection,
+                    surface,
                     expected_boundary_version=expected_boundary_version,
                 )
             receipt = build_receipt(
-                key, digest, now,
+                key,
+                digest,
+                now,
                 effect=m.AcceptedSurfaceEffect(
                     action, accepted.key, accepted.boundary_version
                 ),
@@ -985,7 +996,9 @@ class LifecycleStore:
                 m.RecordReceipt, _json.loads(row["canonical_json"])
             )
             if not isinstance(receipt.accepted_effect, m.AcceptedUnderstandingEffect):
-                raise LifecycleStoreInvariantError("accepted effect index disagrees with receipt")
+                raise LifecycleStoreInvariantError(
+                    "accepted effect index disagrees with receipt"
+                )
             effects.append(receipt.accepted_effect)
         return tuple(effects)
 

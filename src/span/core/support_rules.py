@@ -77,7 +77,8 @@ def retained_successor(
         visited.add(selected.conclusion_id)
         current = next(
             (
-                item for item in membership
+                item
+                for item in membership
                 if item.understanding_id == selected.understanding_id
                 and item.conclusion_id == selected.conclusion_id
                 and item.revision.value >= selected.revision.value
