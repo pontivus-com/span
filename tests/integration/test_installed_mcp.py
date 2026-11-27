@@ -426,9 +426,7 @@ dispose();
         repo_a: _pathlib.Path,
         repo_b: _pathlib.Path,
         data_dir: _pathlib.Path,
-        *,
-        governed: bool = True,
-    ) -> tuple[str, list[str], dict[str, str]]:
+    ) -> tuple[str, list[str], list[str], dict[str, str]]:
         """Use the same sole installer entry for ordinary and governed setup."""
         self.assertFalse(data_dir.exists())
         runtime_root = data_dir.parent / (data_dir.name + "-runtime")
@@ -470,7 +468,7 @@ dispose();
             str(repo_b / "docs/classification.json"),
         ]
         runtime_exe = venv_dir / "bin" / "span-mcp"
-        return str(runtime_exe), command if governed else ordinary, env
+        return str(runtime_exe), ordinary, command, env
 
     def _install_governed_runtime(
         self,
@@ -480,10 +478,10 @@ dispose();
         *,
         governed: bool = True,
     ) -> tuple[str, list[str], dict[str, str]]:
-        runtime_exe, command, env = self._governed_runtime_command(
-            repo_a, repo_b, data_dir, governed=governed
+        runtime_exe, ordinary, command, env = self._governed_runtime_command(
+            repo_a, repo_b, data_dir
         )
-        self._execute_installer(command, env)
+        self._execute_installer(command if governed else ordinary, env)
         self.assertTrue(_pathlib.Path(runtime_exe).is_file())
         self.assertTrue((data_dir / f"{repo_a.name}.db").is_file())
         self.assertTrue((data_dir / f"{repo_b.name}.db").is_file())
@@ -642,7 +640,7 @@ dispose();
                     repo.mkdir(parents=True)
                     _write_files(repo, files)
                 data_dir = root / "data"
-                _, command, env = self._governed_runtime_command(
+                _, _, command, env = self._governed_runtime_command(
                     repo_a, repo_b, data_dir
                 )
                 receipt_path = data_dir / "install.json"
