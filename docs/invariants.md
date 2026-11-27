@@ -30,6 +30,16 @@ that bypass `InstallationRuntime`.
 These are executable consequences of the canonical L0–L4 requirements; this
 document does not add a second Functional Pyramid contract.
 
+**Beta-5 public-boundary amendment (OPEN).** TD §9.2 and the existing
+[implementation plan §3B](implementation-plans/functional-pyramid-governance-implementation-plan.md#3b-public-lifecycle-boundary-remediation--2026-11-27)
+own the PUB architectural construction and task gates. Extend the existing
+I-01/I-02/I-04/I-07/I-13/I-15/I-16/I-18/I-21/I-28/I-39/I-40–I-48 enforcement
+at their current test/review boundaries; preserve every existing invariant.
+The new continuation, routing, migration and accepted-effect obligations are
+not certified by prior tests. Add actual test names and code-review evidence
+at the owning task and reconcile this matrix in PUB-09/10. No new ordinal or
+claimed passing test is introduced here.
+
 The reopened T14 hook review strengthened FD-58/FD-94 and the corresponding
 hook invariants. I-28 now names live complete-input, canonical-preview,
 composed-entry, native Codex and Claude Code translation and deployed

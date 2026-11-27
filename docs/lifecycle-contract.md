@@ -230,8 +230,9 @@ scope after registered-root addressing. The context names the canonical owner. W
 Answer/Gap classification plus one canonical `EvidenceAdmissionView` shared by
 both result kinds. Its fields are `context: InvestigationContextRef`,
 `outcomes: tuple[EvidenceAdmissionOutcome, ...]`,
-`deliveries: tuple[EvidenceDelivery, ...]`, `continuation: str | None`,
-`omitted: tuple[str, ...]`, and `truncated: bool`. It reuses the existing evidence request/outcome,
+`deliveries: tuple[EvidenceDelivery, ...]`. The enclosing Answer/Gap owns
+all selection, continuation and omission metadata (§4.1), not the nested
+admission view. It reuses the existing evidence request/outcome,
 source-observation and range owners; it does not define parallel source-copy or
 range shapes. `EvidenceDelivery` has exactly `observation_id: SourceObservationId`
 and `unit: EvidenceUnit`. The unit carries the existing EvidenceRef, content,
@@ -300,6 +301,7 @@ binds the collection to its item type and allowed parent; no untyped item.
 | conclusions, group_conclusions | ConclusionView |
 | gaps | RecordedQuestionGap |
 | historical | HistoricalConclusion |
+| changed_evidence | EvidenceRef |
 | references, missing | str |
 | source_pointers | EvidenceRequest |
 | pending_refs, stale_refs | PendingConclusionRef, StaleConclusionRef respectively |
@@ -364,11 +366,17 @@ same page across restart. Changed state rejects stale continuation with the
 original exact obtain recovery. Evidence admission binds ordered outcomes and
 observation/range delivery; later context additions cannot alter it. Source
 drift invalidates delivery. Complete affected sets are fixed before Changed
-or accepted-write delivery; recovery re-qualifies only pinned refs. An
-affected revision has one immutable position under its original surface;
-ChangedConclusion or EffectDisposition occupies that same position, even
-when its state changes. Refresh expired contexts for remaining actionable
-refs; never shift later positions into another collection. No new write, silent rescan or lost obligation.
+or accepted-write delivery. Resume re-qualifies only pinned refs. An affected
+revision retains its original surface/ref position, whether represented by a
+ChangedConclusion or EffectDisposition. Live state changes may change nested
+findings and encoded page boundaries: never continue from an offset into a
+changed nested collection. Return a typed stale-continuation Rejected with an
+opaque `restart_continuation: str` addressing the beginning of the same pinned
+selection at its new evaluated state. The client replaces the old delivered
+prefix, not appends to it. No new changed-scope discovery, write or receipt
+is required. Refresh expired contexts only for still-actionable refs.
+Use this restart rule for any state change affecting a live effect page,
+including owner/context change; preserve the immutable accepted set. No new write, silent rescan or lost obligation.
 
 Pure reads expire after existing context lifetime; evidence admission expires
 with its context. Accepted-effect and completed reconsider selections remain
@@ -689,7 +697,12 @@ version: UnderstandingVersionNumber}. It carries
 `descendants: tuple[SurfaceStatusSummary, ...]`. `SurfaceStatusSummary` carries
 `surface`, `current`, `pending`, `stale`, `unassessed`, `unexamined`,
 `unexamined_limited` and no nested refs or descendants. The enclosing result
-page owns omission and continuation. A count is never the length of a page. L1/L9 refer to this explicitly
+page owns omission and continuation. The complete distribution requires
+exact unique pending/stale refs matching its counts; a delivered prefix
+may be shorter only with a bound continuation and explicit omission of
+those collections. Every delivered ref belongs to the selected population;
+completion across pages restores the exact count/ref equality. A count is
+never the length of a page. L1/L9 refer to this explicitly
 selected population, not a broader surface when a question/understanding
 was requested.
 

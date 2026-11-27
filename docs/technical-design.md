@@ -1,6 +1,6 @@
 # Span technical design — layer 4
 
-**Status: binding Layer-4 mechanism authority for Span 1.0 Beta 3.**
+**Status: binding Layer-4 mechanism authority; Beta-5 target under PUB-01–10.**
 
 This document chooses the implementation mechanisms that realize Layers 0–3. It
 adds no product requirement. Where it conflicts with a higher layer, the higher
@@ -399,7 +399,8 @@ FD-95–FD-102.
 SQLite and `shell/sqlite_store/lifecycle.py` remain the repository transaction
 owner. The remediation target is repository schema **16** (§14). It retains
 schema-15 semantic/curation tables, adapting only request/receipt payloads
-and their lookup contracts. §25 is the historical schema-15 transition.
+their lookup contracts and the canonical recorded-fact factoring in §13.
+§25 is the historical schema-15 transition.
 
 Canonical JSON remains the payload; relational columns/indexes project its
 stable lookup keys. The current ownership model is:
@@ -690,6 +691,12 @@ reasons and contexts before delivering first page. Re-qualify pinned refs on eac
 EffectDisposition entry occupies its original surface/ref position, never a
 separate live list with shifted offsets. Verify disposition including successor
 support before reaping; unknown/non-current successor stays outstanding.
+Bind each issued cursor position to the evaluated-state fingerprint used to
+fit it (part of position_json, including current context identity; exclude
+clock-only variation). If a live effect state changes, issue the same
+selection's start-position cursor under the new fingerprint and return the
+P2 stale-continuation recovery. Invalidate prior generation offsets; do not
+persist another copy of the selected effects or replay semantic writes.
 Refresh expired contexts only for actionable owners. For accepted writes
 persist complete immutable effect refs in receipt in the commit transaction;
 manifest may be composed after commit, because receipt recovery reconstructs
@@ -705,7 +712,11 @@ installation composition. The service reads typed expired candidates, obtains
 qualification through the shared evaluator and computes eligible identities
 using core retention decisions; the SQLite shell deletes only that typed
 approved set in a transaction after exact candidate identity/version/expiry
-recheck. A changed candidate or unavailable qualification is retained. Do not
+recheck. For reference-dependent eligibility, acquire the existing §19
+transaction-bound repository capabilities before final qualification and
+keep the relevant semantic versions locked through deletion. Service owns
+that final evaluation; shell checks and deletes the approved identities.
+A changed candidate or unavailable qualification is retained. Do not
 call the semantic evaluator from a SQL store/reaper or introduce a second
 retention engine. Delete cursor rows with manifest; remove addressed request
 binding only when neither bound context nor receipt remains. No new clock,

@@ -10,7 +10,7 @@ flowchart LR
   S --> C[Pure core rules]
   S --> P[Typed ports]
   P --> E[Filesystem and structural evidence]
-  P --> D[Repository schema-15 SQLite store]
+  P --> D[Repository SQLite store]
   I --> F[Installation Functional Pyramid store]
   S --> M
   M --> A
@@ -53,7 +53,10 @@ Each registered repository has its own lifecycle store containing repository
 semantic/audit state: retained understanding, observations, challenges,
 verification, receipts, and repository-local support indexes.
 
-The current Beta-3 repository store is schema **15**.
+The existing Beta-3 schema-15 repository state is the migration source;
+[Technical Design §14](technical-design.md#14-offline-schema-transition)
+owns the Beta-5 repository and installation target. The diagram describes
+ownership, not evidence that the target has been implemented.
 
 ### Installation state
 
@@ -156,4 +159,6 @@ silently migrates them.
 - [Contributing](contributing.md) — development and verification workflow.
 
 Binding behavior is owned by the Functional Pyramid documents, not by this
-architecture guide.
+architecture guide. The current PUB remediation's detailed construction
+ownership is in [TD §9.2](technical-design.md#92-contract-implementation-decisions-amended-2026-11-14),
+with execution/verification in the single [plan §3B](implementation-plans/functional-pyramid-governance-implementation-plan.md#3b-public-lifecycle-boundary-remediation--2026-11-27).

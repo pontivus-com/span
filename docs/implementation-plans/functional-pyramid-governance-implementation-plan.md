@@ -688,9 +688,12 @@ historical withdrawn content, later curation/challenge, and negative recursive
 schema plus installed wire assertions. No transport stripping or regenerated
 authority. Gate: exact semantic audit equivalence, no private type leakage.
 Architecture gate: establish TD §13's shared immutable verification and
-challenge fact components at their existing canonical model owners, before
-delivery; retain complete stored records and build the single public audit
-projection reused by PUB-05/08. Replace compact_support/compact_understanding/
+challenge fact components at their existing canonical model owners; retain
+complete stored records and build the single public audit projection reused
+by PUB-05/08. Any persisted-carrier change is integrated atomically with
+PUB-07A's offline migration and target store version. Develop and test the
+pure components first; do not commit a runtime that reads old persisted
+shapes as the new model or keep a temporary runtime bridge. Replace compact_support/compact_understanding/
 compact_verification at their canonical ownership boundary as applicable;
 all consumers use one typed support projection with service-supplied facts.
 Inspect import direction and actual call sites; pure projection test without
@@ -738,6 +741,10 @@ directory after routes to the same ResultPage, pending keyset retains its
 canonical form. Test stale state vs timestamp-only changes, exact restart,
 missing/forged cursor, mixed nested collection, no-progress rejection,
 expiry with undisposed effects, receipt recovery after manifest loss.
+Test state changes between nested effect pages (including context expiry):
+restart at the same pinned selection, no offset reuse, no new traversal or
+write. Verify one enclosing delivery metadata owner and exact count/ref
+equality on complete delivery; reject misleading partial status.
 Test repeated admission retry against the same durable manifest, successor
 becoming non-current, and primary-complete Answer with history cursor. No
 second evidence selection or semantic writer. Fit mandatory subject/state/
@@ -767,6 +774,8 @@ routing; retain only domain entry points delegating to shared delivery. Test
 byte parity, strict variant/parent rejection, unchanged immutable record
 round trip, initial valid envelope, no state write in preview, accepted
 manifest stores receipt pointer only and no copied accepted effects.
+Test reaping against a concurrent semantic update: final disposition check
+uses locked typed capabilities and deletion retains changed/unknown candidates.
 I-01/02/04/13/15/16/18/21/28/35/36/39.
 
 **PUB-05 — Select status and relevant verification (API-05/06).** After
@@ -923,7 +932,12 @@ Sequence: PUB-01 → PUB-02 → PUB-03 → PUB-07 persistence/migration subtask
 (schema 16/2, canonical receipt/index/selection tables and transaction ports)
 → PUB-04 → PUB-07 accepted outcome composition → PUB-05/PUB-06 → PUB-08
 → PUB-09 → PUB-10. PUB-06 uses PUB-07 receipt transaction and PUB-04 delivery;
-PUB-08 uses PUB-02/04/07. Test each subtask before dependent integration.
+PUB-08 uses PUB-02/04/07. Test each subtask before dependent integration. PUB-02 and PUB-03's pure
+model/rule work and PUB-07A's affected persisted model/store changes form one
+integrated code cutover before PUB-04: intermediate incompatible schemas are
+not valid committed runtime states. No task may introduce temporary parallel
+carriers or postpone removal of a superseded active path. The §3B order
+supersedes earlier independent-task wording for this track.
 All PUB tasks remain OPEN pending executable evidence. The documented
 contracts are design targets; the source baseline still contains the defects.
 
@@ -942,8 +956,8 @@ PUB-10 and S-FIELD-04 close the same release programme.
 ## 4. Execution sequence
 
 Original delivery sequence (historical): S-DOC-01 → S-INIT-01 → S-INIT-02 → S-INIT-03 → S-PUBLIC-01 → S-PUBLIC-02 → S-VERIFY-01 → S-VERIFY-02 → S-VERIFY-03. Field amendment execution sequence: S-FIELD-01 → S-FIELD-02 → S-FIELD-03; S-FIELD-05–07 follow the existing owners and design, then S-FIELD-04 closes all gates. The PUB-01–10 sequence in §3B is the additional active public-boundary track;
-S-FIELD-04 and release readiness depend on its closure as well. The tests at each task gate must pass before dependent work is accepted. Public boundary tasks may be implemented independently after their canonical design is closed, but final installed acceptance is a single end-to-end gate. Reuse all existing owners; if a governing contradiction is discovered, stop at its owner and amend the design, not a downstream workaround.
+S-FIELD-04 and release readiness depend on its closure as well. The tests at each task gate must pass before dependent work is accepted. Public boundary tasks follow §3B's ordered dependencies and integrated persisted-contract cutover; final installed acceptance is a single end-to-end gate. Reuse all existing owners; if a governing contradiction is discovered, stop at its owner and amend the design, not a downstream workaround.
 
 ## 5. Explicit non-scope
 
-No replacement of the V3 resolver, route-support engine, repository store or installation store; no new storage schema solely for setup convenience; no changes to the repository's canonical governance content; no LLM discovery or automatic semantic re-establishment; no new public MCP tool; no compatibility bridge for V1/V2 declaration grammar; no manual metadata-authoring alternative to the governed setup contract; no release publication or live adopter cutover. Any genuine additional architectural requirement must be raised against the governing layer before implementation.
+No replacement of the V3 resolver, route-support engine, repository store or installation store; the only active storage-format target for PUB is TD §14 (16/2), not a second storage owner or schema for setup convenience; no changes to the repository's canonical governance content; no LLM discovery or automatic semantic re-establishment; no new public MCP tool; no compatibility bridge for V1/V2 declaration grammar; no manual metadata-authoring alternative to the governed setup contract; no release publication or live adopter cutover. Any genuine additional architectural requirement must be raised against the governing layer before implementation.

@@ -1531,7 +1531,11 @@ superseded ones without erasing their position. Recreate expired contexts
 only for still-actionable owners. Evidence page uses original outcome order,
 and deduplicates delivery only by exact observation/range, not by locator;
 later context additions do not change order or membership. Retention follows
-FD-43/45; no new semantic evaluation or write on continuation. *(A8)*
+FD-43/45. Continuation performs no new semantic mutation or changed-scope
+traversal; validate the exact bound read or re-qualify pinned effects as
+required by lifecycle §4.1. Changed live-effect delivery restarts at the
+beginning of the pinned selection under its newly evaluated state, not at
+an obsolete nested offset. *(A8)*
 
 **FD-56 — Truncation never substitutes stale content.**
 A budget limit never promotes historical content into answer content and never
