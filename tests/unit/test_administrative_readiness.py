@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import hashlib
 import io
 import json
@@ -10,6 +11,7 @@ import pathlib
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from span.core import model as m
 from span.shell import install_verify
@@ -17,6 +19,7 @@ from span.shell.install.constants import INSTALL_VERSION
 from span.shell.install.receipt import write_receipt
 from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
 from span.shell.readiness import (
+    probe_active_functional_pyramid,
     probe_functional_pyramid_repository,
     probe_governed_provenance,
     probe_store,
@@ -100,7 +103,7 @@ class StoreProbeTest(unittest.TestCase):
             self.assertTrue(report["declarations"]["valid"])
             self.assertEqual(report["participation"]["state"], "UNAVAILABLE")
             self.assertEqual(
-                report["activation_readiness"]["status"], "requires_governed_install"
+                report["activation_readiness"]["status"], "unavailable"
             )
             self.assertEqual(list(data.iterdir()), [])
             self.assertFalse(any(root.rglob("*")))
@@ -199,6 +202,151 @@ class StoreProbeTest(unittest.TestCase):
 
             self.assertEqual(report["participation"]["state"], "EXCLUDED")
             self.assertEqual(before, after)
+
+
+class ActivationGuidanceTest(unittest.TestCase):
+    def _installation(self, data):
+        return FunctionalPyramidInstallationStore.create(
+            data / "installation" / "functional-pyramid.db",
+            retention=DEFAULT_LIFECYCLE_RETENTION,
+        )
+
+    def _member(self, data, root):
+        root.mkdir()
+        (root / "foundation.md").write_text("# Foundation")
+        document = {"repository_id": root.name, "document_ref": "foundation.md", "layer": "P0"}
+        source = root / "declaration.json"
+        source.write_text(json.dumps({
+            "version": 3, "source_id": f"{root.name}:repository",
+            "kind": "repository", "scope": ".",
+            "documents": [{"repository_id": root.name, "document_ref": "foundation.md"}],
+            "placements": [{"document": document, "scope": ".", "governing_placements": ["ROOT"]}],
+        }))
+        binding = m.AuthorityBinding(
+            evidence_ref=m.EvidenceRef(
+                evidence_id=m.EvidenceId(f"{root.name}-foundation"),
+                repository_id=root.name,
+                source_kind=m.EvidenceSourceKind.DOCUMENTATION,
+                locator="foundation.md",
+            ),
+            authority_kind=m.AuthorityKind.REPOSITORY_RULE,
+            status=m.AuthorityStatus.ACCEPTED,
+        )
+        store = LifecycleStore(data / f"{root.name}.db", retention=DEFAULT_LIFECYCLE_RETENTION)
+        try:
+            store.register_repository(root.name, str(root.resolve()), authority_bindings=(binding,))
+        finally:
+            store.close()
+        return m.FunctionalPyramidMemberView(
+            repository_id=root.name,
+            declaration_refs=(m.EvidenceRef(
+                evidence_id=m.EvidenceId(f"{root.name}-declaration"),
+                repository_id=root.name,
+                source_kind=m.EvidenceSourceKind.CONFIGURATION,
+                locator="declaration.json",
+                revision_or_fingerprint=hashlib.sha256(source.read_bytes()).hexdigest(),
+            ),),
+        )
+
+    def _activate(self, store, name, members):
+        identity = m.FunctionalPyramidId(name)
+        version = m.FunctionalPyramidVersion(1)
+        with store.transaction() as transaction:
+            transaction.write_pyramid_version(
+                pyramid_id=identity, version=version, content_digest=m.ContentDigest("digest"),
+                committed_at=datetime.datetime.now(datetime.timezone.utc), members=members,
+            )
+            transaction.set_current_pyramid(pyramid_id=identity, version=version, members=members)
+
+    def test_ordinary_excluded_and_explicit_governed_intent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root, data = base / "repo", base / "data"
+            root.mkdir()
+            _ready(data, "repo", root)
+            store = self._installation(data)
+            try:
+                report = probe_functional_pyramid_repository(data, "repo", root)
+                self.assertEqual(report["activation_readiness"], {"status": "not_required", "action": None})
+                with store.transaction() as transaction:
+                    transaction.set_excluded("repo", True)
+                report = probe_functional_pyramid_repository(data, "repo", root)
+                self.assertEqual(report["participation"]["state"], "EXCLUDED")
+                self.assertEqual(report["activation_readiness"], {"status": "not_required", "action": None})
+                with store.transaction() as transaction:
+                    transaction.set_excluded("repo", False)
+                receipt = {"install_version": INSTALL_VERSION, "repos": [str(root)], "host_registration": {},
+                           "governed_initialization": {"repo": {"root": str(root)}}}
+                # Exercise the projection with explicit retained intent rather than manufacturing provenance.
+                from span.shell.readiness import project_activation_guidance
+                guidance = project_activation_guidance(
+                    "repo", probe_functional_pyramid_repository(data, "repo", root),
+                    {"ready": True}, {}, receipt, {},
+                )
+                self.assertEqual(guidance["status"], "requires_governed_install")
+            finally:
+                store.close()
+
+    def test_pending_guidance_precedes_unavailable_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            root, data = base / "repo", base / "data"
+            root.mkdir()
+            data.mkdir()
+            for pending in ({"backup_manifest_digest": "digest"}, {"accepted_pyramid_id": "p"}, {"restore_intent": {"backup": "backup"}}):
+                with self.subTest(pending=pending):
+                    write_receipt(data, {"install_version": INSTALL_VERSION, "repos": [str(root)], "host_registration": {},
+                                         "pending_governed_initialization": pending})
+                    before = (data / "install.json").read_bytes()
+                    guidance = probe_functional_pyramid_repository(data, "repo", root)["activation_readiness"]
+                    self.assertEqual(guidance["status"], "pending_recovery")
+                    if "restore_intent" in pending:
+                        self.assertIn("--restore-backup", guidance["action"])
+                    self.assertEqual((data / "install.json").read_bytes(), before)
+                    self.assertFalse((data / "repo.db").exists())
+
+    def test_active_observation_expands_members_and_separates_instances(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            data = base / "data"
+            data.mkdir()
+            roots = {name: base / name for name in ("a", "b", "c")}
+            members = {name: self._member(data, root) for name, root in roots.items()}
+            store = self._installation(data)
+            try:
+                self._activate(store, "first", (members["a"], members["b"]))
+                self._activate(store, "second", (members["c"],))
+            finally:
+                store.close()
+            selected = {"a": roots["a"], "c": roots["c"]}
+            graph = probe_active_functional_pyramid(data, selected)
+            self.assertEqual(graph["status"], "valid", graph)
+            self.assertEqual({frozenset(member["repository_id"] for member in instance["members"]) for instance in graph["instances"]}, {frozenset(("a", "b")), frozenset(("c",))})
+            report = probe_functional_pyramid_repository(data, "a", roots["a"])
+            self.assertEqual(report["activation_readiness"], {"status": "not_required", "action": None})
+            (roots["b"] / "declaration.json").write_text("{invalid")
+            report = probe_functional_pyramid_repository(data, "a", roots["a"])
+            self.assertEqual(report["activation_readiness"]["status"], "requires_repair")
+            self.assertEqual(probe_functional_pyramid_repository(data, "c", roots["c"])["activation_readiness"]["status"], "not_required")
+            roots["b"].rename(base / "unavailable")
+            report = probe_functional_pyramid_repository(data, "a", roots["a"])
+            self.assertEqual(report["activation_readiness"]["status"], "unavailable")
+
+    def test_changing_membership_observation_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            data = base / "data"
+            data.mkdir()
+            root = base / "a"
+            member = self._member(data, root)
+            store = self._installation(data)
+            self._activate(store, "first", (member,))
+            store.close()
+            from span.shell import readiness
+            actual = readiness._retained_instances(data, ("a",))
+            with patch.object(readiness, "_retained_instances", side_effect=[actual, ()]):
+                graph = probe_active_functional_pyramid(data, {"a": root})
+            self.assertEqual(graph["status"], "unavailable")
 
 
 class InstallVerifyTest(unittest.TestCase):

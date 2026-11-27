@@ -1012,6 +1012,9 @@ def _execute(env: _Environment) -> None:
     receipt = _build_receipt(env, state, host_registration, report)
     if not env.dry:
         governed.finalize(receipt, prior, pending)
+        from span.shell.install_verify import project_final_receipt
+
+        project_final_receipt(env.data_dir, report, receipt, strict=pending is not None)
     write_receipt(env.data_dir, receipt, dry_run=env.dry)
     print("install plan only." if env.dry else "install complete.")
 

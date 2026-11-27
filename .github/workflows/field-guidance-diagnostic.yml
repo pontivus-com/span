@@ -1,0 +1,29 @@
+name: Temporary field guidance diagnostic
+on:
+  push:
+    branches: [release/1.0.0-beta5]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[test,dev]'
+      - name: Format and measure
+        run: |
+          black src/span/shell/readiness.py src/span/service/functional_pyramid.py src/span/shell/install_verify.py src/span/shell/install/cli.py tests/unit/test_administrative_readiness.py tests/integration/test_installed_mcp.py tests/unit/test_recovery.py
+          git diff -- src/span/shell/readiness.py src/span/service/functional_pyramid.py src/span/shell/install_verify.py src/span/shell/install/cli.py tests/unit/test_administrative_readiness.py tests/integration/test_installed_mcp.py tests/unit/test_recovery.py
+          python -c 'from tests.unit.test_code_budget import measure; import json; print(json.dumps(measure(), sort_keys=True))'
+      - name: Ruff
+        if: always()
+        run: ruff check src tests
+      - name: Typing
+        if: always()
+        run: mypy src/span
+      - name: Focused regression tests
+        if: always()
+        run: pytest -q tests/unit/test_administrative_readiness.py tests/unit/test_recovery.py tests/unit/test_install.py tests/unit/test_functional_pyramid_installation_store.py

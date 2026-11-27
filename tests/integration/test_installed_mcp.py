@@ -538,6 +538,19 @@ dispose();
             self.assertEqual(
                 repo["functional_pyramid"]["provenance"]["state"], "PROVENANCE_MATCH"
             )
+        for repo in receipt["verify"]["repos"]:
+            self.assertEqual(repo["functional_pyramid"]["activation_readiness"], {"status": "not_required", "action": None})
+        verify = [
+            str(_pathlib.Path(runtime_exe).with_name("python")), "-m", "span.shell.install_verify",
+            "--data-dir", str(data_dir), "--repo", str(repo_a), "--strict",
+        ]
+        observed = _json.loads(self._execute_installer(verify, env).stdout)
+        self.assertTrue(observed["acceptance_ok"])
+        self.assertEqual(
+            {repo["functional_pyramid"]["repository_id"]: repo["functional_pyramid"]["activation_readiness"] for repo in observed["repos"]},
+            {repo["functional_pyramid"]["repository_id"]: repo["functional_pyramid"]["activation_readiness"] for repo in receipt["verify"]["repos"]},
+        )
+        self.assertEqual(len(observed["repos"]), 2)
         before = entries["repo-a"]["participation_results"]
         # The sole input may be reformatted without creating another version.
         path = repo_a / "docs/classification.json"
@@ -600,6 +613,11 @@ dispose();
             "pending_governed_initialization"
         ]
         self.assertEqual(pending["accepted_version"], 2)
+        pending_bytes = receipt_path.read_bytes()
+        observed_pending = _json.loads(self._execute_installer(verify[:-1], env).stdout)
+        self.assertFalse(observed_pending["acceptance_ok"])
+        self.assertTrue(all(repo["functional_pyramid"]["activation_readiness"]["status"] == "pending_recovery" for repo in observed_pending["repos"]))
+        self.assertEqual(receipt_path.read_bytes(), pending_bytes)
         backup = _pathlib.Path(pending["backup"])
         restore = [
             command[0],

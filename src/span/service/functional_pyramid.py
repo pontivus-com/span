@@ -117,6 +117,133 @@ def _graph_finding(
     )
 
 
+def resolve_document_authorities(
+    members: tuple[m.FunctionalPyramidMemberView, ...],
+    declarations: tuple[_DeclarationEntry, ...],
+    available: frozenset[str],
+    *,
+    is_servable: _typing.Callable[[str, str], bool],
+    load_bindings: _typing.Callable[[str], tuple[m.AuthorityBinding, ...]],
+) -> tuple[_AuthorityMap, tuple[m.FunctionalPyramidFinding, ...]]:
+    """Resolve document availability and binding identity for runtime and read-only verification."""
+    member_repositories = frozenset(member.repository_id for member in members)
+    placements = {
+        entry.placement
+        for _, declaration in declarations
+        for entry in declaration.placements
+    }
+    bindings: _AuthorityMap = {}
+    findings: list[m.FunctionalPyramidFinding] = []
+    evaluated_documents: set[tuple[str, str]] = set()
+    unavailable_documents: set[tuple[str, str]] = set()
+    repository_bindings: dict[str, tuple[m.AuthorityBinding, ...]] = {}
+
+    for placement in sorted(
+        placements,
+        key=lambda item: (
+            item.document.repository_id,
+            item.document.document_ref,
+            item.document.layer.value,
+            item.declaring_repository_id,
+            item.scope,
+        ),
+    ):
+        document = placement.document
+        key = (document.repository_id, document.document_ref)
+        if document.repository_id not in member_repositories:
+            findings.append(
+                _graph_finding(
+                    m.FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
+                    document.repository_id,
+                    "canonical document owner repository is outside the active pyramid",
+                    "reference a canonical document owned by an instance member",
+                    placement=placement,
+                )
+            )
+            continue
+        if document.repository_id not in available:
+            findings.append(
+                _graph_finding(
+                    m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
+                    document.repository_id,
+                    "canonical document owner repository is unavailable",
+                    "restore the named member repository",
+                    placement=placement,
+                )
+            )
+            continue
+
+        if key in bindings:
+            continue
+        if key not in evaluated_documents:
+            if not is_servable(
+                document.repository_id, document.document_ref
+            ):
+                unavailable_documents.add(key)
+            evaluated_documents.add(key)
+        if key in unavailable_documents:
+            findings.append(
+                _graph_finding(
+                    m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
+                    document.repository_id,
+                    "canonical Functional Pyramid document is unavailable",
+                    "restore the canonical document at its declared locator",
+                    placement=placement,
+                )
+            )
+
+        candidates = repository_bindings.get(document.repository_id)
+        if candidates is None:
+            candidates = load_bindings(document.repository_id)
+            repository_bindings[document.repository_id] = candidates
+        candidates = tuple(
+            binding
+            for binding in candidates
+            if binding.evidence_ref.locator == document.document_ref
+        )
+        canonical = tuple(
+            binding
+            for binding in candidates
+            if binding.evidence_ref.section_or_span is None
+        )
+        if not candidates:
+            findings.append(
+                _graph_finding(
+                    m.FunctionalPyramidFindingReason.MISSING_DOCUMENT_AUTHORITY,
+                    document.repository_id,
+                    "canonical document has no declared authority binding",
+                    "declare one whole-document authority binding for the canonical document",
+                    placement=placement,
+                )
+            )
+            continue
+        if not canonical:
+            findings.append(
+                _graph_finding(
+                    m.FunctionalPyramidFindingReason.NONCANONICAL_DOCUMENT_AUTHORITY,
+                    document.repository_id,
+                    "canonical document is bound only through section/span authority",
+                    "declare one whole-document authority binding",
+                    placement=placement,
+                )
+            )
+            continue
+        if len(canonical) != 1:
+            findings.append(
+                _graph_finding(
+                    m.FunctionalPyramidFindingReason.AMBIGUOUS_DOCUMENT_AUTHORITY,
+                    document.repository_id,
+                    "canonical document resolves to more than one whole-document authority binding",
+                    "retain one canonical whole-document authority binding",
+                    placement=placement,
+                )
+            )
+            continue
+        bindings[key] = canonical[0]
+
+    return bindings, tuple(findings)
+
+
 class FunctionalPyramidService:
     """Compose exact source loading, authority binding and pure graph rules."""
 
@@ -1579,125 +1706,17 @@ class FunctionalPyramidService:
         declarations: tuple[_DeclarationEntry, ...],
         available: frozenset[str],
     ) -> tuple[_AuthorityMap, tuple[m.FunctionalPyramidFinding, ...]]:
-        member_repositories = frozenset(member.repository_id for member in members)
-        placements = {
-            entry.placement
-            for _, declaration in declarations
-            for entry in declaration.placements
-        }
-        bindings: _AuthorityMap = {}
-        findings: list[m.FunctionalPyramidFinding] = []
-        evaluated_documents: set[tuple[str, str]] = set()
-        unavailable_documents: set[tuple[str, str]] = set()
-        repository_bindings: dict[str, tuple[m.AuthorityBinding, ...]] = {}
-
-        for placement in sorted(
-            placements,
-            key=lambda item: (
-                item.document.repository_id,
-                item.document.document_ref,
-                item.document.layer.value,
-                item.declaring_repository_id,
-                item.scope,
+        return resolve_document_authorities(
+            members,
+            declarations,
+            available,
+            is_servable=lambda repository_id, locator: self._runtime(
+                repository_id
+            ).evidence.is_servable(repository_id, locator),
+            load_bindings=lambda repository_id: tuple(
+                self._runtime(repository_id).store.load_authority_bindings(repository_id)
             ),
-        ):
-            document = placement.document
-            key = (document.repository_id, document.document_ref)
-            if document.repository_id not in member_repositories:
-                findings.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.INVALID_DOCUMENT_REFERENCE,
-                        document.repository_id,
-                        "canonical document owner repository is outside the active pyramid",
-                        "reference a canonical document owned by an instance member",
-                        placement=placement,
-                    )
-                )
-                continue
-            if document.repository_id not in available:
-                findings.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.REPOSITORY_UNAVAILABLE,
-                        document.repository_id,
-                        "canonical document owner repository is unavailable",
-                        "restore the named member repository",
-                        placement=placement,
-                    )
-                )
-                continue
-
-            if key in bindings:
-                continue
-            runtime = self._runtime(document.repository_id)
-            if key not in evaluated_documents:
-                if not runtime.evidence.is_servable(
-                    document.repository_id, document.document_ref
-                ):
-                    unavailable_documents.add(key)
-                evaluated_documents.add(key)
-            if key in unavailable_documents:
-                findings.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.DOCUMENT_UNAVAILABLE,
-                        document.repository_id,
-                        "canonical Functional Pyramid document is unavailable",
-                        "restore the canonical document at its declared locator",
-                        placement=placement,
-                    )
-                )
-
-            candidates = repository_bindings.get(document.repository_id)
-            if candidates is None:
-                candidates = tuple(
-                    runtime.store.load_authority_bindings(document.repository_id)
-                )
-                repository_bindings[document.repository_id] = candidates
-            candidates = tuple(
-                binding
-                for binding in candidates
-                if binding.evidence_ref.locator == document.document_ref
-            )
-            canonical = tuple(
-                binding
-                for binding in candidates
-                if binding.evidence_ref.section_or_span is None
-            )
-            if not candidates:
-                findings.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.MISSING_DOCUMENT_AUTHORITY,
-                        document.repository_id,
-                        "canonical document has no declared authority binding",
-                        "declare one whole-document authority binding for the canonical document",
-                        placement=placement,
-                    )
-                )
-                continue
-            if not canonical:
-                findings.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.NONCANONICAL_DOCUMENT_AUTHORITY,
-                        document.repository_id,
-                        "canonical document is bound only through section/span authority",
-                        "declare one whole-document authority binding",
-                        placement=placement,
-                    )
-                )
-                continue
-            if len(canonical) != 1:
-                findings.append(
-                    _graph_finding(
-                        m.FunctionalPyramidFindingReason.AMBIGUOUS_DOCUMENT_AUTHORITY,
-                        document.repository_id,
-                        "canonical document resolves to more than one whole-document authority binding",
-                        "retain one canonical whole-document authority binding",
-                        placement=placement,
-                    )
-                )
-                continue
-            bindings[key] = canonical[0]
-
-        return bindings, tuple(findings)
+        )
 
     def resolve(
         self,
