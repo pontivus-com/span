@@ -2941,7 +2941,8 @@ class LifecycleServiceTest(unittest.TestCase):
             identity
             for placement in placements
             for identity in (
-                placement.declaring_repository_id, placement.document.repository_id
+                placement.declaring_repository_id,
+                placement.document.repository_id,
             )
         }
         roots = {identity: f"/repos/{identity}" for identity in identities}

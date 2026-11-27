@@ -97,58 +97,60 @@ class DependencyEffectService:
 
     def repository_change(
         self,
-        request: m.ReconsiderRequest,
+        requests: tuple[m.ReconsiderRequest, ...],
         *,
         issue_contexts: bool = True,
     ) -> m.Changed:
-        """Project one repository changed-scope root through the shared engine.
-
-        ``issue_contexts=False`` is the read-only notice path: it returns the
-        identical affected projection without persisting re-establishment
-        contexts.
-        """
-        if request.challenge is not None:
-            raise ValueError("challenge is not a dependency-effect root")
-        repository_id = request.bound_repository_id
-        store = self._store_for_repository(repository_id)
-        store.require_repository(repository_id)
-
+        """Discover all repository roots before one shared premise closure."""
         reasons: dict[m.SurfaceKey, set[m.ChangeReason]] = {}
-        root_scopes = {repository_id: self._repository_root_scopes(request)}
-        surfaces = store.list_surfaces(repository_id)
-        changed_paths = self._changed_paths(request)
-
-        for path in request.changed_paths:
-            member = containment.path_surface(repository_id, path)
-            for surface in containment.containing_surfaces(surfaces, member):
-                reasons.setdefault(surface, set()).add(m.ChangeReason.CONTAINMENT)
-        for surface in request.changed_surfaces:
-            reasons.setdefault(surface, set()).add(m.ChangeReason.CONTAINMENT)
-
         direct: list[m.ConclusionRevisionRef] = []
-        for path in changed_paths:
-            direct.extend(self._source_and_discovery_dependents(repository_id, path))
-            direct.extend(self._authority_dependents(repository_id, path))
+        root_scopes: dict[str, tuple[m.EvidenceScope, ...]] = {}
+        for request in requests:
+            repository_id = request.bound_repository_id
+            root_scopes[repository_id] = (
+                *root_scopes.get(repository_id, ()),
+                *self._repository_root_scopes(request),
+            )
+            direct.extend(self._change_roots(request, reasons))
 
-        route_ids = self._functional_route_impacts(
-            repository_id,
-            request.changed_paths,
-            request.changed_surfaces,
-        )
-        direct.extend(self._route_dependents(route_ids))
-
-        projected = self._project(
+        surfaces, contexts, _ = self._project(
             reasons=reasons,
             direct=direct,
             forced_reassessment={},
             root_scopes=root_scopes,
             issue_contexts=issue_contexts,
         )
-        surfaces_out, contexts, _ = projected
-        return m.Changed(
-            reestablishment_contexts=contexts,
-            surfaces=surfaces_out,
+        return m.Changed(reestablishment_contexts=contexts, surfaces=surfaces)
+
+    def _change_roots(
+        self,
+        request: m.ReconsiderRequest,
+        reasons: dict[m.SurfaceKey, set[m.ChangeReason]],
+    ) -> tuple[m.ConclusionRevisionRef, ...]:
+        if request.challenge is not None:
+            raise ValueError("challenge is not a dependency-effect root")
+        repository_id = request.bound_repository_id
+        store = self._store_for_repository(repository_id)
+        store.require_repository(repository_id)
+        surfaces = store.list_surfaces(repository_id)
+        for path in request.changed_paths:
+            member = containment.path_surface(repository_id, path)
+            for surface in containment.containing_surfaces(surfaces, member):
+                reasons.setdefault(surface, set()).add(m.ChangeReason.CONTAINMENT)
+        for surface in request.changed_surfaces:
+            reasons.setdefault(surface, set()).add(m.ChangeReason.CONTAINMENT)
+        direct: list[m.ConclusionRevisionRef] = []
+        for path in self._changed_paths(request):
+            direct.extend(self._source_and_discovery_dependents(repository_id, path))
+            direct.extend(self._authority_dependents(repository_id, path))
+        direct.extend(
+            self._route_dependents(
+                self._functional_route_impacts(
+                    repository_id, request.changed_paths, request.changed_surfaces
+                )
+            )
         )
+        return tuple(direct)
 
     def retained_functional_pyramid_effects(
         self,

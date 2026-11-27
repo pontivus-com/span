@@ -216,7 +216,9 @@ class FunctionalPyramidResolutionTest(unittest.TestCase):
         service = self._directory("src/service").view
         ui = self._directory("ui").view
         self.assertNotIn(self._public(self.sibling), service.placements)
-        self.assertEqual(ui.placements, (self._public(self.p0), self._public(self.sibling)))
+        self.assertEqual(
+            ui.placements, (self._public(self.p0), self._public(self.sibling))
+        )
 
     def test_document_locator_never_infers_applicability(self) -> None:
         deceptive = _placement(

@@ -18,6 +18,7 @@ from span.shell.functional_pyramid import open_functional_pyramid_service
 from span.shell.mcp import ServiceContext
 from span.shell.sqlite_store.lifecycle import LifecycleStoreError
 from span.shell.structural import canonical_root_from_config, repository_id_from_config
+from span.service.addressing import AddressingService
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.functional_pyramid import FunctionalPyramidService
 
@@ -39,6 +40,7 @@ class InstallationRuntime:
             lambda identity: canonical_root_from_config(repository_locator(identity)),
             registered_repository_ids,
         )
+        self.addressing = AddressingService(self.registered_roots)
         self._policy = policy
         self._runtimes: dict[str, RepositoryRuntime] = {}
         self._contexts: dict[str, ServiceContext] = {}
@@ -90,6 +92,7 @@ class InstallationRuntime:
             functional_pyramid=service,
             repository_runtime=self.repository_runtime,
             policy=self._policy,
+            addressing=self.addressing,
         )
         self._contexts[repository_id] = context
         return context

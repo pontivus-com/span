@@ -20,6 +20,7 @@ from span.core.recording import (
     receipt_decision,
 )
 from span.ports.lifecycle import LifecycleStorePort
+from span.service.addressing import AddressingService
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
 from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
@@ -50,6 +51,7 @@ class ReconsiderService:
         policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
+        addressing: AddressingService | None = None,
     ) -> None:
         self._store = store
         self._evidence = evidence
@@ -58,6 +60,7 @@ class ReconsiderService:
         self._new_context_id = new_context_id or (lambda: "ctx-" + _uuid.uuid4().hex)
         self._effects = effects
         self._understand = understand
+        self._addressing = addressing
 
     def reconsider(
         self, request: m.ReconsiderRequest
@@ -67,7 +70,7 @@ class ReconsiderService:
             self._store.require_repository(repository_id)
             return self._raise_challenge(repository_id, request.challenge)
         try:
-            return self._effects.repository_change(request)
+            return self._effects.repository_change(self._changed_roots(request))
         except (OSError,) + self._store.operational_errors:
             return m.Unavailable(
                 operation="reconsider",
@@ -82,7 +85,16 @@ class ReconsiderService:
         """Return the canonical changed-scope projection without context writes."""
         if request.challenge is not None:
             raise ValueError("a challenge is not a changed-scope preview")
-        return self._effects.repository_change(request, issue_contexts=False)
+        return self._effects.repository_change(
+            self._changed_roots(request), issue_contexts=False
+        )
+
+    def _changed_roots(
+        self, request: m.ReconsiderRequest
+    ) -> tuple[m.ReconsiderRequest, ...]:
+        if self._addressing is None:
+            return (request,)
+        return self._addressing.changes(request)
 
     def _raise_challenge(
         self, repository_id: str, challenge: m.ChallengeRaise

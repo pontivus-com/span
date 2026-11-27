@@ -375,9 +375,7 @@ class FunctionalPyramidService:
             pyramid_id=pyramid_id,
             version=version,
             member_repository_ids=tuple(sorted(item.repository_id for item in members)),
-            findings=tuple(
-                m.public_pyramid_finding(item, roots) for item in findings
-            ),
+            findings=tuple(m.public_pyramid_finding(item, roots) for item in findings),
         )
 
     def route(

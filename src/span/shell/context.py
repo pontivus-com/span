@@ -36,6 +36,7 @@ from span.shell.structural import (
 from span.service.administration import initialize_repository
 from span.service.answer import AnswerService
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.service.addressing import AddressingService
 from span.service.effects import DependencyEffectService
 from span.service.evidence import EvidenceService
 from span.service.functional_pyramid import FunctionalPyramidService
@@ -143,6 +144,7 @@ def compose_context(
     functional_pyramid: FunctionalPyramidService,
     repository_runtime: _typing.Callable[[str], FunctionalPyramidRepositoryRuntime],
     policy: m.ServiceBoundsPolicy = DEFAULT_SERVICE_BOUNDS_POLICY,
+    addressing: AddressingService | None = None,
 ) -> ServiceContext:
     """Compose one repository context from raw + installation capabilities."""
     repository_id = runtime.repository_id
@@ -186,6 +188,7 @@ def compose_context(
         understand=understand,
         evidence=evidence_service,
         policy=policy,
+        addressing=addressing,
     )
     answer = AnswerService(
         store=store,

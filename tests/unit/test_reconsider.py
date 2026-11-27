@@ -254,6 +254,22 @@ class ReconsiderServiceTest(unittest.TestCase):
             understanding_id=m.UnderstandingId(understanding_id),
         )
 
+    def test_multi_root_change_has_one_projection_and_context_per_owner(self) -> None:
+        effects = self._effects()
+        requests = (
+            m.ReconsiderRequest(repository_id="repo-1", changed_paths=("src/a.py",)),
+            m.ReconsiderRequest(repository_id="repo-1", changed_paths=("src/b.py",)),
+        )
+        projection = effects.repository_change(requests)
+        self.assertEqual(len(projection.reestablishment_contexts), 1)
+        refs = [
+            item.ref for surface in projection.surfaces for item in surface.conclusions
+        ]
+        self.assertEqual(len(refs), len(set(refs)))
+        self.assertEqual(
+            {ref.understanding_id.value for ref in refs}, {"u-a", "u-b"}
+        )
+
     def test_changed_path_maps_containment_direct_and_indirect(self) -> None:
         result = self.service.reconsider(
             m.ReconsiderRequest(

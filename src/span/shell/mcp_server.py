@@ -226,6 +226,7 @@ def main(argv: list[str] | None = None) -> None:
     ) as installation:
         adapter.context_loader = installation.context_for_locator
         adapter.functional_pyramid = installation.functional_pyramid
+        adapter.addressing = installation.addressing
         _asyncio.run(_serve(adapter))
 
 

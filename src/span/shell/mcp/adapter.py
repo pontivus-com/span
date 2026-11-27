@@ -45,6 +45,7 @@ from span.shell.sqlite_store.functional_pyramid import (
     FunctionalPyramidInstallationSchemaError,
     FunctionalPyramidInstallationStoreError,
 )
+from span.service.addressing import AddressingService
 from span.service.functional_pyramid import FunctionalPyramidService
 
 try:  # Shell-owned provider-error mapping; the port gains no new result.
@@ -73,6 +74,7 @@ class McpAdapter:
     repository_locators: dict[str, str] = _field(default_factory=dict)
     context_loader: _Callable[[str], ServiceContext] | None = None
     functional_pyramid: FunctionalPyramidService | None = None
+    addressing: AddressingService | None = None
 
     def register(self, repository_id: str, context: ServiceContext) -> None:
         """Record one repository's wired context (explicit setup path)."""
@@ -164,6 +166,9 @@ class McpAdapter:
                 )
             else:
                 assert repository_id is not None
+                if self.addressing is not None and isinstance(request, m.AskRequest):
+                    request = self.addressing.obtain(request)
+                    repository_id = repository_route(tool_name, request, None)
                 context = self._context(repository_id)
                 outcome = _call_operation(tool_name, request, context)
         except StaleContinuationError:

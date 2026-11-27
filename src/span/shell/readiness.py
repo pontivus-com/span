@@ -693,7 +693,8 @@ def _active_instance_report(
         "status": status,
         "members": member_reports,
         "findings": [
-            m.public_pyramid_finding(finding, roots).reason.value for finding in structural
+            m.public_pyramid_finding(finding, roots).reason.value
+            for finding in structural
         ],
         "action": (
             "restore the registered ACTIVE member repository"
