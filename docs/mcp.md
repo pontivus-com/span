@@ -359,7 +359,8 @@ common path: the agent declares the scope it inspected and Span observes
 membership internally.
 
 Results: `UnderstandingRecorded`, `VerificationRecorded`, `SurfaceDeclared`,
-`FunctionalPyramidRecorded`, `Rejected`, or `Unavailable`. A rejection names the offending identity, the
+`FunctionalPyramidRecorded`, `AcceptedDetailUnavailable`, `Rejected`, or
+`Unavailable`. A rejection names the offending identity, the
 stable server-owned public cause text, the required action, and the structured current version or
 current boundary version when one exists; recognized lifecycle request-shape
 failures are also `Rejected` with their public field coordinates. It is a
@@ -369,6 +370,9 @@ could not be evaluated; that outcome is `SupportUnavailable`. Ordinary acceptanc
 carries a receipt selector rather than nesting the full receipt. Accepted
 understanding also carries live status or `SurfaceStatusUnavailable`; exact receipt
 detail remains retrievable with `ReceiptRetrievalSelector`.
+If a write has committed but its exact historical acceptance detail cannot be
+served, `AcceptedDetailUnavailable` identifies that accepted receipt. This is not
+a failed write; do not repeat the semantic operation.
 
 ## `reconsider`
 
