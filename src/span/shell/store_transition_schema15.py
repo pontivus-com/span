@@ -301,6 +301,7 @@ def _restore_receipt(value: object) -> dict[str, object]:
     versions: tuple[m.UnderstandingVersionNumber, ...] = ()
     challenges: tuple[m.ChallengeId, ...] = ()
     dependents: tuple[m.ConclusionRevisionRef, ...] = ()
+    runs: tuple[m.VerificationRunId, ...]
     if isinstance(effect, dict) and effect.get("$type") == "AcceptedVerificationEffect":
         if set(effect) != {"$type", "run_id"}:
             raise TransitionError("unexpected accepted verification detail")
