@@ -768,7 +768,9 @@ def apply_update(
     unchanged = _unchanged_confirmations(
         command, current_version, existing_conclusions, current_confirmations
     )
-    accepted = []
+    accepted: list[
+        tuple[ConclusionRevisionRef, RevisionEffectAction, ConclusionRevisionRef | None]
+    ] = []
     for action in actions:
         if isinstance(action, ConfirmConclusion):
             ref = _require_current(by_lineage, action.conclusion_id)
