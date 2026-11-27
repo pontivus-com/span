@@ -287,6 +287,7 @@ class TransitionManifest:
     staged_sha256: str = ""
     previous_sha256: str = ""
     rollback_sha256: str = ""
+    coordinated_roots: tuple[str, ...] = ()
     steps: tuple[TransitionStep, ...] = ()
     limitations: tuple[str, ...] = ()
 
@@ -609,6 +610,7 @@ def _manifest_payload(manifest: TransitionManifest) -> dict[str, object]:
         "staged_sha256": manifest.staged_sha256,
         "previous_sha256": manifest.previous_sha256,
         "rollback_sha256": manifest.rollback_sha256,
+        "coordinated_roots": list(manifest.coordinated_roots),
         "tables": [_table_payload(item) for item in manifest.tables],
         "created_at": manifest.created_at,
         "updated_at": manifest.updated_at,
@@ -647,6 +649,12 @@ def _manifest_from_payload(payload: dict[str, object]) -> TransitionManifest:
             staged_sha256=str(payload.get("staged_sha256", "")),
             previous_sha256=str(payload.get("previous_sha256", "")),
             rollback_sha256=str(payload.get("rollback_sha256", "")),
+            coordinated_roots=tuple(
+                str(root)
+                for root in _typing.cast(
+                    tuple[object, ...], payload.get("coordinated_roots", ())
+                )
+            ),
             tables=tuple(
                 TableInventory(
                     name=str(item["name"]),
@@ -1484,9 +1492,11 @@ def _activate(
     # leaves the active database absent between two renames.
     _os.replace(paths.staging, paths.active)
     _fsync_file(paths.active)
-    _fsync_dir(paths.data_dir)
+    _fsync_dir(paths.active.parent)
     _fsync_dir(paths.transition_dir)
-    effects.append(f"activated schema-{TARGET_SCHEMA} store at {paths.active}")
+    effects.append(
+        f"activated schema-{manifest.expected_active_schema} store at {paths.active}"
+    )
     return tuple(effects)
 
 
@@ -1644,13 +1654,27 @@ def _prepare_member(
         manifest, step_effects, step_limits = step(config, paths, manifest, root)
         effects += step_effects
         limitations += step_limits
+    if not manifest.staged_sha256:
+        _verify_staged(
+            paths, config, root, manifest.tables, manifest.source_schema_version
+        )
+        manifest = _dataclasses.replace(
+            manifest, staged_sha256=_sha256_file(paths.staging)
+        )
+        _write_manifest(paths, manifest)
+    _require_staged_digest(paths, manifest)
+    return manifest, effects, limitations
+
+
+def _require_staged_digest(
+    paths: TransitionPaths, manifest: TransitionManifest
+) -> None:
     if (
         not manifest.staged_sha256
         or not paths.staging.is_file()
         or _sha256_file(paths.staging) != manifest.staged_sha256
     ):
         raise TransitionError("verified staging store is missing or changed")
-    return manifest, effects, limitations
 
 
 def _cutover_members(
@@ -1686,9 +1710,11 @@ def _require_cutover_source(
     source: _sqlite3.Connection,
     inspection: LegacyInspection,
 ) -> None:
-    if inspection.integrity != "ok":
+    if inspection.integrity != "ok" or _integrity(source) != "ok":
         raise TransitionError(f"cutover source failed integrity: {paths.active}")
     version = _read_schema_version(source)
+    if version != inspection.schema_version:
+        raise TransitionError("cutover source changed after inspection")
     if paths.installation:
         if version != 1:
             raise TransitionError("installation cutover requires schema 1")
@@ -1706,14 +1732,16 @@ def _require_cutover_source(
             raise TransitionError("cutover source root binding does not match")
 
 
-def _prepare_installation_cutover(
-    data_dir: _pathlib.Path, roots: tuple[_pathlib.Path, ...]
-) -> tuple[TransitionManifest, ...]:
-    """Stage and verify the entire 16/2 set without publishing a database.
+_CutoverMember = tuple[
+    TransitionConfig, TransitionPaths, LegacyInspection, _sqlite3.Connection
+]
 
-    This is an offline prerequisite of the integrated runtime cutover.
-    No mixed-version set is made visible by this preparation operation.
-    """
+
+@_contextlib.contextmanager
+def _locked_cutover_members(
+    data_dir: _pathlib.Path, roots: tuple[_pathlib.Path, ...]
+) -> _typing.Iterator[tuple[_CutoverMember, ...]]:
+    """Acquire every source before any archive, stage or publication."""
     members = _cutover_members(data_dir, roots)
     with _transition_ownership(data_dir), _contextlib.ExitStack() as stack:
         for _, paths in members:
@@ -1723,25 +1751,194 @@ def _prepare_installation_cutover(
                 )
         inspections = tuple(_inspect_paths(config, paths) for config, paths in members)
         sources = tuple(
-            stack.enter_context(_exclusive_source(paths.active))
-            for _, paths in members
+            stack.enter_context(_exclusive_source(paths.active)) for _, paths in members
         )
-        for (config, paths), source, inspection in zip(
-            members, sources, inspections, strict=True
-        ):
-            _require_cutover_source(config, paths, source, inspection)
-        required = sum(item.required_free_bytes for item in inspections)
-        if _shutil.disk_usage(data_dir).free < required:
-            raise TransitionError("insufficient free space for coordinated staging")
-        manifests = []
-        for (config, paths), source, inspection in zip(
-            members, sources, inspections, strict=True
-        ):
-            manifest, _, _ = _prepare_member(
-                config, paths, inspection, config.root or str(data_dir), source
+        yield tuple(
+            (config, paths, inspection, source)
+            for (config, paths), inspection, source in zip(
+                members, inspections, sources, strict=True
             )
-            manifests.append(manifest)
-        return tuple(manifests)
+        )
+
+
+def _member_root(config: TransitionConfig) -> str:
+    return config.root or str(config.data_dir.resolve())
+
+
+def _group_member(members: tuple[_CutoverMember, ...]) -> _CutoverMember:
+    return next(member for member in members if member[1].installation)
+
+
+def _require_group(
+    members: tuple[_CutoverMember, ...], *, create: bool
+) -> TransitionManifest:
+    config, paths, inspection, _ = _group_member(members)
+    roots = tuple(
+        sorted(
+            _member_root(config)
+            for config, path, _, _ in members
+            if not path.installation
+        )
+    )
+    manifest = _read_manifest(paths)
+    if manifest is None:
+        if not create or inspection.schema_version != 1:
+            raise TransitionError("coordinated transition manifest is missing")
+        manifest = _open_manifest(config, paths, inspection, _member_root(config))
+        manifest = _dataclasses.replace(manifest, coordinated_roots=roots)
+        _write_manifest(paths, manifest)
+    if not manifest.coordinated_roots and manifest.state is TransitionState.INSPECTED:
+        if not create or paths.archive.exists():
+            raise TransitionError("coordinated transition membership is unavailable")
+        manifest = _dataclasses.replace(manifest, coordinated_roots=roots)
+        _write_manifest(paths, manifest)
+    if manifest.coordinated_roots != roots:
+        raise TransitionError("registered cutover membership changed")
+    _require_manifest_binding(config, paths, manifest, _member_root(config))
+    return manifest
+
+
+def _group_has_step(manifest: TransitionManifest, name: str) -> bool:
+    return any(step.name == name for step in manifest.steps)
+
+
+def _mark_group(
+    members: tuple[_CutoverMember, ...], manifest: TransitionManifest, name: str
+) -> None:
+    if _group_has_step(manifest, name):
+        return
+    config, paths, _, _ = _group_member(members)
+    _write_manifest(
+        paths,
+        _advance(manifest, manifest.state, name, clock=config.clock),
+    )
+
+
+def _published_manifest(
+    config: TransitionConfig, paths: TransitionPaths
+) -> TransitionManifest:
+    manifest = _read_manifest(paths)
+    if manifest is None or manifest.state not in {
+        TransitionState.ACTIVATED,
+        TransitionState.VERIFIED,
+    }:
+        raise TransitionError("published cutover member lacks verified intent")
+    _require_manifest_binding(config, paths, manifest, _member_root(config))
+    _require_published_digest(paths, manifest)
+    return manifest
+
+
+def _prepare_cutover_locked(
+    members: tuple[_CutoverMember, ...], *, resume_publication: bool
+) -> tuple[TransitionManifest, ...]:
+    for config, paths, inspection, source in members:
+        if inspection.schema_version != paths.target_schema:
+            _require_cutover_source(config, paths, source, inspection)
+        elif not resume_publication:
+            raise TransitionError("cutover already contains published members")
+        else:
+            _published_manifest(config, paths)
+    group = _require_group(members, create=True)
+    if _group_has_step(group, "coordinated-rollback"):
+        raise TransitionError("coordinated rollback must be completed")
+    if group.state is TransitionState.VERIFIED:
+        raise TransitionError("coordinated transition is already published")
+    required = sum(
+        inspection.required_free_bytes
+        for _, paths, inspection, _ in members
+        if inspection.schema_version != paths.target_schema
+    )
+    if _shutil.disk_usage(members[0][0].data_dir).free < required:
+        raise TransitionError("insufficient free space for coordinated staging")
+    manifests = []
+    for config, paths, inspection, source in members:
+        if inspection.schema_version == paths.target_schema:
+            manifest = _published_manifest(config, paths)
+        else:
+            manifest, _, _ = _prepare_member(
+                config, paths, inspection, _member_root(config), source
+            )
+        manifests.append(manifest)
+    return tuple(manifests)
+
+
+def _prepare_installation_cutover(
+    data_dir: _pathlib.Path, roots: tuple[_pathlib.Path, ...]
+) -> tuple[TransitionManifest, ...]:
+    """Stage and verify all stores without publishing any active database."""
+    with _locked_cutover_members(data_dir, roots) as members:
+        return _prepare_cutover_locked(members, resume_publication=False)
+
+
+def _apply_installation_cutover(
+    data_dir: _pathlib.Path, roots: tuple[_pathlib.Path, ...]
+) -> tuple[TransitionManifest, ...]:
+    """Publish the verified complete set, installation last, under one lock."""
+    with _locked_cutover_members(data_dir, roots) as members:
+        manifests = _prepare_cutover_locked(members, resume_publication=True)
+        group = _require_group(members, create=False)
+        _mark_group(members, group, "coordinated-publication")
+        # Close every former journal before the first database replacement.
+        for _, paths, inspection, source in members:
+            if inspection.schema_version != paths.target_schema:
+                _prepare_replacement(source, paths.active)
+        published: dict[_pathlib.Path, TransitionManifest] = {}
+        ordered = sorted(
+            zip(members, manifests, strict=True),
+            key=lambda item: item[0][1].installation,
+        )
+        for (config, paths, inspection, _), manifest in ordered:
+            # The installation manifest also owns the durable group intent.
+            if paths.installation:
+                manifest = _require_group(members, create=False)
+            if inspection.schema_version == paths.target_schema:
+                manifest = _finish_published(config, paths, manifest)
+            else:
+                manifest, _, _ = _activate_step(
+                    config, paths, manifest, _member_root(config)
+                )
+            published[paths.active] = manifest
+        return tuple(published[paths.active] for _, paths, _, _ in members)
+
+
+def _rollback_installation_cutover(
+    data_dir: _pathlib.Path, roots: tuple[_pathlib.Path, ...]
+) -> tuple[TransitionManifest, ...]:
+    """Restore the complete set, preserving new-format writes before replacement."""
+    with _locked_cutover_members(data_dir, roots) as members:
+        group = _require_group(members, create=False)
+        for config, paths, inspection, _ in members:
+            manifest = _read_manifest(paths)
+            if manifest is None:
+                if inspection.schema_version == paths.target_schema:
+                    raise TransitionError("unattributed published cutover member")
+                continue
+            _require_manifest_binding(config, paths, manifest, _member_root(config))
+            if inspection.schema_version == paths.target_schema:
+                _verify_archive(paths, manifest)
+                _verify_previous(paths, manifest)
+        _mark_group(members, group, "coordinated-rollback")
+        restored: dict[_pathlib.Path, TransitionManifest] = {}
+        for config, paths, inspection, source in sorted(
+            members, key=lambda member: member[1].installation
+        ):
+            manifest = _read_manifest(paths)
+            if manifest is None:
+                continue
+            if manifest.state is TransitionState.ROLLED_BACK:
+                if inspection.schema_version != manifest.source_schema_version:
+                    raise TransitionError("rolled-back member schema changed")
+                restored[paths.active] = manifest
+                continue
+            report = _rollback_member(config, paths, inspection, source)
+            if report.manifest is None:
+                raise TransitionError("rollback did not retain its manifest")
+            restored[paths.active] = report.manifest
+        return tuple(
+            restored[paths.active]
+            for _, paths, _, _ in members
+            if paths.active in restored
+        )
 
 
 def _resume_published(
@@ -1751,31 +1948,9 @@ def _resume_published(
     inspection: LegacyInspection,
     root: str,
 ) -> TransitionReport:
-    if (
-        manifest.repository_id != config.repository_id
-        or manifest.root != root
-        or manifest.expected_active_schema != TARGET_SCHEMA
-    ):
-        raise TransitionError("pending activation has different binding facts")
+    _require_manifest_binding(config, paths, manifest, root)
     with _exclusive_source(paths.active):
-        _verify_archive(paths, manifest)
-        if (
-            not manifest.staged_sha256
-            or _sha256_file(paths.active) != manifest.staged_sha256
-            or not paths.previous.is_file()
-            or _sha256_file(paths.previous) != manifest.previous_sha256
-        ):
-            raise TransitionError("published activation cannot be proven from manifest")
-        _fsync_file(paths.active)
-        _fsync_dir(paths.data_dir)
-        manifest = _advance(
-            manifest,
-            TransitionState.VERIFIED,
-            "activate",
-            clock=config.clock,
-            detail="verified already published staging bytes",
-        )
-        _write_manifest(paths, manifest)
+        manifest = _finish_published(config, paths, manifest)
     return TransitionReport(
         phase=TransitionPhase.APPLY,
         state=manifest.state,
@@ -1786,6 +1961,53 @@ def _resume_published(
         manifest=manifest,
         limitations=manifest.limitations,
     )
+
+
+def _require_manifest_binding(
+    config: TransitionConfig,
+    paths: TransitionPaths,
+    manifest: TransitionManifest,
+    root: str,
+) -> None:
+    if (
+        manifest.repository_id != config.repository_id
+        or manifest.root != root
+        or manifest.source_path != str(paths.active)
+        or manifest.expected_active_schema != (paths.target_schema or TARGET_SCHEMA)
+    ):
+        raise TransitionError("transition manifest has different binding facts")
+
+
+def _require_published_digest(
+    paths: TransitionPaths, manifest: TransitionManifest
+) -> None:
+    _verify_archive(paths, manifest)
+    if (
+        not manifest.staged_sha256
+        or _sha256_file(paths.active) != manifest.staged_sha256
+        or not paths.previous.is_file()
+        or _sha256_file(paths.previous) != manifest.previous_sha256
+    ):
+        raise TransitionError("published activation cannot be proven from manifest")
+
+
+def _finish_published(
+    config: TransitionConfig, paths: TransitionPaths, manifest: TransitionManifest
+) -> TransitionManifest:
+    _require_published_digest(paths, manifest)
+    if manifest.state is TransitionState.VERIFIED:
+        return manifest
+    _fsync_file(paths.active)
+    _fsync_dir(paths.active.parent)
+    manifest = _advance(
+        manifest,
+        TransitionState.VERIFIED,
+        "activate",
+        clock=config.clock,
+        detail="verified already published staging bytes",
+    )
+    _write_manifest(paths, manifest)
+    return manifest
 
 
 def _open_manifest(
@@ -1814,17 +2036,9 @@ def _open_manifest(
         )
         _write_manifest(paths, manifest)
         return manifest
-    if (
-        existing.repository_id != config.repository_id
-        or existing.root != root
-        or existing.source_path != str(paths.active)
-        or existing.expected_active_schema != (paths.target_schema or TARGET_SCHEMA)
-        or existing.source_schema_version != inspection.schema_version
-    ):
-        raise TransitionError(
-            "an unfinished transition for this repository has different "
-            "binding facts; inspect it before reusing or removing it"
-        )
+    _require_manifest_binding(config, paths, existing, root)
+    if existing.source_schema_version != inspection.schema_version:
+        raise TransitionError("unfinished transition source schema changed")
     if existing.state in {TransitionState.ROLLING_BACK, TransitionState.ROLLED_BACK}:
         raise TransitionError("transition is in rollback; preserve its artifacts")
     if existing.state is TransitionState.VERIFIED:
@@ -1956,14 +2170,7 @@ def _activate_step(
     if manifest.state is not TransitionState.ACTIVATED:
         return manifest, (), ()
     _require_schema12_context_drain(paths.archive, config)
-    if not manifest.staged_sha256:
-        _verify_staged(
-            paths, config, root, manifest.tables, manifest.source_schema_version
-        )
-        manifest = _dataclasses.replace(
-            manifest, staged_sha256=_sha256_file(paths.staging)
-        )
-        _write_manifest(paths, manifest)
+    _require_staged_digest(paths, manifest)
     digest = _sha256_file(paths.active)
     if manifest.previous_sha256 != digest:
         manifest = _dataclasses.replace(manifest, previous_sha256=digest)
@@ -1974,7 +2181,7 @@ def _activate_step(
         TransitionState.VERIFIED,
         "activate",
         clock=config.clock,
-        detail=f"schema-{TARGET_SCHEMA} store is active",
+        detail=f"schema-{manifest.expected_active_schema} store is active",
     )
     _write_manifest(paths, manifest)
     return manifest, effects, ()
@@ -2073,6 +2280,18 @@ def rollback(config: TransitionConfig) -> TransitionReport:
 def _rollback(config: TransitionConfig) -> TransitionReport:
     paths = TransitionPaths(config.data_dir, config.repository_id)
     inspection = inspect_store(config)
+    if not paths.active.is_file():
+        raise TransitionError("active store is missing; refusing destructive rollback")
+    with _exclusive_source(paths.active) as source:
+        return _rollback_member(config, paths, inspection, source)
+
+
+def _rollback_member(
+    config: TransitionConfig,
+    paths: TransitionPaths,
+    inspection: LegacyInspection,
+    source: _sqlite3.Connection,
+) -> TransitionReport:
     manifest = _read_manifest(paths)
     if manifest is None:
         raise TransitionError("no transition manifest to roll back")
@@ -2087,12 +2306,8 @@ def _rollback(config: TransitionConfig) -> TransitionReport:
         raise TransitionError(
             f"transition state {manifest.state.value} cannot be rolled back"
         )
-    if (
-        manifest.repository_id != config.repository_id
-        or manifest.source_path != str(paths.active)
-        or manifest.expected_active_schema != TARGET_SCHEMA
-    ):
-        raise TransitionError("rollback manifest has different binding facts")
+    root = str(_pathlib.Path(config.root).resolve()) if config.root else manifest.root
+    _require_manifest_binding(config, paths, manifest, root)
     effects: list[str] = []
     if manifest.state in {
         TransitionState.INSPECTED,
@@ -2123,7 +2338,7 @@ def _rollback(config: TransitionConfig) -> TransitionReport:
             manifest=manifest,
             limitations=manifest.limitations,
         )
-    manifest, preserved = _restore_archived_store(config, paths, manifest)
+    manifest, preserved = _restore_archived_store(config, paths, manifest, source)
     effects.append(f"preserved new-format writes at {preserved}")
     effects.append(f"restored verified legacy store at {paths.active}")
     manifest = _advance(
@@ -2178,67 +2393,69 @@ def _rollback_snapshot(
 
 
 def _restore_archived_store(
-    config: TransitionConfig, paths: TransitionPaths, manifest: TransitionManifest
+    config: TransitionConfig,
+    paths: TransitionPaths,
+    manifest: TransitionManifest,
+    source: _sqlite3.Connection,
 ) -> tuple[TransitionManifest, _pathlib.Path]:
     _verify_archive(paths, manifest)
     manifest = _verify_previous(paths, manifest)
     if not paths.active.is_file():
         raise TransitionError("active store is missing; refusing destructive rollback")
-    with _exclusive_source(paths.active) as source:
-        version = _read_schema_version(source)
-        if (
-            manifest.state is TransitionState.ROLLING_BACK
-            and version == manifest.source_schema_version
-        ):
-            preserved = _rollback_snapshot(paths, manifest)
-            if (
-                not preserved.is_file()
-                or _sha256_file(preserved) != manifest.rollback_sha256
-                or _sha256_file(paths.active) != manifest.previous_sha256
-            ):
-                raise TransitionError(
-                    "published rollback cannot be proven from manifest"
-                )
-            _fsync_file(paths.active)
-            _fsync_dir(paths.data_dir)
-            return manifest, preserved
-        if version != TARGET_SCHEMA:
-            raise TransitionError(
-                f"active store is not the schema-{TARGET_SCHEMA} store "
-                "this manifest owns; refusing to replace it"
-            )
-        # Always capture the present target, including writes since a failed
-        # rollback. Earlier immutable snapshots remain untouched.
-        temporary = paths.transition_dir / "rollback-target.db"
-        digest = _backup_database(source, temporary)
-        manifest = _dataclasses.replace(manifest, rollback_sha256=digest)
+    version = _read_schema_version(source)
+    if (
+        manifest.state is TransitionState.ROLLING_BACK
+        and version == manifest.source_schema_version
+    ):
         preserved = _rollback_snapshot(paths, manifest)
-        if preserved.exists():
-            if _sha256_file(preserved) != digest:
-                raise TransitionError("existing rollback snapshot is corrupt")
-            temporary.unlink()
-        else:
-            _os.replace(temporary, preserved)
-        _fsync_dir(paths.transition_dir)
-        manifest = _advance(
-            manifest,
-            TransitionState.ROLLING_BACK,
-            "preserve-target",
-            clock=config.clock,
-            detail=f"sha256 {digest}",
-        )
-        _write_manifest(paths, manifest)
-        _prepare_replacement(source, paths.active)
-        restore = paths.transition_dir / "rollback-source.db.partial"
-        _shutil.copy2(paths.previous, restore)
-        _fsync_file(restore)
-        if _sha256_file(restore) != manifest.previous_sha256:
-            raise TransitionError("rollback restoration copy changed")
-        _os.replace(restore, paths.active)
+        if (
+            not preserved.is_file()
+            or _sha256_file(preserved) != manifest.rollback_sha256
+            or _sha256_file(paths.active) != manifest.previous_sha256
+        ):
+            raise TransitionError(
+                "published rollback cannot be proven from manifest"
+            )
         _fsync_file(paths.active)
-        _fsync_dir(paths.data_dir)
-        _fsync_dir(paths.transition_dir)
+        _fsync_dir(paths.active.parent)
         return manifest, preserved
+    if version != manifest.expected_active_schema:
+        raise TransitionError(
+            f"active store is not the schema-{manifest.expected_active_schema} store "
+            "this manifest owns; refusing to replace it"
+        )
+    # Always capture the present target, including writes since a failed
+    # rollback. Earlier immutable snapshots remain untouched.
+    temporary = paths.transition_dir / "rollback-target.db"
+    digest = _backup_database(source, temporary)
+    manifest = _dataclasses.replace(manifest, rollback_sha256=digest)
+    preserved = _rollback_snapshot(paths, manifest)
+    if preserved.exists():
+        if _sha256_file(preserved) != digest:
+            raise TransitionError("existing rollback snapshot is corrupt")
+        temporary.unlink()
+    else:
+        _os.replace(temporary, preserved)
+    _fsync_dir(paths.transition_dir)
+    manifest = _advance(
+        manifest,
+        TransitionState.ROLLING_BACK,
+        "preserve-target",
+        clock=config.clock,
+        detail=f"sha256 {digest}",
+    )
+    _write_manifest(paths, manifest)
+    _prepare_replacement(source, paths.active)
+    restore = paths.transition_dir / "rollback-source.db.partial"
+    _shutil.copy2(paths.previous, restore)
+    _fsync_file(restore)
+    if _sha256_file(restore) != manifest.previous_sha256:
+        raise TransitionError("rollback restoration copy changed")
+    _os.replace(restore, paths.active)
+    _fsync_file(paths.active)
+    _fsync_dir(paths.active.parent)
+    _fsync_dir(paths.transition_dir)
+    return manifest, preserved
 
 
 def _read_schema_version_ro(path: _pathlib.Path) -> int | None:

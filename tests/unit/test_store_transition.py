@@ -2040,6 +2040,71 @@ class PubSchemaTransitionTest(unittest.TestCase):
             for _, paths in members:
                 self.assertEqual(paths.active.read_bytes(), before[paths.active])
 
+    def test_coordinated_publication_resumes_and_restores_all_members(self):
+        from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
+        from span.shell.sqlite_store.functional_pyramid import (
+            FunctionalPyramidInstallationStore,
+            functional_pyramid_installation_path,
+        )
+        from span.shell.sqlite_store.lifecycle import LifecycleStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            data = base / "data"
+            data.mkdir()
+            roots = tuple(base / name for name in ("one", "two"))
+            for root in roots:
+                root.mkdir()
+                store = LifecycleStore(
+                    data / f"{root.name}.db", retention=DEFAULT_LIFECYCLE_RETENTION
+                )
+                store.register_repository(root.name, str(root))
+                store.close()
+            store = FunctionalPyramidInstallationStore.create(
+                functional_pyramid_installation_path(data),
+                retention=DEFAULT_LIFECYCLE_RETENTION,
+            )
+            store.close()
+            members = st._cutover_members(data, roots)
+            before = {paths.active: paths.active.read_bytes() for _, paths in members}
+            activate = st._activate
+
+            def interrupt(paths, manifest, *, clock):
+                if paths.repository_id == "two":
+                    raise st.TransitionError("interrupted between publications")
+                return activate(paths, manifest, clock=clock)
+
+            with mock.patch.object(st, "_activate", side_effect=interrupt):
+                with self.assertRaisesRegex(st.TransitionError, "interrupted"):
+                    st._apply_installation_cutover(data, roots)
+            self.assertEqual(st._read_schema_version_ro(data / "one.db"), 16)
+            self.assertEqual(st._read_schema_version_ro(data / "two.db"), 15)
+            self.assertEqual(
+                st._read_schema_version_ro(functional_pyramid_installation_path(data)),
+                1,
+            )
+            with self.assertRaisesRegex(st.TransitionError, "membership"):
+                st._apply_installation_cutover(data, (roots[1],))
+            manifests = st._apply_installation_cutover(data, roots)
+            for (_, paths), manifest in zip(members, manifests, strict=True):
+                self.assertEqual(manifest.state, st.TransitionState.VERIFIED)
+                self.assertEqual(
+                    st._read_schema_version_ro(paths.active), paths.target_schema
+                )
+                with sqlite3.connect(paths.active) as connection:
+                    connection.execute("INSERT INTO meta VALUES('new-write', 'kept')")
+            restored = st._rollback_installation_cutover(data, roots)
+            for (_, paths), manifest in zip(members, restored, strict=True):
+                self.assertEqual(manifest.state, st.TransitionState.ROLLED_BACK)
+                self.assertEqual(paths.active.read_bytes(), before[paths.active])
+                with sqlite3.connect(st._rollback_snapshot(paths, manifest)) as conn:
+                    self.assertEqual(
+                        conn.execute(
+                            "SELECT value FROM meta WHERE key='new-write'"
+                        ).fetchone()[0],
+                        "kept",
+                    )
+
     def test_coordinated_staging_composes_earlier_repository_mapping(self):
         from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
         from span.shell.sqlite_store.functional_pyramid import (
