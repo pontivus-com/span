@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import dataclasses as _dataclasses
-import json as _json
 import types as _types
 import typing as _typing
-from typing import cast as _cast
 
 from span.core import model as m
 from span.core import schema as _schema
+from span.core.schema import canonical_result_payload, encode_result_payload
 from span.core.rejection import StructuralFault, StructuralValidationError
 from span.shell.mcp.models import ToolError, ToolResult
 from span.shell.mcp.schemas import TOOL_REQUEST_TYPES
@@ -169,21 +168,15 @@ def _embedded_repository(request: object) -> str | None:
     return None
 
 
-def canonical_result_payload(result: object) -> dict[str, object]:
-    """Build the one canonical wire object used by both MCP result channels."""
-    compact = _schema.to_wire_root(type(result), m.to_canonical(result))
-    return _cast(dict, compact)
-
-
 def encode_result(result: object) -> str:
-    return _json.dumps(canonical_result_payload(result), sort_keys=True)
+    return encode_result_payload(canonical_result_payload(result))
 
 
 def encode_error(kind: str, message: str, replacement: str | None = None) -> ToolResult:
     error = ToolError(kind=kind, message=message, replacement=replacement)
     payload = canonical_result_payload(error)
     return ToolResult(
-        content=_json.dumps(payload, sort_keys=True),
+        content=encode_result_payload(payload),
         structured_content=payload,
         is_error=True,
     )

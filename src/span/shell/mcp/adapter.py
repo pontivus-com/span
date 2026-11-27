@@ -8,7 +8,6 @@ and perform no work.
 
 from __future__ import annotations
 
-import json as _json
 import logging as _logging
 import pathlib as _pathlib
 from collections.abc import Callable as _Callable
@@ -17,6 +16,7 @@ from dataclasses import field as _field
 from typing import cast as _cast
 
 from span.core import model as m
+from span.core.schema import encode_result_payload
 from span.core.recording import RecordingConflict, RecordingValidationError
 from span.core.rejection import (
     Rejection,
@@ -484,7 +484,7 @@ def _encoded_result(result: object) -> ToolResult:
             "report the operation failure without internal diagnostics",
         )
     return ToolResult(
-        content=_json.dumps(payload, sort_keys=True),
+        content=encode_result_payload(payload),
         structured_content=payload,
         is_error=False,
     )

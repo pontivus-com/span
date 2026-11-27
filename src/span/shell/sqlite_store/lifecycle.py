@@ -923,6 +923,7 @@ class LifecycleStore:
         identity: m.RecordingIdentity,
         content_digest: m.ContentDigest,
         understanding_id: m.UnderstandingId,
+        expected_version: m.UnderstandingVersionNumber,
     ) -> m.RecordReceipt:
         """Persist acceptance for an unchanged, already-current version (FD-31)."""
         with _transaction(self._connection) as connection:
@@ -945,6 +946,11 @@ class LifecycleStore:
             understanding = self._get_understanding_in(
                 connection, understanding_id.value
             )
+            if understanding.current_version != expected_version:
+                raise RecordingConflict(
+                    "expected understanding version does not match current",
+                    current_version=understanding.current_version.value,
+                )
             receipt = build_receipt(
                 identity,
                 content_digest,

@@ -316,6 +316,7 @@ class LifecycleStorePort(_typing.Protocol):
         identity: m.RecordingIdentity,
         content_digest: m.ContentDigest,
         understanding_id: m.UnderstandingId,
+        expected_version: m.UnderstandingVersionNumber,
     ) -> m.RecordReceipt:
         """Persist acceptance for an unchanged, already-current version."""
         ...

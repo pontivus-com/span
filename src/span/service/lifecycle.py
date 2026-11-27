@@ -463,7 +463,9 @@ class LifecycleService:
             no_op = self._confirm_noop(governed)
             if no_op is not None:
                 return self.qualify_understanding(
-                    self._store.record_noop(governed.identity, digest, no_op)
+                    self._store.record_noop(
+                        governed.identity, digest, no_op, governed.expected_version
+                    )
                 )
             return self.qualify_understanding(
                 self._store.record_understanding(governed, content_digest=digest)
@@ -783,6 +785,7 @@ class LifecycleService:
             or command.correct
             or command.replace
             or command.withdraw
+            or command.curate
             or command.gaps is not None
             or command.challenge_dispositions
         ):

@@ -14,6 +14,8 @@ from span.core.schema.wire import (  # noqa: F401
     to_wire,
     to_wire_root,
     compact_payload,
+    canonical_result_payload,
+    encode_result_payload,
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "to_wire",
     "to_wire_root",
     "compact_payload",
+    "canonical_result_payload",
+    "encode_result_payload",
 ]

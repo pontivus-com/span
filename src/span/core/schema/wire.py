@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses as _dataclasses
+import json as _json
 import types as _types
 import typing as _typing
 
@@ -753,6 +754,21 @@ def to_wire(value: object, hint: object) -> object:
         item = args[0] if args else None
         return [to_wire(v, item) for v in value]
     return value
+
+
+def canonical_result_payload(result: object) -> dict[str, object]:
+    """The single result projection shared by fitting and MCP delivery."""
+    from span.core.model.canonical import to_canonical
+
+    payload = to_wire_root(type(result), to_canonical(result))
+    if not isinstance(payload, dict):
+        raise TypeError("a canonical result must be an object")
+    return payload
+
+
+def encode_result_payload(payload: dict[str, object]) -> str:
+    """Exact JSON text for the structured and textual delivery channels."""
+    return _json.dumps(payload, sort_keys=True)
 
 
 def to_wire_root(cls: type, canonical: object) -> object:

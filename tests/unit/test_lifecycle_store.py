@@ -389,6 +389,29 @@ class LifecycleStoreTest(unittest.TestCase):
                 understanding_id=m.UnderstandingId("u-1"),
             )
 
+    def test_noop_acceptance_rechecks_expected_version_and_replays(self) -> None:
+        self.store.put_context(_context())
+        self.store.record_understanding(
+            _create_command(), understanding_id=m.UnderstandingId("u-1")
+        )
+        identity = _identity("sub-noop")
+        digest = m.ContentDigest("sha256:noop")
+        version = m.UnderstandingVersionNumber(1)
+        receipt = self.store.record_noop(
+            identity, digest, m.UnderstandingId("u-1"), version
+        )
+        self.store.record_understanding(_update_command())
+        self.assertEqual(
+            self.store.record_noop(
+                identity, digest, m.UnderstandingId("u-1"), version
+            ),
+            receipt,
+        )
+        with self.assertRaises(RecordingConflict):
+            self.store.record_noop(
+                _identity("sub-stale-noop"), digest, m.UnderstandingId("u-1"), version
+            )
+
     def test_update_cas_and_history(self) -> None:
         self.store.put_context(_context())
         self.store.record_understanding(
