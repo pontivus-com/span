@@ -549,9 +549,7 @@ class DependencyEffectService:
                 if self._is_actionable(conclusion):
                     actionable.setdefault(repository_id, []).append(conclusion)
 
-        pending: list[
-            tuple[str, ContextBinding, tuple[str, ...], tuple[str, ...]]
-        ] = []
+        pending: list[tuple[str, ContextBinding, tuple[str, ...], tuple[str, ...]]] = []
         for repository_id in sorted(actionable):
             store = self._store_for_repository(repository_id)
             scopes = list(root_scopes.get(repository_id, ()))
