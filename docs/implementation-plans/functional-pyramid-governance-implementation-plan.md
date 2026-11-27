@@ -693,10 +693,13 @@ replay and ordinary dependent effects. Persist original per-ref reasons and
 surface with immutable accepted coordinates; replay must not rewrite all
 causes to DIRECT. Test direct seed reached as indirect dependent, replay
 of indirect effect, current/superseded/withdrawn/unavailable dispositions,
-and legacy unknown cause; shared engine, no second traversal.
+and legacy unknown cause. Keep a stable affected_conclusions slot through
+live disposition changes; verify successor support before declaring an effect
+discharged. PUB-03 closes pure traversal/projection first; receipt/manifest
+persistence integration follows PUB-07A and PUB-04. Shared engine, no second traversal.
 
 **PUB-04 — Bound exact result delivery (API-04/07–09/16/21/22).** After
-PUB-02/03, modify service/continuation.py, bounds.py, answer.py, evidence.py,
+PUB-02/03 and PUB-07A, modify service/continuation.py, bounds.py, answer.py, evidence.py,
 lifecycle.py, reconsider.py, functional_pyramid.py and shell/mcp/{adapter,wire,
 schemas}.py; use existing store/retention owners for immutable ordered
 delivery selection. Extend existing token grammar to typed selection owner,
@@ -708,7 +711,9 @@ directory after routes to the same ResultPage, pending keyset retains its
 canonical form. Test stale state vs timestamp-only changes, exact restart,
 missing/forged cursor, mixed nested collection, no-progress rejection,
 expiry with undisposed effects, receipt recovery after manifest loss.
-No second evidence selection or semantic writer. Fit mandatory subject/state/
+Test repeated admission retry against the same durable manifest, successor
+becoming non-current, and primary-complete Answer with history cursor. No
+second evidence selection or semantic writer. Fit mandatory subject/state/
 receipt envelope first, primary content then aux, page all variable
 collections (including nested findings, evidence metadata, exact receipts
 and contexts), constant omission description, no lost commit. Preflight

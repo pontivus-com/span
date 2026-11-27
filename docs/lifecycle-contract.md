@@ -106,7 +106,7 @@ Exactly one form is supplied:
 
 A surface is an exact `{kind, locator}` identity, never containment. A reference
 must resolve to exactly one surface; otherwise return `AmbiguousSurface` with
-exact candidates. Ordinary surface/reference obtain accepts no free `question`
+exact candidates, each a repository-qualified SurfaceKey. Ordinary surface/reference obtain accepts no free `question`
 field. Recorded questions remain metadata grouped in the document view, and F3's
 targeted question reachability is the explicit
 `RecordedQuestionSelector{repository_id, surface, question}`. The `surface` input in both ordinary obtain and this selector uses
@@ -275,9 +275,10 @@ exact keyset PendingCuration pages. EvidencePage is retired; the initial
 admission retains its context. No continued write, empty Answer or second
 copy of an initial result. ResultKind is the initial result discriminator
 (Answer, Gap, RetrievedUnderstanding, RetrievedReceipt,
-FunctionalPyramidView/Status/Candidate/Recorded/RetrievedFunctionalPyramidReceipt,
+FunctionalPyramidView, FunctionalPyramidStatus, FunctionalPyramidCandidate,
+FunctionalPyramidRecorded, RetrievedFunctionalPyramidReceipt,
 UnderstandingRecorded, VerificationRecorded, SurfaceDeclared, Changed,
-Challenged, AmbiguousSurface).
+Challenged, AmbiguousSurface, AcceptedDetailUnavailable).
 
 ResultPart is a closed typed collection slice: `collection` identifies one
 public collection below, `parent` identifies the containing public semantic
@@ -293,6 +294,7 @@ binds the collection to its item type and allowed parent; no untyped item.
 
 | Collection | Item type |
 | --- | --- |
+| groups | AnswerGroup (nonempty fitting conclusion prefix) |
 | conclusions, group_conclusions | ConclusionView |
 | gaps | RecordedQuestionGap |
 | historical | HistoricalConclusion |
@@ -302,17 +304,19 @@ binds the collection to its item type and allowed parent; no untyped item.
 | descendants | SurfaceStatusSummary |
 | verification, verification_history | VerificationView |
 | observation_qualifications | ObservationQualification |
+| verification_runs, run_observations, limitations | VerificationRun, SourceObservationId, str respectively |
 | support_findings | SupportFinding |
 | evidence_refs, audit_basis, audit_derivation_inputs | EvidenceRef, SupportBasis, existing ClaimRef/RelationshipRef/EvidenceRef union respectively |
 | admission_outcomes, evidence_deliveries | EvidenceAdmissionOutcome, EvidenceDelivery respectively |
 | placements, unresolved, validation_findings, graph_findings, status_findings | FunctionalPyramidPlacementView, FunctionalPyramidPublicFinding, FunctionalPyramidValidationFinding, FunctionalPyramidPublicFinding, FunctionalPyramidPublicFinding respectively |
 | member_repository_ids, receipt_members, member_declaration_refs | str, FunctionalPyramidMemberView, EvidenceRef respectively |
 | audit_conclusions, challenges, curations, challenge_dispositions | AuditConclusion, Challenge, CurationDisposition, ChallengeDispositionRecord respectively |
-| effect_dispositions | EffectDisposition |
+| challenge_targets, resolution_conclusions, resolution_withdrawn | ConclusionRevisionRef |
+| historical_understanding_versions, historical_verification_run_ids, historical_challenge_ids | UnderstandingVersionRef, VerificationRunId, ChallengeId respectively |
 | accepted_revision_effects, recorded_revision_effects, accepted_challenge_dispositions | AcceptedRevisionEffect, RecordedRevisionEffect, AcceptedChallengeDisposition respectively |
-| affected_surfaces, affected_conclusions, dependent_effect_refs, participation_effects, reestablishment_contexts, unaffected | ChangedSurface, ChangedConclusion, ConclusionRevisionRef, FunctionalPyramidParticipationEffect, InvestigationContextRef, SurfaceKey respectively |
+| affected_surfaces, affected_conclusions, dependent_effect_refs, participation_effects, reestablishment_contexts, unaffected | ChangedSurface, ChangedConclusion or EffectDisposition (tagged union), ConclusionRevisionRef, FunctionalPyramidParticipationEffect, InvestigationContextRef, SurfaceKey respectively |
 | accepted_dependency_effects | AcceptedDependencyEffect |
-| ambiguous_candidates | existing AmbiguousSurface candidate carrier |
+| ambiguous_candidates | SurfaceKey |
 | prior_conclusions | AuditConclusion |
 
 For nested parts, allowed parent coordinates are those of the actual named
@@ -329,9 +333,12 @@ position, not a reconstructed internal object.
 Initial prefixes and subsequent parts are ordered non-overlapping slices of
 the bound selection. Parent items carry required scalar facts before their
 nested collections are continued; omitted nested collections are explicitly
-named with parent and remaining count. A page with actionable conclusions
-also carries their owner's usable context; the handle may repeat, not the
-effect. Counts are totals, not page lengths. Each page advances by an item or
+named with parent and remaining count. A page with actionable conclusions also carries their owner's usable context;
+the handle may repeat, not the effect. A complete individual conclusion is
+usable when required evidence and qualification are delivered; if those
+collections are deferred, obtain them before relying on that conclusion.
+Initial selection_id is present whenever any continuation exists, including
+verification_history when primary delivery is complete. Counts are totals, not page lengths. Each page advances by an item or
 exact evidence line range; an empty page with next token is invalid. Final
 page has no token and truncated=false. Original classification never changes
 because of delivery. Nonpageable minimum fields remain complete.
@@ -342,9 +349,11 @@ same page across restart. Changed state rejects stale continuation with the
 original exact obtain recovery. Evidence admission binds ordered outcomes and
 observation/range delivery; later context additions cannot alter it. Source
 drift invalidates delivery. Complete affected sets are fixed before Changed
-or accepted-write delivery; recovery re-qualifies only pinned refs, names
-superseded/disposed refs explicitly, refreshes expired contexts for remaining
-actionable refs. No new write, silent rescan or lost obligation.
+or accepted-write delivery; recovery re-qualifies only pinned refs. An
+affected revision has one immutable position under its original surface;
+ChangedConclusion or EffectDisposition occupies that same position, even
+when its state changes. Refresh expired contexts for remaining actionable
+refs; never shift later positions into another collection. No new write, silent rescan or lost obligation.
 
 Pure reads expire after existing context lifetime; evidence admission expires
 with its context. Accepted-effect and completed reconsider selections remain
@@ -556,9 +565,10 @@ parallel setup DTOs.
   `version: FunctionalPyramidVersion | None`,
   `members: tuple[FunctionalPyramidMemberView, ...]`,
   `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`,
-  and `accepted_dependency_effects: tuple[AcceptedDependencyEffect, ...]`, plus
-  result-page fields. Migrated receipts use the explicit historical-detail
-  unavailable branch in §4.2 when original causes were not retained. Member declaration references are exact accepted audit evidence,
+  and `dependency_effects: AcceptedDependencyEffects | HistoricalAcceptanceDetailUnavailable`,
+  plus result-page fields. `AcceptedDependencyEffects` contains exactly
+  `effects: tuple[AcceptedDependencyEffect, ...]`; the closed alternate
+  is used only for migrated receipts with missing original causes (§4.2). Member declaration references are exact accepted audit evidence,
   not live configuration; replay digest remains private.
   It has no investigation-context binding or repository receipt owner. For
   ACTIVATE/REVISE, `members` is the resulting ACTIVE member set. For
@@ -771,11 +781,11 @@ no pyramid identity/version. ACTIVATE/REVISE/DEACTIVATE derive semantic dependen
 effects from the participation/route change before the acceptance transaction is
 committed; EXCLUDE has no active-instance route effects. The immutable receipt
 retains the accepted durable participation effects and
-`accepted_dependency_effects: tuple[AcceptedDependencyEffect, ...]` (exact
-surface, revision ref and cause facts). Its audit exposes those facts. A
+the AcceptedDependencyEffects set (exact surface, revision ref and cause
+facts). Its audit exposes those facts. A
 replay never changes or expands the accepted set; the live projection uses
-only those refs and original per-revision reasons. No-longer-actionable refs
-are named in effect_dispositions, not silently erased. Fresh contexts are
+only those refs and original per-revision reasons. No-longer-actionable refs occupy their original position as
+EffectDisposition, not silently erased. Fresh contexts are
 issued only for effects actionable now. It is receipted/replay-safe under L4. The server
 derives the pyramid identity on first activation; callers never choose a stable
 internal identity.
@@ -1031,10 +1041,10 @@ fields, plus result-page fields for variable collections:
 
 | Result | Exact public fields |
 | --- | --- |
-| `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `surface: SurfaceKey`, `revision_effects: tuple[RecordedRevisionEffect, ...]`, `challenge_dispositions: tuple[AcceptedChallengeDisposition, ...]`, `dependent_effects: tuple[ChangedSurface, ...]`, `reestablishment_contexts: tuple[InvestigationContextRef, ...]`, `effect_dispositions: tuple[EffectDisposition, ...]` |
+| `UnderstandingRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `understanding_id: UnderstandingId`, `version: UnderstandingVersionNumber`, `surface: SurfaceKey`, `revision_effects: tuple[RecordedRevisionEffect, ...]`, `challenge_dispositions: tuple[AcceptedChallengeDisposition, ...]`, `dependent_effects: tuple[ChangedSurface, ...]`, `reestablishment_contexts: tuple[InvestigationContextRef, ...]` |
 | `VerificationRecorded` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `run_id: VerificationRunId`, `command: str \| None`, `scenario: str \| None`, `outcome: VerificationOutcome`, `qualification: VerificationQualification \| SupportUnavailable` |
 | `SurfaceDeclared` | `receipt_selector: ReceiptRetrievalSelector`, `committed_at: datetime`, `action: create \| update`, `surface: SurfaceKey`, `boundary_version: int` |
-| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `action: ACTIVATE \| REVISE \| DEACTIVATE \| EXCLUDE`, `pyramid_id: FunctionalPyramidId \| None`, `version: FunctionalPyramidVersion \| None`, `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`, `dependent_effects: tuple[ChangedSurface, ...]`, `reestablishment_contexts: tuple[InvestigationContextRef, ...]`, `effect_dispositions: tuple[EffectDisposition, ...]` |
+| `FunctionalPyramidRecorded` | `receipt_selector: FunctionalPyramidReceiptSelector`, `committed_at: datetime`, `action: ACTIVATE \| REVISE \| DEACTIVATE \| EXCLUDE`, `pyramid_id: FunctionalPyramidId \| None`, `version: FunctionalPyramidVersion \| None`, `participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]`, `dependent_effects: tuple[ChangedSurface, ...]`, `reestablishment_contexts: tuple[InvestigationContextRef, ...]` |
 
 `AcceptedRevisionEffect` is the immutable fact: `ref: ConclusionRevisionRef`,
 `action: CREATE | ADD | CONFIRM | CORRECT | REPLACE | WITHDRAW | CURATE`,
@@ -1120,7 +1130,7 @@ attached retroactively. Live qualification does not rewrite the snapshot.
 **Receipt audit.** `RetrievedReceipt` carries receipt_selector, committed_at,
 a closed accepted-effect branch and result-page fields: understanding
 ID/version, `revision_effects: tuple[AcceptedRevisionEffect, ...]` (no live
-qualification), accepted challenge dispositions and accepted_dependency_effects; verification runs
+qualification), accepted challenge dispositions and AcceptedDependencyEffects; verification runs
 exactly named by the receipt; surface action and accepted boundary; or accepted
 challenge opening identity and target refs. Use the existing canonical accepted
 facts, not raw RecordReceipt. A usable context reference may accompany challenge
@@ -1131,8 +1141,9 @@ lookup never re-executes the operation. Functional Pyramid receipt follows §4.1
 For migrated acceptance where exact detail was not retained,
 `HistoricalAcceptanceDetailUnavailable` is an explicit accepted-effect
 alternative (never an empty successful effect set). It carries exactly
-`understanding_versions: tuple[UnderstandingVersionRef, ...]` (the existing
-paired ID/version facts), `verification_run_ids: tuple[VerificationRunId, ...]`,
+`understanding_versions: tuple[UnderstandingVersionRef, ...]`, where
+UnderstandingVersionRef is exactly `{understanding_id: UnderstandingId,
+version: UnderstandingVersionNumber}` (paired accepted facts), `verification_run_ids: tuple[VerificationRunId, ...]`,
 `challenge_ids: tuple[ChallengeId, ...]`, `dependent_effect_refs: tuple[ConclusionRevisionRef, ...]`,
 `reason: str`, `recovery: str`. For a historical Functional Pyramid receipt,
 retain its exact action/identity/version/member/participation facts; only
@@ -1241,22 +1252,26 @@ actionable, while historical revisions remain traversable as dependencies.
 `AcceptedDependencyEffect` carries `surface: SurfaceKey`, `ref:
 ConclusionRevisionRef`, `reasons: tuple[ChangeReason, ...]` (nonempty exact
 per-revision causes). This immutable coordinate is shared by accepted receipts
-and completed selection binding. `ChangedConclusion` carries ref,
-current expected_version, own reasons and support as before. Surface reasons
-are the separate aggregate. `EffectDisposition` carries `effect:
-AcceptedDependencyEffect`, `state: CURRENT | SUPERSEDED | WITHDRAWN |
-UNAVAILABLE`, `reason: str` and `recovery: str | None` (required for
-UNAVAILABLE); CURRENT has current SupportQualification, other states no
-manufactured support verdict. A pinned ref remains actionable if it is still
+and completed selection binding. `ChangedSurface` carries `surface: SurfaceKey`, aggregate
+`reasons: tuple[ChangeReason, ...]`, and `conclusions: tuple[ChangedConclusion |
+EffectDisposition, ...]`. `ChangedConclusion` carries `ref: ConclusionRevisionRef`,
+`expected_version: UnderstandingVersionNumber`, own `reasons`, and
+`support: SupportQualification | SupportUnavailable`. `EffectDisposition`
+carries `ref: ConclusionRevisionRef`, own `reasons`,
+`state: CURRENT | SUPERSEDED | WITHDRAWN | UNAVAILABLE`,
+`reason: str`, `recovery: str | None` (required for UNAVAILABLE), and
+`support: SupportQualification | None` (required and CURRENT for CURRENT,
+otherwise absent). No manufactured support verdict. Both variants use the
+same pinned affected_conclusions position and owning surface. A pinned ref remains actionable if it is still
 current membership and support is non-current or unavailable; return the
 ordinary ChangedConclusion with version/context when obtainable. If exact
 owner/version cannot be established, report UNAVAILABLE disposition; it
-remains an obligation, not a discharged one. CURRENT/SUPERSEDED/WITHDRAWN
-are explicit no-longer-actionable states only when verified; their accepted
-coordinates remain visible. `Changed` carries effect_dispositions and
-result-page fields. Initial complete analysis can include CURRENT considered
-conclusions in ChangedConclusion; replay/continuation retains every pinned
-identity in a live changed entry or disposition, never both in one selection.
+remains an obligation, not a discharged one. CURRENT/SUPERSEDED/WITHDRAWN are no-longer-actionable states only when
+verified. SUPERSEDED requires an evidenced accepted successor/disposition;
+if successor support is non-current or cannot be established, UNAVAILABLE
+names exact current target/recovery and remains outstanding. `Changed`
+carries result-page fields. Initial complete analysis can include CURRENT
+considered conclusions; replay/continuation retains one entry per pinned ref.
 A context is issued once per actionable repository for the bound evaluation;
 any page with actionable refs for that owner carries the same usable handle.
 Do not repeat the whole installation's context list on each page. If context
@@ -1410,12 +1425,12 @@ returns that canonical affected projection.
 
 If verification/recovery requires another initialization attempt or a later
 participation write, an earlier accepted write's immutable
-`dependent_effect_refs` remain outstanding until their live projection is no
-longer actionable or has been re-established CURRENT. The installer retains the
+accepted dependency coordinates remain outstanding until their verified
+disposition is no longer actionable or has been re-established CURRENT. The installer retains the
 accepted receipt identity for the agent's existing `FunctionalPyramidReceiptSelector`
 handoff.
-`ask(FunctionalPyramidReceiptSelector)` reconstructs the immutable accepted
-`dependent_effect_refs`; it does not manufacture live contexts. When the agent
+`ask(FunctionalPyramidReceiptSelector)` retrieves immutable accepted
+dependency coordinates; it does not manufacture live contexts. When the agent
 still has the original canonical write payload, replaying that same accepted
 write re-evaluates only those refs and can issue a fresh live
 `dependent_effects` projection/contexts. Otherwise the exact retained refs may

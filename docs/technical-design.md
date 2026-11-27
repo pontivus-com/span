@@ -572,7 +572,8 @@ store. Two tables:
 
 - delivery_selections(selection_id TEXT PRIMARY KEY, kind TEXT NOT NULL,
   owner_repository_id TEXT NULL, created_at TEXT NOT NULL,
-  expires_at TEXT NOT NULL, canonical_json TEXT NOT NULL).
+  expires_at TEXT NOT NULL, admission_context_id TEXT NULL UNIQUE,
+  canonical_json TEXT NOT NULL).
   The canonical manifest holds normalized exact selector or accepted receipt
   coordinate, initial result kind, ordered collection keys/parent coordinates,
   selected immutable refs, bound context/source outcome/range IDs if present,
@@ -591,11 +592,14 @@ store. Two tables:
   is only the opaque issued cursor ID; unknown or wrong selector/position
   rejects via the existing continuation rejection taxonomy.
 
-Before returning a first truncated read, commit the manifest and issued
-cursor; without durable binding do not claim recoverability. Bind evidence
+Before returning a first truncated read (or independent history cursor),
+commit the manifest and issued cursor; without durable binding do not claim recoverability. Bind evidence
 outcomes in the existing context/admission transaction, using installation
 main plus owning repository ATTACH under §19, with context lifetime and
-immutable observation/range selection. For pure read manifests, re-open
+immutable observation/range selection. Get-or-create by admitting context ID
+and original request binding; identical admission replay uses original
+ordered manifest and issued position. Do not issue a second selection for
+same admission retry. For pure read manifests, re-open
 the exact normalized selection on continuation, compare complete ordered
 selection and semantic state signature (canonical public state with
 evaluation timestamps excluded; evidence fingerprints, curation/status,
@@ -605,9 +609,11 @@ rejection names original obtain. Do not serve frozen CURRENT after drift.
 Version-less exact snapshot binds the concrete selected version. Source
 delivery rereads bytes with recorded identity as today; no source copy.
 For completed Changed retain the full selected effect coordinates, per-ref
-reasons and contexts before delivering first page. Re-qualify pinned refs on
-each resume, keep disposed/superseded coordinates with explicit disposition,
-refresh expired contexts only for actionable owners. For accepted writes
+reasons and contexts before delivering first page. Re-qualify pinned refs on each resume; the tagged ChangedConclusion /
+EffectDisposition entry occupies its original surface/ref position, never a
+separate live list with shifted offsets. Verify disposition including successor
+support before reaping; unknown/non-current successor stays outstanding.
+Refresh expired contexts only for actionable owners. For accepted writes
 persist complete immutable effect refs in receipt in the commit transaction;
 manifest may be composed after commit, because receipt recovery reconstructs
 that exact selection without a new mutation. Failure to create cursor then
