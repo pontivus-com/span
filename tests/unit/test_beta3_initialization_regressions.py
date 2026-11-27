@@ -88,9 +88,7 @@ class Beta3InitializationRegressionTest(unittest.TestCase):
                 ),
                 self.assertRaises(SystemExit) as caught,
             ):
-                validate_authority_files(
-                    (repo,), {}, {"repo-a": (self._binding(),)}
-                )
+                validate_authority_files((repo,), {}, {"repo-a": (self._binding(),)})
             message = str(caught.exception)
             self.assertIn("repo-a/docs/authority.md", message)
             self.assertIn("restore access and retry", message)

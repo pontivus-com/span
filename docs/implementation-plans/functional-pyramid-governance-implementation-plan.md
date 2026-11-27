@@ -470,8 +470,8 @@ exclusion of internal type names; its rejection contract is not relaxed.
 [Diagnostic 45943190670](https://github.com/pontivus-com/span/actions/runs/45943190670)
 passed 196 focused tests, 41 subtests, 15 host tests, Ruff and zero-error
 typing on `aab049f3426b`. Test lines measured 35,221; the added authority
-provider diagnostic regression contributes 21 lines, for a candidate
-ratchet of 35,242 (+102 over 35,140).
+provider diagnostic regression contributes 19 lines, for a candidate
+ratchet of 35,240 (+100 over 35,140).
 All other architectural ceilings remain unchanged; longest function measured
 131 lines. Final CI must establish the exact candidate and confirm the
 measured ratchet. The temporary workflow is removed. The adapter cannot
