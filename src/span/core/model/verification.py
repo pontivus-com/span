@@ -35,18 +35,15 @@ class VerificationScope:
         _require_non_empty("VerificationScope.description", self.description)
 
 
-def _validate_run(
+def _validate_execution(
     *,
     repository_id: str,
-    observations: tuple[SourceObservationId, ...],
     command: str | None,
     scenario: str | None,
     observer: str,
     observed_at: _datetime.datetime,
 ) -> None:
     _require_non_empty("VerificationRun.repository_id", repository_id)
-    if not observations:
-        raise ValueError("a verification run requires source observations")
     if not command and not scenario:
         raise ValueError("a verification run requires a command or scenario")
     _require_non_empty("VerificationRun.observer", observer)
@@ -70,9 +67,10 @@ class ProposedVerificationRun:
     provenance: str = ""
 
     def __post_init__(self) -> None:
-        _validate_run(
+        if not self.observations:
+            raise ValueError("a verification run requires source observations")
+        _validate_execution(
             repository_id=self.repository_id,
-            observations=self.observations,
             command=self.command,
             scenario=self.scenario,
             observer=self.observer,
@@ -95,12 +93,13 @@ class VerificationRunFacts:
     provenance: str
 
     def __post_init__(self) -> None:
-        _require_non_empty("VerificationRun.repository_id", self.repository_id)
-        if not self.command and not self.scenario:
-            raise ValueError("a verification run requires a command or scenario")
-        _require_non_empty("VerificationRun.observer", self.observer)
-        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
-            raise ValueError("VerificationRun.observed_at must be aware")
+        _validate_execution(
+            repository_id=self.repository_id,
+            command=self.command,
+            scenario=self.scenario,
+            observer=self.observer,
+            observed_at=self.observed_at,
+        )
 
 
 @_dataclass(frozen=True)
@@ -120,11 +119,27 @@ class VerificationRun:
     provenance: str = ""
 
     def __post_init__(self) -> None:
-        _validate_run(
+        if not self.observations:
+            raise ValueError("a verification run requires source observations")
+        _validate_execution(
             repository_id=self.repository_id,
-            observations=self.observations,
             command=self.command,
             scenario=self.scenario,
             observer=self.observer,
             observed_at=self.observed_at,
         )
+
+
+def verification_facts(run: VerificationRun) -> VerificationRunFacts:
+    """Project exact recorded execution facts independently of live support."""
+    return VerificationRunFacts(
+        run_id=run.run_id,
+        repository_id=run.repository_id,
+        scope=run.scope,
+        command=run.command,
+        scenario=run.scenario,
+        outcome=run.outcome,
+        observed_at=run.observed_at,
+        observer=run.observer,
+        provenance=run.provenance,
+    )

@@ -1132,9 +1132,9 @@ class ReconsiderServiceTest(unittest.TestCase):
         )
         self.assertIsInstance(result, m.Challenged)
         assert isinstance(result, m.Challenged)
-        self.assertEqual(result.challenge.understanding_id.value, "u-a")
+        self.assertEqual(result.challenge.facts.understanding_id.value, "u-a")
         self.assertEqual(result.challenge.target_conclusions, (target,))
-        self.assertEqual(result.challenge.state, m.ChallengeState.OPEN)
+        self.assertEqual(result.challenge.facts.state, m.ChallengeState.OPEN)
         self.assertEqual(result.receipt_selector.request_id, "req-challenge")
         self.assertEqual(result.committed_at, NOW)
         self.assertEqual(

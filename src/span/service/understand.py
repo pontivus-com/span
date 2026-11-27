@@ -109,7 +109,9 @@ class UnderstandService:
             and not receipt.accepted_challenge_ids
             and not receipt.dependent_effects
         ):
-            accepted_effect = m.AcceptedVerificationReceipt(verification_runs)
+            accepted_effect = m.AcceptedVerificationReceipt(
+                tuple(m.verification_view(run, None) for run in verification_runs)
+            )
         else:
             accepted_effect = self.unavailable_acceptance(receipt)
         return m.RetrievedReceipt(
@@ -179,7 +181,7 @@ class UnderstandService:
         return m.Challenged(
             receipt_selector=selector,
             committed_at=receipt.committed_at,
-            challenge=opening,
+            challenge=m.challenge_view(opening),
             context=m.InvestigationContextRef(
                 repository_id=receipt.identity.repository_id,
                 context_id=receipt.identity.context_id,
@@ -230,7 +232,7 @@ class UnderstandService:
             gaps=version.gaps,
             conclusions=conclusions,
             challenges=tuple(
-                challenge
+                m.challenge_view(challenge)
                 for challenge in self._store.get_challenges(identity)
                 if challenge.target_version == version.version
             ),

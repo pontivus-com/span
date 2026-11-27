@@ -567,7 +567,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         answer = await self._session(journey)
         self.assertEqual(answer["$type"], "Answer")
         self.assertEqual(len(answer["verification"]), 1)
-        self.assertEqual(answer["verification"][0]["run"]["outcome"], "PASS")
+        self.assertEqual(answer["verification"][0]["facts"]["outcome"], "PASS")
         self.assertEqual(answer["verification"][0]["qualification"]["state"], "CURRENT")
 
     async def test_invalidated_ask_returns_historical_content(self) -> None:
@@ -1218,8 +1218,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(challenged["$type"], "Challenged")
             challenge = challenged["challenge"]
-            challenge_id = challenge["challenge_id"]["value"]
-            challenge_revision = challenge["challenge_revision"]["value"]
+            challenge_id = challenge["facts"]["challenge_id"]["value"]
+            challenge_revision = challenge["facts"]["challenge_revision"]["value"]
             settled = await self._call(
                 session,
                 "record",
@@ -1336,10 +1336,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "challenge_dispositions": [
                         {
                             "$type": "resolved",
-                            "challenge_id": challenge["challenge_id"]["value"],
-                            "expected_challenge_revision": challenge[
-                                "challenge_revision"
-                            ]["value"],
+                            "challenge_id": challenge["facts"]["challenge_id"]["value"],
+                            "expected_challenge_revision": challenge["facts"]["challenge_revision"]["value"],
                             "reasoning": (
                                 "The ADR supplies the additional support required "
                                 "to settle the challenge."
@@ -1352,7 +1350,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             return {
                 "understanding_id": understanding_id,
                 "target_id": target_id,
-                "challenge_id": challenge["challenge_id"]["value"],
+                "challenge_id": challenge["facts"]["challenge_id"]["value"],
                 "resolved": resolved,
             }
 
@@ -1498,10 +1496,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     "challenge_dispositions": [
                         {
                             "$type": "resolved",
-                            "challenge_id": challenge["challenge_id"]["value"],
-                            "expected_challenge_revision": challenge[
-                                "challenge_revision"
-                            ]["value"],
+                            "challenge_id": challenge["facts"]["challenge_id"]["value"],
+                            "expected_challenge_revision": challenge["facts"]["challenge_revision"]["value"],
                             "reasoning": "This payload must reject before the write.",
                             "resulting_version": 2,
                         }
@@ -1548,7 +1544,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(unknown.is_error)
             return {
                 "understanding_id": understanding_id,
-                "challenge_id": challenge["challenge_id"]["value"],
+                "challenge_id": challenge["facts"]["challenge_id"]["value"],
                 "surface_rejections": surface_rejections,
             }
 

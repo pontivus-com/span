@@ -46,7 +46,7 @@ from span.core.model.support import (
     SupportQualification,
     SupportState,
     SupportUnavailable,
-    VerificationQualification,
+    VerificationView,
 )
 from span.core.model.surfaces import (
     ChangeReason,
@@ -57,7 +57,7 @@ from span.core.model.surfaces import (
 )
 from span.core.model.understanding import (
     AuditConclusion,
-    Challenge,
+    ChallengeView,
     HistoricalAcceptanceDetailUnavailable,
     PendingCuration,
     ReceiptRetrievalSelector,
@@ -65,7 +65,6 @@ from span.core.model.understanding import (
     RetrievedReceipt,
     RetrievedUnderstanding,
 )
-from span.core.model.verification import VerificationRun
 from span.core.rejection import RejectionCauseKind
 
 
@@ -109,18 +108,6 @@ class AnswerGroup:
         _require_non_empty("AnswerGroup.question", self.question)
         if not self.conclusions:
             raise ValueError("an AnswerGroup requires a current conclusion")
-
-
-@_dataclass(frozen=True)
-class VerificationView:
-    """One applicable verification run and its present qualification.
-
-    The run is authoritative for identity. A failed qualification still names
-    the run it could not qualify.
-    """
-
-    run: VerificationRun
-    qualification: VerificationQualification | SupportUnavailable
 
 
 @_dataclass(frozen=True)
@@ -385,7 +372,7 @@ class Challenged:
 
     receipt_selector: ReceiptRetrievalSelector
     committed_at: _datetime.datetime
-    challenge: Challenge
+    challenge: ChallengeView
     context: InvestigationContextRef
     prior_conclusions: tuple[AuditConclusion, ...]
 

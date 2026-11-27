@@ -41,9 +41,9 @@ from span.core.model.support import (
     SupportDependency,
     SupportQualification,
     SupportUnavailable,
+    VerificationView,
     basis_evidence,
 )
-from span.core.model.verification import VerificationRun
 
 
 def _require_aware(name: str, value: _datetime.datetime) -> None:
@@ -382,6 +382,105 @@ class Challenge:
 
 
 @_dataclass(frozen=True)
+class ChallengeResolutionView:
+    facts: ChallengeResolutionFacts
+    conclusions: tuple[ConclusionRevisionRef, ...]
+    withdrawn: tuple[ConclusionRevisionRef, ...]
+    evidence: tuple[EvidenceRef, ...]
+
+
+@_dataclass(frozen=True)
+class AcceptedUnresolvedChallengeDisposition:
+    challenge_id: ChallengeId
+    disposition: UnresolvedChallengeRecord
+
+
+@_dataclass(frozen=True)
+class AcceptedResolvedChallengeDisposition:
+    challenge_id: ChallengeId
+    decision: ChallengeDispositionDecision
+    resolution: ChallengeResolutionView
+
+
+AcceptedChallengeDisposition = _typing.Union[
+    AcceptedUnresolvedChallengeDisposition,
+    AcceptedResolvedChallengeDisposition,
+]
+
+
+@_dataclass(frozen=True)
+class ChallengeView:
+    """Recorded dispute facts and independently deliverable history."""
+
+    facts: ChallengeFacts
+    target_conclusions: tuple[ConclusionRevisionRef, ...]
+    evidence: tuple[EvidenceRef, ...]
+    dispositions: tuple[AcceptedChallengeDisposition, ...]
+    resolution: ChallengeResolutionView | None
+
+
+def challenge_resolution_view(value: ChallengeResolution) -> ChallengeResolutionView:
+    return ChallengeResolutionView(
+        facts=ChallengeResolutionFacts(
+            reasoning=value.reasoning,
+            resulting_understanding_id=value.resulting_understanding_id,
+            resulting_version=value.resulting_version,
+        ),
+        conclusions=value.conclusions,
+        withdrawn=value.withdrawn,
+        evidence=value.evidence,
+    )
+
+
+def accepted_challenge_disposition(
+    challenge_id: ChallengeId, record: ChallengeDispositionRecord
+) -> AcceptedChallengeDisposition:
+    if isinstance(record, UnresolvedChallengeRecord):
+        return AcceptedUnresolvedChallengeDisposition(challenge_id, record)
+    return AcceptedResolvedChallengeDisposition(
+        challenge_id=challenge_id,
+        decision=ChallengeDispositionDecision(
+            challenge_revision=record.challenge_revision,
+            recorded_at=record.recorded_at,
+        ),
+        resolution=challenge_resolution_view(record.resolution),
+    )
+
+
+def challenge_view(value: Challenge) -> ChallengeView:
+    """Keep contradictory historical facts; omit only an exact duplicate."""
+    resolution = value.resolution
+    if resolution is not None and any(
+        isinstance(record, ResolvedChallengeRecord)
+        and record.challenge_revision == value.challenge_revision
+        and record.resolution == resolution
+        for record in value.dispositions
+    ):
+        resolution = None
+    return ChallengeView(
+        facts=ChallengeFacts(
+            challenge_id=value.challenge_id,
+            understanding_id=value.understanding_id,
+            target_version=value.target_version,
+            reason=value.reason,
+            provenance=value.provenance,
+            challenge_revision=value.challenge_revision,
+            state=value.state,
+            created_at=value.created_at,
+        ),
+        target_conclusions=value.target_conclusions,
+        evidence=value.evidence,
+        dispositions=tuple(
+            accepted_challenge_disposition(value.challenge_id, record)
+            for record in value.dispositions
+        ),
+        resolution=(
+            None if resolution is None else challenge_resolution_view(resolution)
+        ),
+    )
+
+
+@_dataclass(frozen=True)
 class SupportedAuditContent:
     statement: str
     assertion_nature: AssertionNature
@@ -466,7 +565,7 @@ class RetrievedUnderstanding:
     surface_boundary_version: int
     gaps: tuple[RecordedQuestionGap, ...]
     conclusions: tuple[AuditConclusion, ...]
-    challenges: tuple[Challenge, ...] = ()
+    challenges: tuple[ChallengeView, ...] = ()
     curations: tuple[CurationDisposition, ...] = ()
 
 
@@ -692,11 +791,13 @@ class HistoricalAcceptanceDetailUnavailable:
 class AcceptedVerificationReceipt:
     """Exact recorded execution facts, without live qualification."""
 
-    verification_runs: tuple[VerificationRun, ...]
+    verification_runs: tuple[VerificationView, ...]
 
     def __post_init__(self) -> None:
         if not self.verification_runs:
             raise ValueError("verification acceptance requires a recorded run")
+        if any(view.qualification is not None for view in self.verification_runs):
+            raise ValueError("immutable verification receipt cannot carry live support")
 
 
 @_dataclass(frozen=True)

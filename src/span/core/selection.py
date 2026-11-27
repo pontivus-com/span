@@ -113,7 +113,7 @@ def _verification_group(
 ) -> tuple[
     tuple[str, ...], tuple[tuple[str, ...], ...], str, str, str, tuple[str, ...]
 ]:
-    run = view.run
+    run = view.facts
     refs = tuple(
         sorted(
             {
@@ -135,7 +135,7 @@ def _verification_group(
         run.scope.description,
         run.command or "",
         run.scenario or "",
-        tuple(item.strip() for item in run.environment_limitations),
+        tuple(item.strip() for item in view.environment_limitations),
     )
 
 
@@ -154,15 +154,15 @@ def select_verification(
     primary: list[m.VerificationView] = []
     history: list[m.VerificationView] = []
     for key in sorted(groups):
-        ordered = sorted(groups[key], key=lambda item: item.run.run_id.value)
-        ordered.sort(key=lambda item: item.run.observed_at, reverse=True)
-        latest = ordered[0].run.observed_at
+        ordered = sorted(groups[key], key=lambda item: item.facts.run_id.value)
+        ordered.sort(key=lambda item: item.facts.observed_at, reverse=True)
+        latest = ordered[0].facts.observed_at
         current_times = {
             outcome: max(
                 (
-                    item.run.observed_at
+                    item.facts.observed_at
                     for item in ordered
-                    if item.run.outcome is outcome
+                    if item.facts.outcome is outcome
                     and isinstance(item.qualification, m.VerificationQualification)
                     and item.qualification.state is m.SupportState.CURRENT
                 ),
@@ -174,10 +174,10 @@ def select_verification(
             current = (
                 isinstance(item.qualification, m.VerificationQualification)
                 and item.qualification.state is m.SupportState.CURRENT
-                and item.run.observed_at == current_times[item.run.outcome]
+                and item.facts.observed_at == current_times[item.facts.outcome]
             )
             destination = (
-                primary if item.run.observed_at == latest or current else history
+                primary if item.facts.observed_at == latest or current else history
             )
             destination.append(item)
     return tuple(primary), tuple(history)

@@ -595,7 +595,7 @@ class AnswerService:
                 qualification = m.SupportUnavailable(
                     "verification support evaluation is unavailable"
                 )
-            candidates.append(m.VerificationView(run=run, qualification=qualification))
+            candidates.append(m.verification_view(run, qualification))
         selected, _history = selection.select_verification(tuple(candidates))
         return selected
 

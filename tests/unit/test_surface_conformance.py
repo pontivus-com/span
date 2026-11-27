@@ -132,6 +132,10 @@ class SurfaceConformanceTest(unittest.TestCase):
         # The canonical generator already prunes definitions unreachable
         # from each output root. This includes nested and tagged variants.
         private = {
+            "VerificationRun",
+            "Challenge",
+            "ChallengeResolution",
+            "ResolvedChallengeRecord",
             "AuthorityBinding",
             "AuthoritySupportDependency",
             "ConclusionRevision",

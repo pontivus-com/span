@@ -1531,7 +1531,7 @@ class AnswerServiceTest(unittest.TestCase):
         result = self._ask("src/a.py", None)
         assert isinstance(result, m.Answer)
         self.assertEqual(len(result.verification), 1)
-        self.assertEqual(result.verification[0].run.observed_at, NOW)
+        self.assertEqual(result.verification[0].facts.observed_at, NOW)
 
     def test_verification_selection_order_is_deterministic(self) -> None:
         first = self._record_verification_paths("req-order-a", ("src/a.py",))
@@ -1543,7 +1543,7 @@ class AnswerServiceTest(unittest.TestCase):
             second.accepted_verification_run_ids[0].value,
         ]
         self.assertEqual(
-            [view.run.run_id.value for view in result.verification],
+            [view.facts.run_id.value for view in result.verification],
             expected,
         )
 
@@ -1945,7 +1945,10 @@ class AnswerServiceTest(unittest.TestCase):
             )
         )
         assert isinstance(result, m.RetrievedReceipt)
-        self.assertEqual(result.accepted_effect, m.AcceptedVerificationReceipt((run,)))
+        self.assertEqual(
+            result.accepted_effect,
+            m.AcceptedVerificationReceipt((m.verification_view(run, None),)),
+        )
 
     def _page_service(self, *, clock=None):
         import dataclasses
