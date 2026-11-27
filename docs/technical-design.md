@@ -517,7 +517,7 @@ uses RecordingKey as canonical owner, original_addressing_repository_id,
 original content_digest, committed_at, replay_expires_at, optional canonical
 InvestigationContextRef (absent for surface), and a closed accepted-effect
 union: understanding (id/version, AcceptedRevisionEffect tuple, accepted
-challenge dispositions, dependent refs); verification (accepted run ID);
+challenge dispositions, accepted dependency coordinates); verification (accepted run ID);
 surface (action, SurfaceKey, accepted boundary_version); challenge opening
 (exact accepted challenge identity/revision, target version/refs). Use the
 existing immutable surface_boundary_versions row for audit/replay, never
@@ -624,7 +624,11 @@ manifest; remove addressed request binding only when neither bound context
 nor receipt remains. No new clock, independent reaper or arbitrary TTL.
 Repository-portable backups retain receipts, not transient delivery state;
 a restored receipt remains sufficient to reconstruct its exact accepted set.
-No runtime migration or schema fallback.
+No runtime migration or schema fallback. Restore/reconcile the addressed
+request index only during explicit provisioning/recovery using original
+origin and key retained in canonical context/receipt; verify collisions
+before opening restored state. No runtime scan or silent missing-index
+fallback for an already bound request.
 
 Budget fitting does not constrain semantic traversal or administrative
 authority validation (§20). Preflight minimum acceptance envelope before
@@ -658,7 +662,8 @@ Extend the same explicit inspect/archive/stage/verify/activate/rollback
 administrative transition to installation schema 1→2 (existing
 shell/sqlite_store/functional_pyramid.py DDL and ports). Installation 2
 preserves every pyramid version/member/exclusion/receipt including raw
-digest and immutable dependent refs, adds §13 delivery tables and §17.1
+digest and immutable dependent refs, migrates missing original cause facts
+as historical-detail unavailable (never DIRECT by default), adds §13 delivery tables and §17.1
 addressed-request binding table, initially empty. Do not change declaration
 Version 3 grammar. Stage and verify every affected registered repository
 and the installation DB before publication; acquire existing exclusive
@@ -1835,7 +1840,7 @@ indexes defined in §§13,17.1:
 | `functional_pyramid_versions` | `(pyramid_id, version) PRIMARY KEY`; immutable canonical complete member intent + digest/commit time |
 | `functional_pyramid_active_members` | `repository_id PRIMARY KEY`; current `pyramid_id`, version and canonical member intent projection; this key enforces one ACTIVE instance per repository |
 | `functional_pyramid_exclusions` | `repository_id PRIMARY KEY`; explicit EXCLUDED state; absence from both active-members and exclusions means registered repository state UNCONFIGURED |
-| `functional_pyramid_receipts` | `request_id PRIMARY KEY`; digest, action, commit/replay times, pyramid/version, resulting members, participation effects and immutable dependent-effect refs |
+| `functional_pyramid_receipts` | `request_id PRIMARY KEY`; digest, action, commit/replay times, pyramid/version, resulting members, participation effects and immutable accepted dependency coordinates |
 
 Repository registration/root/authority configuration remains owned by each
 repository LifecycleStore and the installed repository routing configuration;
@@ -1890,8 +1895,7 @@ persistence acquires/holds the installation plus repository locks and exposes
 repository-qualified transaction capabilities. Service composition evaluates
 the old/new Functional Pyramid delta through the one shared effect engine while
 those locks are held. The transaction writer persists only the resulting
-participation/version state, immutable dependent-effect refs, canonical context
-rows and receipt. Shell code must not compute changed route identities, group
+participation/version state, immutable accepted dependency coordinates, canonical context rows and receipt. Shell code must not compute changed route identities, group
 semantic effect refs by repository, instantiate a semantic support evaluator for
 projection, merge `ChangedSurface` semantics or classify activation/deactivation
 effects. Replay projects only the retained immutable refs through the same
@@ -2266,11 +2270,15 @@ revalidation, the shared effect engine above, and one atomic store transaction.
 On first acceptance, the result contains the accepted action/identity/version,
 not member configuration, and only actual durable `FunctionalPyramidParticipationEffect` transitions, the
 canonical dependent `ChangedSurface` projection and one live repository-bound
-context per repository with actionable effects. The receipt stores only the
-immutable dependent `ConclusionRevisionRef` identities. On replay, §19
-re-evaluates only those retained refs to produce the current actionable
-`ChangedSurface` projection and fresh contexts; replay never expands the
-accepted effect identity set. Receipt selectors from accepted participation
+context per repository with actionable effects. The receipt stores immutable AcceptedDependencyEffect coordinates (owner
+surface/ref/original per-ref causes), not live support. Change the existing
+functional_pyramid_receipts dependent_effect_refs_json payload to the
+canonical accepted-effect union under schema 2. Ordinary receipts use the
+same coordinates and replay projector. In service/effects.py replay resolves
+only the retained set, uses original reasons and projects dispositions under
+P2 §4.3; no blanket DIRECT, no swallowed store error or silent absent ref.
+Re-issue contexts only for still-actionable owners; replay never expands the
+accepted set. Legacy cause absence is explicit §14 unavailable detail. Receipt selectors from accepted participation
 writes remain the durable public handoff across subsequent DEGRADED repair or
 revision loops so earlier accepted effect refs cannot disappear from lifecycle
 completion merely because a later pyramid write occurs.

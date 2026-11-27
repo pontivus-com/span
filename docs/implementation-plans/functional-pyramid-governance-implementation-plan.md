@@ -688,8 +688,12 @@ participation transaction before commitment. Test injected interruption before
 and during traversal and precommit failure. Tests: direct-only and indirect-only on same
 surface, genuine multi-reason ref, deep chain beyond former max_depth/nodes,
 wide graph, cycles, cross-repo, omitted context/replay, current/superseded refs.
-Gate: full affected identity set and true attribution; shared engine, no new
-registry or second traversal.
+Gate: full affected identity set and true attribution, including accepted
+replay and ordinary dependent effects. Persist original per-ref reasons and
+surface with immutable accepted coordinates; replay must not rewrite all
+causes to DIRECT. Test direct seed reached as indirect dependent, replay
+of indirect effect, current/superseded/withdrawn/unavailable dispositions,
+and legacy unknown cause; shared engine, no second traversal.
 
 **PUB-04 — Bound exact result delivery (API-04/07–09/16/21/22).** After
 PUB-02/03, modify service/continuation.py, bounds.py, answer.py, evidence.py,
@@ -766,7 +770,7 @@ status/candidate/record independent of unrelated detail. Gate: exact functional
 equivalence and no consumer path translation or internal leakage.
 
 **PUB-07 — Accurate write outcomes and surface receipts (API-11–14/19).**
-After PUB-02/03/04, change core/model/{outcomes,recording,commands,
+PUB-07A follows PUB-02/03; PUB-07B follows PUB-04. For PUB-07B, change core/model/{outcomes,recording,commands,
 understanding,answers}.py, core transition owner, ports/lifecycle.py,
 service/lifecycle.py, shell/sqlite_store/lifecycle.py and existing migration
 owner per TD §§12,14,25. Retain immutable AcceptedRevisionEffect/action/
@@ -779,8 +783,8 @@ atomically under existing repository request key; no artificial context.
 Replay before live parent/version/support checks, original accepted effect
 after later update; conflicting same request rejected; different request
 CAS preserved. Implement §14 repository schema 16 and installation schema 2 migration as
-PUB-07's first persistence subtask (shared infrastructure may be delivered
-before PUB-04 integration; see sequence below). Map old receipts offline to
+PUB-07A before PUB-04 (shared schema/transaction infrastructure). PUB-07B
+is accepted-outcome composition after PUB-04. No circular gate. Map old receipts offline to
 exact accepted effect or HistoricalAcceptanceDetailUnavailable; preserve every
 receipt key/digest, history and curation; original origin canonical owner.
 Use existing boundary history rows and atomic addressed-request index owner.

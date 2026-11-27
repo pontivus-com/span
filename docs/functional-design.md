@@ -623,11 +623,12 @@ and dependent-effect coordinates; the public result projects them through the
 same `ChangedSurface`/affected-conclusion carriers used by `reconsider`.
 Exactly one repository-bound live re-establishment context is issued for each
 repository with an actionable effect. The immutable receipt/effect set is the
-accepted `ConclusionRevisionRef` identity set, not a frozen live
+accepted revision/surface/cause coordinate set, not a frozen live
 `ChangedSurface` status snapshot. On replay, Span keeps those immutable effect
 identities unchanged, re-evaluates only those retained revisions against current
-support/membership state, returns the current actionable `ChangedSurface`
-projection, and issues fresh contexts only for effects that are actionable now.
+support/membership state, returns live actionable effects and explicit
+verified dispositions under P2 §4.3, and issues contexts only for remaining
+actionable effects. Unavailable owner or membership remains outstanding.
 It never discovers additional accepted effects from later governance state.
 
 Activation/revision stores only the identities, relationships, source identities,
@@ -1832,8 +1833,8 @@ rules. These are behavioral cases, not layer-4 mechanism choices.
 41. **Pyramid-write replay projection.** Replaying an accepted Functional
     Pyramid write preserves the immutable participation state and accepted
     dependent `ConclusionRevisionRef` set, re-evaluates only those refs into a
-    current actionable `ChangedSurface` projection, and issues fresh live
-    re-establishment contexts only where the retained effect is actionable now;
+    live actionable projection and verified effect dispositions, with fresh
+    contexts only where the retained effect is actionable now;
     it never adds effects from later governance state.
 42. **Pyramid concurrency.** Concurrent revise/deactivate operations obey pyramid
     version compare-and-set, and concurrent overlapping activations/revisions
