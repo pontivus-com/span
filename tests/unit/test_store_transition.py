@@ -208,6 +208,75 @@ def _legacy_store(
     return path
 
 
+def _historical_fact_payload(payload):
+    """Test fixture spelling of the pre-16 flat retained facts."""
+    if isinstance(payload, list):
+        return [_historical_fact_payload(item) for item in payload]
+    if not isinstance(payload, dict):
+        return payload
+    result = {key: _historical_fact_payload(value) for key, value in payload.items()}
+    component = {
+        "VerificationRun": "facts",
+        "Challenge": "facts",
+        "ChallengeResolution": "facts",
+        "ResolvedChallengeRecord": "decision",
+    }.get(result.get("$type"))
+    if component is not None:
+        facts = result.pop(component)
+        result.update({key: value for key, value in facts.items() if key != "$type"})
+    return result
+
+
+def _historical_receipt_payload(payload):
+    effect = payload["accepted_effect"]
+    key = payload["key"]
+    context = payload["context"]
+    historical = {
+        "$type": "RecordReceipt",
+        "identity": {
+            "$type": "RecordingIdentity",
+            "repository_id": key["repository_id"],
+            "request_id": key["request_id"],
+            "context_id": context["context_id"],
+        },
+        "content_digest": payload["content_digest"],
+        "committed_at": payload["committed_at"],
+        "replay_expires_at": payload["replay_expires_at"],
+        "accepted_understanding_ids": [],
+        "accepted_understanding_versions": [],
+        "accepted_verification_run_ids": [],
+        "accepted_challenge_ids": [],
+        "dependent_effects": [],
+    }
+    if effect["$type"] == "AcceptedUnderstandingEffect":
+        historical["accepted_understanding_ids"] = [effect["understanding_id"]]
+        historical["accepted_understanding_versions"] = [effect["version"]]
+        historical["dependent_effects"] = [
+            item["ref"] for item in effect["dependent_effects"]["effects"]
+        ]
+    elif effect["$type"] == "AcceptedVerificationEffect":
+        historical["accepted_verification_run_ids"] = [effect["run_id"]]
+    elif effect["$type"] == "AcceptedChallengeOpeningEffect":
+        historical["accepted_challenge_ids"] = [effect["challenge_id"]]
+    else:
+        raise AssertionError("unexpected test fixture acceptance")
+    return historical
+
+
+def _write_historical_payloads(connection):
+    for table, convert in (
+        ("verification_runs", _historical_fact_payload),
+        ("challenges", _historical_fact_payload),
+        ("record_receipts", _historical_receipt_payload),
+    ):
+        rows = connection.execute(f"SELECT rowid, canonical_json FROM {table}").fetchall()
+        for rowid, canonical in rows:
+            connection.execute(
+                f"UPDATE {table} SET canonical_json=? WHERE rowid=?",
+                (json.dumps(convert(json.loads(canonical)), sort_keys=True), rowid),
+            )
+
+
 def _schema11_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
     """Build one schema-11-shaped store with a stored excerpt."""
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
@@ -244,6 +313,7 @@ def _schema11_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
         connection.execute(
             "UPDATE source_observations SET excerpt='a\n' WHERE observation_id='obs-a'"
         )
+        _write_historical_payloads(connection)
         connection.execute("UPDATE meta SET value='11' WHERE key='schema_version'")
         connection.commit()
     finally:
@@ -429,6 +499,7 @@ def _schema10_store(
         connection.execute(
             "UPDATE source_observations SET excerpt='a\n' WHERE observation_id='obs-a'"
         )
+        _write_historical_payloads(connection)
         connection.execute("UPDATE meta SET value='10' WHERE key='schema_version'")
         connection.execute("DROP TABLE surfaces")
         connection.execute("DROP TABLE surface_boundary_versions")
@@ -574,7 +645,7 @@ def _schema12_store(
             ),
         )
     )
-    assert receipt.accepted_verification_run_ids
+    assert isinstance(receipt.accepted_effect, m.AcceptedVerificationEffect)
     store.close()
 
     connection = sqlite3.connect(path)
@@ -599,6 +670,7 @@ def _schema12_store(
                 " WHERE context_id=?",
                 (json.dumps(payload, sort_keys=True), persisted_expiry, context_id),
             )
+        _write_historical_payloads(connection)
         connection.execute("UPDATE meta SET value='12' WHERE key='schema_version'")
         connection.commit()
     finally:
@@ -694,6 +766,7 @@ def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
         connection.execute("PRAGMA foreign_keys=OFF")
         connection.execute("DROP TABLE conclusion_curations")
         connection.execute("DROP TABLE functional_route_dependency_index")
+        _write_historical_payloads(connection)
         connection.execute("UPDATE meta SET value='13' WHERE key='schema_version'")
         connection.commit()
     finally:
@@ -795,6 +868,7 @@ def _schema14_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
             ("u-schema14", "c-schema14", 1, "p-1", "demo", "route-1"),
         )
         connection.execute("DROP TABLE conclusion_curations")
+        _write_historical_payloads(connection)
         connection.execute("UPDATE meta SET value='14' WHERE key='schema_version'")
         connection.commit()
     finally:
@@ -1557,9 +1631,9 @@ class RefusalTest(unittest.TestCase):
                 )
                 self.assertIsNotNone(receipt)
                 assert receipt is not None
-                self.assertEqual(len(receipt.accepted_verification_run_ids), 1)
+                self.assertIsInstance(receipt.accepted_effect, m.AcceptedVerificationEffect)
                 run = store.get_verification_run(
-                    receipt.accepted_verification_run_ids[0].value
+                    receipt.accepted_effect.run_id.value
                 )
                 self.assertEqual(run.command, "python3 -m unittest")
                 self.assertEqual(run.repository_id, "demo")
@@ -1575,7 +1649,7 @@ class RefusalTest(unittest.TestCase):
             data.mkdir()
             _legacy_store(data / "demo.db", seeds=(_seed(),))
             st.apply(_config(root, data))
-            with self.assertRaisesRegex(st.TransitionError, "already schema 15"):
+            with self.assertRaisesRegex(st.TransitionError, "already schema 16"):
                 st.apply(_config(root, data))
             inspection, _, state = st.inspect_store_report(_config(root, data))
             self.assertEqual(state, st.TransitionState.ALREADY_CURRENT)
@@ -1955,41 +2029,47 @@ class PubSchemaTransitionTest(unittest.TestCase):
             revision_or_fingerprint="original",
         )
         run = m.VerificationRun(
-            run_id=m.VerificationRunId("run"),
-            repository_id="demo",
-            scope=m.VerificationScope(
-                "exact run", m.EvidenceScope(paths=("src/a.py",))
+            facts=m.VerificationRunFacts(
+                run_id=m.VerificationRunId("run"),
+                repository_id="demo",
+                scope=m.VerificationScope(
+                    "exact run", m.EvidenceScope(paths=("src/a.py",))
+                ),
+                command="pytest -q",
+                scenario="regression",
+                outcome=m.VerificationOutcome.FAIL,
+                observed_at=NOW,
+                observer="reviewer",
+                provenance="run provenance",
             ),
             observations=(
                 m.SourceObservationId("obs-2"),
                 m.SourceObservationId("obs-1"),
             ),
-            command="pytest -q",
-            scenario="regression",
-            outcome=m.VerificationOutcome.FAIL,
-            observed_at=NOW,
-            observer="reviewer",
             environment_limitations=("first limit", "second limit"),
-            provenance="run provenance",
         )
         resolution = m.ChallengeResolution(
-            reasoning="exact resolution",
-            resulting_understanding_id=ref.understanding_id,
-            resulting_version=m.UnderstandingVersionNumber(2),
+            facts=m.ChallengeResolutionFacts(
+                reasoning="exact resolution",
+                resulting_understanding_id=ref.understanding_id,
+                resulting_version=m.UnderstandingVersionNumber(2),
+            ),
             conclusions=(ref,),
             evidence=(evidence,),
         )
         challenge = m.Challenge(
-            challenge_id=m.ChallengeId("challenge"),
-            understanding_id=ref.understanding_id,
-            target_version=m.UnderstandingVersionNumber(1),
+            facts=m.ChallengeFacts(
+                challenge_id=m.ChallengeId("challenge"),
+                understanding_id=ref.understanding_id,
+                target_version=m.UnderstandingVersionNumber(1),
+                reason="disputed statement",
+                provenance="challenge provenance",
+                challenge_revision=m.ChallengeRevision(3),
+                state=m.ChallengeState.RESOLVED,
+                created_at=NOW,
+            ),
             target_conclusions=(ref,),
-            reason="disputed statement",
             evidence=(evidence,),
-            provenance="challenge provenance",
-            challenge_revision=m.ChallengeRevision(3),
-            state=m.ChallengeState.RESOLVED,
-            created_at=NOW,
             resolution=resolution,
             dispositions=(
                 m.UnresolvedChallengeRecord(
@@ -1999,9 +2079,8 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     recorded_at=NOW,
                 ),
                 m.ResolvedChallengeRecord(
-                    challenge_revision=m.ChallengeRevision(3),
+                    decision=m.ChallengeDispositionDecision(m.ChallengeRevision(3), NOW),
                     resolution=resolution,
-                    recorded_at=NOW,
                 ),
             ),
         )
@@ -2010,20 +2089,21 @@ class PubSchemaTransitionTest(unittest.TestCase):
             (challenge, migration.challenge_payload, migration._restore_challenge),
         ):
             with self.subTest(carrier=type(value).__name__):
-                source = m.to_canonical(value)
+                source = _historical_fact_payload(m.to_canonical(value))
                 staged = convert(source)
+                self.assertEqual(m.from_canonical(type(value), staged), value)
                 self.assertEqual(restore(staged), source)
                 if isinstance(value, m.VerificationRun):
                     facts = m.from_canonical(m.VerificationRunFacts, staged["facts"])
-                    self.assertEqual(facts.run_id, value.run_id)
-                    self.assertEqual(facts.scope, value.scope)
-                    self.assertEqual(facts.outcome, value.outcome)
+                    self.assertEqual(facts.run_id, value.facts.run_id)
+                    self.assertEqual(facts.scope, value.facts.scope)
+                    self.assertEqual(facts.outcome, value.facts.outcome)
                 else:
                     challenge_facts = m.from_canonical(
                         m.ChallengeFacts, staged["facts"]
                     )
-                    self.assertEqual(challenge_facts.challenge_id, value.challenge_id)
-                    self.assertEqual(challenge_facts.state, value.state)
+                    self.assertEqual(challenge_facts.challenge_id, value.facts.challenge_id)
+                    self.assertEqual(challenge_facts.state, value.facts.state)
 
     def test_accepted_dependency_coordinates_are_strict_and_round_trip(self):
         ref = m.ConclusionRevisionRef(
