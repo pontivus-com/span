@@ -203,7 +203,11 @@ class SurfaceConformanceTest(unittest.TestCase):
             (
                 "ask",
                 "RetrievedFunctionalPyramidReceipt",
-                {"member_repository_ids", "member_declaration_refs", "dependency_effects"},
+                {
+                    "member_repository_ids",
+                    "member_declaration_refs",
+                    "dependency_effects",
+                },
                 {"members", "content_digest"},
             ),
             (

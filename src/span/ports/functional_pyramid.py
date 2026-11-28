@@ -84,9 +84,7 @@ class FunctionalPyramidStateTransaction(_typing.Protocol):
         self, request_id: m.RequestId
     ) -> m.FunctionalPyramidReceipt | None: ...
 
-    def write_delivery_selection(
-        self, selection: m.DeliverySelection
-    ) -> None: ...
+    def write_delivery_selection(self, selection: m.DeliverySelection) -> None: ...
 
     def issue_delivery_cursor(
         self, selection_id: str, position: m.DeliveryPosition, cursor_id: str

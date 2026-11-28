@@ -246,7 +246,7 @@ class StartupRegistrationTest(unittest.TestCase):
             side_effect=AssertionError("must not open repository context")
         )
         service = mock.Mock()
-        service.status.return_value = m.FunctionalPyramidStatus(
+        service.obtain_status.return_value = m.FunctionalPyramidStatus(
             state=m.FunctionalPyramidParticipationState.UNCONFIGURED
         )
         adapter = McpAdapter(
@@ -267,7 +267,7 @@ class StartupRegistrationTest(unittest.TestCase):
 
         self.assertFalse(result.is_error, result.content)
         loader.assert_not_called()
-        selector = service.status.call_args.args[0]
+        selector = service.obtain_status.call_args.args[0]
         self.assertEqual(selector.repository_id, REPO)
 
     def test_cs09_functional_pyramid_record_is_installation_scoped(self):

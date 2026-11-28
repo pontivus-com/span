@@ -377,9 +377,7 @@ class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationRea
             f"repository is not attached to this pyramid transaction: {repository_id}"
         )
 
-    def write_delivery_selection(
-        self, selection: m.DeliverySelection
-    ) -> None:
+    def write_delivery_selection(self, selection: m.DeliverySelection) -> None:
         self._connection.execute(
             "INSERT INTO delivery_selections"
             "(selection_id, kind, created_at, expires_at, canonical_json)"

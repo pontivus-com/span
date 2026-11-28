@@ -73,10 +73,12 @@ class PyramidStatusReadBinding:
 
     def __post_init__(self) -> None:
         _require_non_negative_int("findings_count", self.findings_count)
-        if not self.member_repository_ids or len(set(self.member_repository_ids)) != len(
-            self.member_repository_ids
-        ):
-            raise ValueError("status binding requires distinct active member identities")
+        if not self.member_repository_ids or len(
+            set(self.member_repository_ids)
+        ) != len(self.member_repository_ids):
+            raise ValueError(
+                "status binding requires distinct active member identities"
+            )
 
 
 @_dataclass(frozen=True)
@@ -165,7 +167,10 @@ def delivery_extents(
         )
     if isinstance(binding, PyramidReceiptReadBinding):
         return (
-            (DeliveryCollection.MEMBER_REPOSITORY_IDS, len(binding.member_repository_ids)),
+            (
+                DeliveryCollection.MEMBER_REPOSITORY_IDS,
+                len(binding.member_repository_ids),
+            ),
             (DeliveryCollection.MEMBER_DECLARATION_REFS, binding.declaration_count),
             (DeliveryCollection.PARTICIPATION_EFFECTS, binding.participation_count),
             (

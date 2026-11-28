@@ -62,7 +62,9 @@ def _active_health(
 
 def _read_fingerprint(
     result: (
-        m.FunctionalPyramidView | m.FunctionalPyramidStatus | m.FunctionalPyramidCandidate
+        m.FunctionalPyramidView
+        | m.FunctionalPyramidStatus
+        | m.FunctionalPyramidCandidate
     ),
     roots: dict[str, str],
     members: tuple[m.FunctionalPyramidMemberView, ...],
@@ -503,7 +505,9 @@ class FunctionalPyramidService:
             if receipt is None:
                 raise delivery.stale(bound[0])
             return delivery.resume(
-                bound, receipt, payload_digest(m.to_canonical(receipt)),
+                bound,
+                receipt,
+                payload_digest(m.to_canonical(receipt)),
                 self._policy.max_response_bytes,
             )
         candidate, _, fingerprint = self._candidate(
@@ -586,9 +590,7 @@ class FunctionalPyramidService:
             )
             limit = self._policy.max_response_bytes
             if bound is not None:
-                return delivery.resume(
-                    bound, resolution.view, fingerprint, limit
-                )
+                return delivery.resume(bound, resolution.view, fingerprint, limit)
             initial = delivery.initial(selector, resolution.view, fingerprint, limit)
             assert isinstance(
                 initial, (m.FunctionalPyramidView, m.FunctionalPyramidUnavailable)
@@ -888,11 +890,7 @@ class FunctionalPyramidService:
     ) -> m.RetrievedFunctionalPyramidReceipt | None:
         """Retrieve one immutable installation-scoped Functional Pyramid receipt."""
         retained = self._require_state().receipt(selector.request_id)
-        return (
-            None
-            if retained is None
-            else m.project_functional_pyramid_receipt(retained)
-        )
+        return None if retained is None else m.project_functional_pyramid_receipt(retained)
 
     def obtain_receipt(
         self, selector: m.FunctionalPyramidReceiptSelector

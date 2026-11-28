@@ -328,6 +328,7 @@ class ChangeCarrierTest(unittest.TestCase):
                 m.RetrievedReceipt,
                 m.RetrievedFunctionalPyramidReceipt,
                 m.EvidencePage,
+                m.ResultPage,
                 m.FunctionalPyramidStatus,
                 m.FunctionalPyramidView,
                 m.FunctionalPyramidParticipation,
