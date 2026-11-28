@@ -182,7 +182,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(recorded["$type"], "UnderstandingRecorded")
-            self.assertEqual(recorded["revision_effects"][0]["qualification"]["state"], "CURRENT")
+            self.assertEqual(
+                recorded["revision_effects"][0]["qualification"]["state"], "CURRENT"
+            )
             curated = await self._curate_recorded(
                 session, recorded, "large-range-curate"
             )
@@ -651,7 +653,13 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(added["$type"], "UnderstandingRecorded", added)
             added_id = (self._qualification_ids(added) - existing_ids).pop()
-            await self._curate_recorded(session, added, "sub-status-curate")
+            curated = await self._curate_recorded(
+                session,
+                added,
+                "sub-status-curate",
+                conclusion_ids=existing_ids | {added_id},
+            )
+            self.assertEqual(curated["$type"], "UnderstandingRecorded")
             _write(self.repo, "styles/site.css", "body { color: blue; }\n")
             answer = await self._call(
                 session,
@@ -1265,10 +1273,10 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(store.close)
         challenge = store.get_challenge(outcome["challenge_id"])
         self.assertEqual(
-            challenge.challenge_revision.value,
+            challenge.facts.challenge_revision.value,
             outcome["challenge_revision"] + 1,
         )
-        self.assertEqual(challenge.state, m.ChallengeState.UNRESOLVED)
+        self.assertEqual(challenge.facts.state, m.ChallengeState.UNRESOLVED)
 
     async def test_resolved_challenge_reestablishes_with_new_external_support(
         self,
@@ -1367,9 +1375,9 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
         )
         self.addCleanup(store.close)
         challenge = store.get_challenge(outcome["challenge_id"])
-        self.assertEqual(challenge.state, m.ChallengeState.RESOLVED)
+        self.assertEqual(challenge.facts.state, m.ChallengeState.RESOLVED)
         assert challenge.resolution is not None
-        self.assertEqual(challenge.resolution.resulting_version.value, 2)
+        self.assertEqual(challenge.resolution.facts.resulting_version.value, 2)
         self.assertEqual(len(challenge.resolution.conclusions), 1)
         self.assertEqual(
             challenge.resolution.conclusions[0].conclusion_id.value,
@@ -1563,7 +1571,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
             1,
         )
         self.assertEqual(
-            store.get_challenge(outcome["challenge_id"]).state,
+            store.get_challenge(outcome["challenge_id"]).facts.state,
             m.ChallengeState.OPEN,
         )
 

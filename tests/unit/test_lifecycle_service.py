@@ -1644,7 +1644,7 @@ class LifecycleServiceTest(unittest.TestCase):
 
         # A confirming or additive transition invalidates no premise.
         add = self._record_add(2, "sub-add-after-correct")
-        self.assertEqual(add.dependent_effects, ())
+        self.assertEqual(add.dependency_refs, ())
 
     # -- retention policy --------------------------------------------------
 

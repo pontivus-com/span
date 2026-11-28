@@ -1539,8 +1539,8 @@ class AnswerServiceTest(unittest.TestCase):
         result = self._ask("src/a.py", "What does A do?", "req-order-ask")
         assert isinstance(result, m.Answer)
         expected = [
-            first.accepted_verification_run_ids[0].value,
-            second.accepted_verification_run_ids[0].value,
+            first.verification_run_ids[0].value,
+            second.verification_run_ids[0].value,
         ]
         self.assertEqual(
             [view.facts.run_id.value for view in result.verification],
@@ -1931,9 +1931,7 @@ class AnswerServiceTest(unittest.TestCase):
         self,
     ) -> None:
         receipt = self._record_verification_paths("receipt-run", ("src/a.py",))
-        run = self.store.get_verification_run(
-            receipt.verification_run_ids[0].value
-        )
+        run = self.store.get_verification_run(receipt.verification_run_ids[0].value)
         (self.root / "src/a.py").write_text("changed\n", encoding="utf-8")
         result = self.service.ask(
             m.AskRequest(

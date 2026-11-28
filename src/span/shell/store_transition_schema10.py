@@ -866,10 +866,18 @@ def _receipt_from_schema10(
         ),
         "content_digest": payload["content_digest"],
         "committed_at": payload["committed_at"],
-        "accepted_understanding_ids": [item for item in _items(payload, "accepted_understanding_ids")],
-        "accepted_understanding_versions": [item for item in _items(payload, "accepted_understanding_versions")],
-        "accepted_verification_run_ids": [item for item in _items(payload, "accepted_verification_run_ids")],
-        "accepted_challenge_ids": [item for item in _items(payload, "accepted_challenge_ids")],
+        "accepted_understanding_ids": [
+            item for item in _items(payload, "accepted_understanding_ids")
+        ],
+        "accepted_understanding_versions": [
+            item for item in _items(payload, "accepted_understanding_versions")
+        ],
+        "accepted_verification_run_ids": [
+            item for item in _items(payload, "accepted_verification_run_ids")
+        ],
+        "accepted_challenge_ids": [
+            item for item in _items(payload, "accepted_challenge_ids")
+        ],
         "dependent_effects": [],
         "replay_expires_at": payload.get("replay_expires_at"),
     }

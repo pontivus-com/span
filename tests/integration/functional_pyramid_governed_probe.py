@@ -244,7 +244,10 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
             )
             pre_understanding_id = _value(pre_created.get("understanding_id"))
             pre_version = _value(pre_created.get("version"))
-            pre_affected = [item["effect"]["ref"] for item in pre_created.get("revision_effects", [])]
+            pre_affected = [
+                item["effect"]["ref"]
+                for item in pre_created.get("revision_effects", [])
+            ]
             pre_conclusion_id = (
                 _value(pre_affected[0].get("conclusion_id")) if pre_affected else None
             )
@@ -394,7 +397,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
             )
             understanding_id = _value(created.get("understanding_id"))
             version = _value(created.get("version"))
-            affected = [item["effect"]["ref"] for item in created.get("revision_effects", [])]
+            affected = [
+                item["effect"]["ref"] for item in created.get("revision_effects", [])
+            ]
             conclusion_id = (
                 _value(affected[0].get("conclusion_id")) if affected else None
             )
@@ -567,7 +572,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                 },
             )
             corrected_version = _value(corrected.get("version"))
-            corrected_affected = [item["effect"]["ref"] for item in corrected.get("revision_effects", [])]
+            corrected_affected = [
+                item["effect"]["ref"] for item in corrected.get("revision_effects", [])
+            ]
             corrected_conclusion_id = (
                 _value(corrected_affected[0].get("conclusion_id"))
                 if corrected_affected
@@ -655,20 +662,28 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                 "activated_error": activated_error,
                 "activated_kind": activated.get("$type"),
                 "pre_created_error": pre_created_error,
-                "pre_created_qualification": pre_created["revision_effects"][0]["qualification"]["state"],
+                "pre_created_qualification": pre_created["revision_effects"][0][
+                    "qualification"
+                ]["state"],
                 "activation_effect_repositories": _surface_repositories(
                     {"surfaces": activated.get("dependent_effects", [])}
                 ),
                 "activation_receipt_before_error": activation_receipt_before_error,
-                "activation_receipt_before_refs": activation_receipt_before.get("dependency_effects", {}).get("effects", []),
+                "activation_receipt_before_refs": activation_receipt_before.get(
+                    "dependency_effects", {}
+                ).get("effects", []),
                 "activation_replay_before_error": activation_replay_before_error,
                 "activation_replay_before_effect_repositories": _surface_repositories(
                     {"surfaces": activation_replay_before.get("dependent_effects", [])}
                 ),
                 "pre_reestablished_error": pre_reestablished_error,
-                "pre_reestablished_qualification": pre_reestablished["revision_effects"][0]["qualification"]["state"],
+                "pre_reestablished_qualification": pre_reestablished[
+                    "revision_effects"
+                ][0]["qualification"]["state"],
                 "activation_receipt_after_error": activation_receipt_after_error,
-                "activation_receipt_after_refs": activation_receipt_after.get("dependency_effects", {}).get("effects", []),
+                "activation_receipt_after_refs": activation_receipt_after.get(
+                    "dependency_effects", {}
+                ).get("effects", []),
                 "activation_replay_after_error": activation_replay_after_error,
                 "activation_replay_after_effect_count": sum(
                     item.get("$type") == "ChangedConclusion"
@@ -705,7 +720,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                 "owner_ask_error": owner_ask_error,
                 "owner_route_status": owner_fp.get("status"),
                 "created_error": created_error,
-                "created_qualification": created["revision_effects"][0]["qualification"]["state"],
+                "created_qualification": created["revision_effects"][0][
+                    "qualification"
+                ]["state"],
                 "captured_ask_error": captured_ask_error,
                 "captured_ask_kind": captured_ask.get("$type"),
                 "captured_gap_reason": captured_ask.get("reason"),
@@ -725,7 +742,9 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
                 "changed_surface_repositories": _surface_repositories(changed),
                 "changed_context_repository": context_a.get("repository_id"),
                 "reestablished_error": reestablished_error,
-                "reestablished_qualification": reestablished["revision_effects"][0]["qualification"]["state"],
+                "reestablished_qualification": reestablished["revision_effects"][0][
+                    "qualification"
+                ]["state"],
                 "snapshot_after_error": snapshot_after_error,
                 "snapshot_after_has_route": _has_route_support(snapshot_after),
                 "snapshot_after_authority_locators": _authority_locators(

@@ -1324,7 +1324,8 @@ class FunctionalPyramidService:
             required_governance=frozenset(
                 effect.surface.repository_id
                 for effect in receipt.dependency_effects.effects
-                if transaction.active_pyramid_id(effect.surface.repository_id) is not None
+                if transaction.active_pyramid_id(effect.surface.repository_id)
+                is not None
             ),
         )
         return self._recorded(receipt, surfaces, contexts)

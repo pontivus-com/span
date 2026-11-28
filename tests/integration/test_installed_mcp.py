@@ -950,7 +950,9 @@ dispose();
         )
         self.assertFalse(observed["activation_replay_after_error"])
         self.assertEqual(observed["activation_replay_after_effect_count"], 0)
-        self.assertEqual(observed["activation_replay_after_dispositions"], ["SUPERSEDED"])
+        self.assertEqual(
+            observed["activation_replay_after_dispositions"], ["SUPERSEDED"]
+        )
         self.assertEqual(observed["activation_replay_after_context_count"], 0)
 
         self.assertFalse(observed["ask_a_error"])
