@@ -292,8 +292,8 @@ def largest_fitting_prefix(total: int, fits: _Callable[[int], bool]) -> int | No
         raise ValueError("collection size must be non-negative")
     if fits(total):
         return total
-    low, high = 0, total - 1
-    best = None
+    low, high = 1, total - 1
+    best = 0 if fits(0) else None
     while low <= high:
         middle = (low + high) // 2
         if fits(middle):

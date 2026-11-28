@@ -115,15 +115,17 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
             self.assertEqual(readiness["schema_version"], 2)
 
     def test_bound_delivery_cursor_survives_reopen_and_reuses_position(self) -> None:
-        selection = m.DirectoryDeliverySelection(
+        selection = m.DeliverySelection(
             selection_id="selection",
-            selector=m.FunctionalPyramidDirectorySelector("repo", "."),
-            owner_repository_id="repo",
             created_at=NOW,
             expires_at=NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime,
             state_fingerprint=m.ContentDigest("digest"),
-            placements=(),
-            unresolved_count=3,
+            binding=m.DirectoryReadBinding(
+                selector=m.FunctionalPyramidDirectorySelector("repo", "."),
+                owner_repository_id="repo",
+                placements=(),
+                unresolved_count=3,
+            ),
         )
         position = m.DeliveryPosition(
             m.DeliveryCollection.UNRESOLVED, 1, selection.state_fingerprint

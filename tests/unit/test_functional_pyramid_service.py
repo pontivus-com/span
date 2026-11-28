@@ -167,7 +167,7 @@ class _State:
         self.excluded: set[str] = set()
         self.receipts: dict[str, m.RetrievedFunctionalPyramidReceipt] = {}
         self.transaction_paths: list[tuple[tuple[str, str], ...]] = []
-        self.selections: dict[str, m.DirectoryDeliverySelection] = {}
+        self.selections: dict[str, m.DeliverySelection] = {}
         self.cursors: dict[str, tuple[str, m.DeliveryPosition]] = {}
 
     def load_delivery_cursor(self, cursor_id):
@@ -711,6 +711,41 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.declarations.roots["repo-a"] = "/moved/repo-a"
         with self.assertRaises(RecordingValidationError):
             self.admin_service.continue_delivery(first.next_after)
+
+    def test_candidate_continuation_recovers_complete_validation_findings(self) -> None:
+        selector = m.FunctionalPyramidCandidateSelector(
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=tuple(
+                m.FunctionalPyramidMemberIntent(
+                    repository_id=f"unknown-{index:03d}",
+                    declaration_sources=(m.EvidenceRequest("decl.json"),),
+                )
+                for index in range(30)
+            ),
+        )
+        full = self.admin_service.candidate(selector)
+        self.admin_service._policy = dataclasses.replace(
+            DEFAULT_SERVICE_BOUNDS_POLICY, max_response_bytes=2000
+        )
+        first = self.admin_service.obtain_candidate(selector)
+        assert isinstance(first, m.FunctionalPyramidCandidate)
+        self.assertFalse(first.activation_ready)
+        self.assertTrue(first.truncated)
+        collected = list(first.validation_findings)
+        token = first.continuation
+        while token is not None:
+            current = self.admin_service.continue_delivery(token)
+            assert isinstance(current, m.ResultPage)
+            self.assertLessEqual(encoded_size(current), 2000)
+            self.assertEqual(current.selection_id, first.selection_id)
+            for part in current.parts:
+                assert isinstance(part, m.ValidationFindingsPart)
+                self.assertEqual(part.start, len(collected))
+                self.assertEqual(part.total, len(full.validation_findings))
+                collected.extend(part.items)
+            token = current.continuation
+        self.assertEqual(tuple(collected), full.validation_findings)
+        self.assertFalse(self.state.active)
 
     def test_duplicate_unregistered_and_other_active_members_accumulate(self) -> None:
         intent = self._install_v3("repo-a")

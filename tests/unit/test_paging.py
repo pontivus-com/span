@@ -21,6 +21,7 @@ class FittingPrefixTest(unittest.TestCase):
         )
         self.assertEqual(paging.largest_fitting_prefix(0, lambda n: n == 0), 0)
         self.assertIsNone(paging.largest_fitting_prefix(4, lambda _: False))
+        self.assertEqual(paging.largest_fitting_prefix(2, lambda n: n == 1), 1)
 
 
 class PageTokenTest(unittest.TestCase):

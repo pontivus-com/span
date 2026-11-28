@@ -101,7 +101,10 @@ def decode_continuation(token: str) -> ContinuationCursor:
     )
 
 
-_DirectoryCursor = tuple[m.DirectoryDeliverySelection, m.DeliveryPosition]
+_GovernanceResult = (
+    m.FunctionalPyramidView | m.FunctionalPyramidStatus | m.FunctionalPyramidCandidate
+)
+_BoundCursor = tuple[m.DeliverySelection, m.DeliveryPosition]
 
 
 def is_bound_delivery(token: str) -> bool:
@@ -109,50 +112,189 @@ def is_bound_delivery(token: str) -> bool:
     return token.startswith("cur-srv-")
 
 
-def _directory_position(
-    selection: m.DirectoryDeliverySelection, delivered: int
-) -> m.DeliveryPosition | None:
-    placements = len(selection.placements)
-    if delivered < placements:
-        return m.DeliveryPosition(
-            m.DeliveryCollection.PLACEMENTS, delivered, selection.state_fingerprint
+def _binding(
+    selector: m.GovernanceReadSelector, result: _GovernanceResult
+) -> m.GovernanceReadBinding:
+    if isinstance(selector, m.FunctionalPyramidDirectorySelector) and isinstance(
+        result, m.FunctionalPyramidView
+    ):
+        assert result.resolved_repository_id is not None
+        return m.DirectoryReadBinding(
+            selector,
+            result.resolved_repository_id,
+            result.placements,
+            len(result.unresolved),
         )
-    if delivered < placements + selection.unresolved_count:
-        return m.DeliveryPosition(
-            m.DeliveryCollection.UNRESOLVED,
-            delivered - placements,
-            selection.state_fingerprint,
+    if isinstance(selector, m.FunctionalPyramidSelector) and isinstance(
+        result, m.FunctionalPyramidStatus
+    ):
+        if result.pyramid_id is None or result.version is None:
+            raise ValueError("inactive status has no pageable selection")
+        return m.PyramidStatusReadBinding(
+            selector,
+            result.pyramid_id,
+            result.version,
+            result.member_repository_ids,
+            len(result.findings),
         )
-    return None
+    if isinstance(selector, m.FunctionalPyramidCandidateSelector) and isinstance(
+        result, m.FunctionalPyramidCandidate
+    ):
+        return m.PyramidCandidateReadBinding(
+            selector,
+            result.version,
+            len(result.validation_findings),
+            len(result.graph_findings),
+        )
+    raise ValueError("result does not belong to the supplied exact selector")
 
 
-def _directory_omission(
-    selection: m.DirectoryDeliverySelection, delivered: int
-) -> tuple[str, ...]:
-    position = _directory_position(selection, delivered)
+def _result_kind(binding: m.GovernanceReadBinding) -> m.ResultKind:
+    if isinstance(binding, m.DirectoryReadBinding):
+        return m.ResultKind.FUNCTIONAL_PYRAMID_VIEW
+    if isinstance(binding, m.PyramidStatusReadBinding):
+        return m.ResultKind.FUNCTIONAL_PYRAMID_STATUS
+    return m.ResultKind.FUNCTIONAL_PYRAMID_CANDIDATE
+
+
+def _total(selection: m.DeliverySelection) -> int:
+    return sum(count for _, count in m.delivery_extents(selection.binding))
+
+
+def _omission(selection: m.DeliverySelection, delivered: int) -> tuple[str, ...]:
+    position = m.delivery_position(selection, delivered)
     if position is None:
         return ()
-    remaining = len(selection.placements) + selection.unresolved_count - delivered
+    remaining = _total(selection) - delivered
     return (f"{position.collection.value}: {remaining} remaining selected items",)
 
 
-def _directory_unavailable(
-    selection: m.DirectoryDeliverySelection, delivered: int
+def _recovery(binding: m.GovernanceReadBinding) -> str:
+    selector = binding.selector
+    if isinstance(selector, m.FunctionalPyramidDirectorySelector):
+        return (
+            "Repeat FunctionalPyramidDirectorySelector with repository_id="
+            f"{selector.repository_id!r}, directory={selector.directory!r}, "
+            "and no after token"
+        )
+    if isinstance(selector, m.FunctionalPyramidSelector):
+        coordinate = (
+            f"repository_id={selector.repository_id!r}"
+            if selector.repository_id is not None
+            else (
+                f"pyramid_id={selector.pyramid_id.value!r}"
+                if selector.pyramid_id
+                else "the original identity"
+            )
+        )
+        return f"Repeat FunctionalPyramidSelector with {coordinate}"
+    return (
+        f"Repeat the original FunctionalPyramidCandidateSelector for {selector.action.value} "
+        "with the same target version and member intents"
+    )
+
+
+def _unavailable(
+    selection: m.DeliverySelection, delivered: int
 ) -> m.FunctionalPyramidUnavailable:
-    position = _directory_position(selection, delivered)
+    position = m.delivery_position(selection, delivered)
     coordinate = (
-        "initial directory envelope"
+        "initial result envelope"
         if position is None
         else f"{position.collection.value}[{position.offset}]"
     )
     return m.FunctionalPyramidUnavailable(
         failure=f"Response budget cannot carry the required unit {coordinate}",
         recovery=(
-            f"Obtain a narrower directory than {selection.selector.repository_id}:"
-            f"{selection.selector.directory}; if the unit remains indivisible, "
-            "report the named delivery blocker"
+            f"{_recovery(selection.binding)} with a narrower existing selection "
+            "where applicable; otherwise report the named indivisible delivery blocker"
         ),
     )
+
+
+def _initial_prefix(
+    result: _GovernanceResult,
+    selection: m.DeliverySelection,
+    count: int,
+    cursor: str,
+) -> _GovernanceResult:
+    if count == _total(selection):
+        return result
+    omitted = _omission(selection, count)
+    if isinstance(result, m.FunctionalPyramidView):
+        return _dataclasses.replace(
+            result,
+            placements=result.placements[:count],
+            unresolved=result.unresolved[: max(0, count - len(result.placements))],
+            selection_id=selection.selection_id,
+            next_after=cursor,
+            omitted=omitted,
+            truncated=True,
+        )
+    if isinstance(result, m.FunctionalPyramidStatus):
+        return _dataclasses.replace(
+            result,
+            member_repository_ids=result.member_repository_ids[:count],
+            findings=result.findings[
+                : max(0, count - len(result.member_repository_ids))
+            ],
+            selection_id=selection.selection_id,
+            continuation=cursor,
+            omitted=omitted,
+            truncated=True,
+        )
+    return _dataclasses.replace(
+        result,
+        validation_findings=result.validation_findings[:count],
+        graph_findings=result.graph_findings[
+            : max(0, count - len(result.validation_findings))
+        ],
+        selection_id=selection.selection_id,
+        continuation=cursor,
+        omitted=omitted,
+        truncated=True,
+    )
+
+
+def _part(
+    result: _GovernanceResult, position: m.DeliveryPosition, count: int
+) -> m.ResultPart:
+    start, end = position.offset, position.offset + count
+    collection = position.collection
+    if isinstance(result, m.FunctionalPyramidView):
+        if collection is m.DeliveryCollection.PLACEMENTS:
+            return m.PlacementsPart(
+                start, len(result.placements), result.placements[start:end]
+            )
+        if collection is m.DeliveryCollection.UNRESOLVED:
+            return m.UnresolvedPart(
+                start, len(result.unresolved), result.unresolved[start:end]
+            )
+    if isinstance(result, m.FunctionalPyramidStatus):
+        if collection is m.DeliveryCollection.MEMBER_REPOSITORY_IDS:
+            return m.MemberRepositoryIdsPart(
+                start,
+                len(result.member_repository_ids),
+                result.member_repository_ids[start:end],
+            )
+        if collection is m.DeliveryCollection.STATUS_FINDINGS:
+            return m.StatusFindingsPart(
+                start, len(result.findings), result.findings[start:end]
+            )
+    if isinstance(result, m.FunctionalPyramidCandidate):
+        if collection is m.DeliveryCollection.VALIDATION_FINDINGS:
+            return m.ValidationFindingsPart(
+                start,
+                len(result.validation_findings),
+                result.validation_findings[start:end],
+            )
+        if collection is m.DeliveryCollection.GRAPH_FINDINGS:
+            return m.GraphFindingsPart(
+                start,
+                len(result.graph_findings),
+                result.graph_findings[start:end],
+            )
+    raise ValueError("collection does not belong to the bound result")
 
 
 class ContinuationService:
@@ -167,27 +309,19 @@ class ContinuationService:
         self._clock = clock
 
     @staticmethod
-    def stale_directory(
-        selection: m.DirectoryDeliverySelection,
-    ) -> RecordingValidationError:
-        selector = selection.selector
+    def stale(selection: m.DeliverySelection) -> RecordingValidationError:
         return RecordingValidationError(
-            "the directory selection is no longer current",
+            "the bound selection is no longer current",
             cause_kind=RejectionCauseKind.CONTINUATION_INVALID,
-            public_identity=f"{selector.repository_id}:{selector.directory}",
-            public_cause=(
-                "The bound directory selection is stale or expired; repeat "
-                "FunctionalPyramidDirectorySelector with repository_id="
-                f"{selector.repository_id!r}, directory={selector.directory!r}, "
-                "and no after token"
-            ),
+            public_identity=selection.selection_id,
+            public_cause=f"The bound selection is stale or expired. {_recovery(selection.binding)}",
         )
 
-    def load_directory(
+    def load(
         self,
         cursor_id: str,
         selector: m.FunctionalPyramidDirectorySelector | None = None,
-    ) -> _DirectoryCursor:
+    ) -> _BoundCursor:
         bound = self._state.load_delivery_cursor(cursor_id)
         if bound is None:
             raise RecordingValidationError.continuation_invalid(
@@ -197,107 +331,75 @@ class ContinuationService:
         if (
             self._clock() >= selection.expires_at
             or position.state_fingerprint != selection.state_fingerprint
-            or (selector is not None and selector != selection.selector)
+            or (selector is not None and selector != selection.binding.selector)
         ):
-            raise self.stale_directory(selection)
+            raise self.stale(selection)
         return bound
 
-    def initial_directory(
+    def initial(
         self,
-        selector: m.FunctionalPyramidDirectorySelector,
-        view: m.FunctionalPyramidView,
+        selector: m.GovernanceReadSelector,
+        result: _GovernanceResult,
         fingerprint: m.ContentDigest,
         limit: int,
-    ) -> m.FunctionalPyramidView | m.FunctionalPyramidUnavailable:
-        if encoded_size(view) <= limit:
-            return view
-        assert view.resolved_repository_id is not None
+    ) -> _GovernanceResult | m.FunctionalPyramidUnavailable:
+        if encoded_size(result) <= limit:
+            return result
         now = self._clock()
-        selection = m.DirectoryDeliverySelection(
+        selection = m.DeliverySelection(
             selection_id=server_selection_id(),
-            selector=selector,
-            owner_repository_id=view.resolved_repository_id,
             created_at=now,
             expires_at=now + self._state.retention.context_lifetime,
             state_fingerprint=fingerprint,
-            placements=view.placements,
-            unresolved_count=len(view.unresolved),
+            binding=_binding(selector, result),
         )
-        total = len(view.placements) + len(view.unresolved)
         cursor_id = server_cursor_id()
-
-        def build(count: int) -> m.FunctionalPyramidView:
-            if count == total:
-                return view
-            return _dataclasses.replace(
-                view,
-                placements=view.placements[:count],
-                unresolved=view.unresolved[: max(0, count - len(view.placements))],
-                selection_id=selection.selection_id,
-                next_after=cursor_id,
-                omitted=_directory_omission(selection, count),
-                truncated=True,
-            )
-
         count = largest_fitting_prefix(
-            total, lambda n: n > 0 and encoded_size(build(n)) <= limit
+            _total(selection),
+            lambda n: n > 0
+            and encoded_size(_initial_prefix(result, selection, n, cursor_id)) <= limit,
         )
         if not count:
-            return _directory_unavailable(selection, 0)
-        position = _directory_position(selection, count)
+            return _unavailable(selection, 0)
+        position = m.delivery_position(selection, count)
         if position is None:
-            return view
-        candidate = build(count)
+            return result
+        candidate = _initial_prefix(result, selection, count, cursor_id)
         with self._state.transaction() as transaction:
             transaction.write_delivery_selection(selection)
             issued = transaction.issue_delivery_cursor(
                 selection.selection_id, position, cursor_id
             )
-        return _dataclasses.replace(candidate, next_after=issued)
+        if isinstance(candidate, m.FunctionalPyramidView):
+            return _dataclasses.replace(candidate, next_after=issued)
+        return _dataclasses.replace(candidate, continuation=issued)
 
-    def resume_directory(
+    def resume(
         self,
-        bound: _DirectoryCursor,
-        view: m.FunctionalPyramidView,
+        bound: _BoundCursor,
+        result: _GovernanceResult,
         fingerprint: m.ContentDigest,
         limit: int,
     ) -> m.ResultPage | m.FunctionalPyramidUnavailable:
         selection, position = bound
         if (
             fingerprint != selection.state_fingerprint
-            or view.resolved_repository_id != selection.owner_repository_id
-            or view.placements != selection.placements
-            or len(view.unresolved) != selection.unresolved_count
             or self._clock() >= selection.expires_at
+            or _binding(selection.binding.selector, result) != selection.binding
         ):
-            raise self.stale_directory(selection)
-        offset = position.offset
-        if position.collection is m.DeliveryCollection.PLACEMENTS:
-            delivered = offset
-            remaining = len(view.placements) - offset
-        else:
-            delivered = len(view.placements) + offset
-            remaining = len(view.unresolved) - offset
-        if remaining <= 0:
-            raise self.stale_directory(selection)
+            raise self.stale(selection)
+        try:
+            delivered, remaining = m.delivery_offset(selection, position)
+        except ValueError as exc:
+            raise self.stale(selection) from exc
         cursor_id = server_cursor_id()
 
         def build(count: int) -> m.ResultPage:
-            end = offset + count
-            part: m.ResultPart
-            if position.collection is m.DeliveryCollection.PLACEMENTS:
-                part = m.PlacementsPart(
-                    offset, len(view.placements), view.placements[offset:end]
-                )
-            else:
-                part = m.UnresolvedPart(
-                    offset, len(view.unresolved), view.unresolved[offset:end]
-                )
-            omitted = _directory_omission(selection, delivered + count)
+            omitted = _omission(selection, delivered + count)
             return m.ResultPage(
                 selection_id=selection.selection_id,
-                result_kind=m.ResultKind.FUNCTIONAL_PYRAMID_VIEW,
-                parts=(part,),
+                result_kind=_result_kind(selection.binding),
+                parts=(_part(result, position, count),),
                 continuation=cursor_id if omitted else None,
                 omitted=omitted,
                 truncated=bool(omitted),
@@ -307,9 +409,9 @@ class ContinuationService:
             remaining, lambda n: n > 0 and encoded_size(build(n)) <= limit
         )
         if not count:
-            return _directory_unavailable(selection, delivered)
+            return _unavailable(selection, delivered)
         candidate = build(count)
-        next_position = _directory_position(selection, delivered + count)
+        next_position = m.delivery_position(selection, delivered + count)
         if next_position is None:
             return candidate
         with self._state.transaction() as transaction:

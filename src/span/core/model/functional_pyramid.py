@@ -595,6 +595,21 @@ def public_pyramid_finding(
     )
 
 
+def _validate_bound_page(
+    selection_id: str | None,
+    continuation: str | None,
+    omitted: tuple[str, ...],
+    truncated: bool,
+) -> None:
+    if truncated != (selection_id is not None and continuation is not None):
+        raise ValueError("a truncated result requires a bound continuation")
+    if (selection_id is None) != (continuation is None) or truncated != bool(omitted):
+        raise ValueError("inconsistent result delivery metadata")
+    if selection_id is not None and continuation is not None:
+        _require_non_empty("selection_id", selection_id)
+        _require_non_empty("continuation", continuation)
+
+
 @_dataclass(frozen=True)
 class FunctionalPyramidStatus:
     state: FunctionalPyramidParticipationState
@@ -603,22 +618,35 @@ class FunctionalPyramidStatus:
     version: FunctionalPyramidVersion | None = None
     member_repository_ids: tuple[str, ...] = ()
     findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
+    selection_id: str | None = None
+    continuation: str | None = None
+    omitted: tuple[str, ...] = ()
+    truncated: bool = False
 
     def __post_init__(self) -> None:
+        _validate_bound_page(
+            self.selection_id, self.continuation, self.omitted, self.truncated
+        )
         if self.state is FunctionalPyramidParticipationState.ACTIVE:
             if self.health is None or self.pyramid_id is None or self.version is None:
                 raise ValueError(
                     "ACTIVE status requires health, pyramid_id, and version"
                 )
-            if not self.member_repository_ids:
+            if not self.member_repository_ids and not self.truncated:
                 raise ValueError("ACTIVE status requires at least one member")
             if len(set(self.member_repository_ids)) != len(self.member_repository_ids):
                 raise ValueError("ACTIVE status member identities must be distinct")
             if self.health is FunctionalPyramidHealth.VALID and self.findings:
                 raise ValueError("VALID Functional Pyramid status has no findings")
-            if self.health is FunctionalPyramidHealth.DEGRADED and not self.findings:
+            if (
+                self.health is FunctionalPyramidHealth.DEGRADED
+                and not self.findings
+                and not self.truncated
+            ):
                 raise ValueError("DEGRADED Functional Pyramid status requires findings")
             return
+        if self.truncated:
+            raise ValueError("inactive status has no pageable collections")
         if self.health is not None:
             raise ValueError("inactive Functional Pyramid status has no health")
         if (
@@ -694,8 +722,15 @@ class FunctionalPyramidCandidate:
     graph_findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
     pyramid_id: FunctionalPyramidId | None = None
     version: FunctionalPyramidVersion | None = None
+    selection_id: str | None = None
+    continuation: str | None = None
+    omitted: tuple[str, ...] = ()
+    truncated: bool = False
 
     def __post_init__(self) -> None:
+        _validate_bound_page(
+            self.selection_id, self.continuation, self.omitted, self.truncated
+        )
         if self.action not in (
             FunctionalPyramidAction.ACTIVATE,
             FunctionalPyramidAction.REVISE,
@@ -709,14 +744,16 @@ class FunctionalPyramidCandidate:
                 finding.reason is FunctionalPyramidPublicReason.UNKNOWN_PYRAMID
                 for finding in self.validation_findings
             )
-            if not unknown_target:
+            if not unknown_target and not self.truncated:
                 raise ValueError(
                     "revise candidate requires target version unless target is unknown"
                 )
         if not revising and self.version is not None:
             raise ValueError("activate candidate has no target version")
         expected_ready = not self.validation_findings and not self.graph_findings
-        if self.activation_ready != expected_ready:
+        if self.activation_ready and (not expected_ready or self.truncated):
+            raise ValueError("an activation-ready candidate has no deferred findings")
+        if not self.truncated and self.activation_ready != expected_ready:
             raise ValueError(
                 "FunctionalPyramidCandidate.activation_ready must match findings"
             )

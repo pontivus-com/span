@@ -25,6 +25,7 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidParticipationEffect,
     FunctionalPyramidPlacementView,
     FunctionalPyramidPublicFinding,
+    FunctionalPyramidValidationFinding,
     FunctionalPyramidReceiptSelector,
     FunctionalPyramidStatus,
     FunctionalPyramidUnavailable,
@@ -409,7 +410,62 @@ class UnresolvedPart:
         _validate_part(self.start, self.total, len(self.items))
 
 
-ResultPart = _typing.Union[PlacementsPart, UnresolvedPart]
+@_dataclass(frozen=True)
+class MemberRepositoryIdsPart:
+    start: int
+    total: int
+    items: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _validate_part(self.start, self.total, len(self.items))
+
+
+@_dataclass(frozen=True)
+class StatusFindingsPart:
+    start: int
+    total: int
+    items: tuple[FunctionalPyramidPublicFinding, ...]
+
+    def __post_init__(self) -> None:
+        _validate_part(self.start, self.total, len(self.items))
+
+
+@_dataclass(frozen=True)
+class ValidationFindingsPart:
+    start: int
+    total: int
+    items: tuple[FunctionalPyramidValidationFinding, ...]
+
+    def __post_init__(self) -> None:
+        _validate_part(self.start, self.total, len(self.items))
+
+
+@_dataclass(frozen=True)
+class GraphFindingsPart:
+    start: int
+    total: int
+    items: tuple[FunctionalPyramidPublicFinding, ...]
+
+    def __post_init__(self) -> None:
+        _validate_part(self.start, self.total, len(self.items))
+
+
+ResultPart = _typing.Union[
+    PlacementsPart,
+    UnresolvedPart,
+    MemberRepositoryIdsPart,
+    StatusFindingsPart,
+    ValidationFindingsPart,
+    GraphFindingsPart,
+]
+
+
+def _governance_part_kind(part: ResultPart) -> ResultKind:
+    if isinstance(part, (PlacementsPart, UnresolvedPart)):
+        return ResultKind.FUNCTIONAL_PYRAMID_VIEW
+    if isinstance(part, (MemberRepositoryIdsPart, StatusFindingsPart)):
+        return ResultKind.FUNCTIONAL_PYRAMID_STATUS
+    return ResultKind.FUNCTIONAL_PYRAMID_CANDIDATE
 
 
 @_dataclass(frozen=True)
@@ -427,6 +483,10 @@ class ResultPage:
         _require_non_empty("ResultPage.selection_id", self.selection_id)
         if not self.parts:
             raise ValueError("a result page must advance")
+        if any(
+            _governance_part_kind(part) is not self.result_kind for part in self.parts
+        ):
+            raise ValueError("result part does not belong to the bound result kind")
         if self.truncated != (self.continuation is not None):
             raise ValueError("truncation requires an exact continuation")
         if self.truncated != bool(self.omitted):

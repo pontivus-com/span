@@ -49,6 +49,40 @@ class _ActiveContext:
     findings: tuple[m.FunctionalPyramidFinding, ...]
 
 
+def _active_health(
+    context: _ActiveContext,
+) -> tuple[m.FunctionalPyramidHealth, tuple[m.FunctionalPyramidFinding, ...]]:
+    return _fp.evaluate_functional_pyramid_health(
+        context.current_members,
+        context.declarations,
+        context.available,
+        context.findings,
+    )
+
+
+def _read_fingerprint(
+    result: (
+        m.FunctionalPyramidView | m.FunctionalPyramidStatus | m.FunctionalPyramidCandidate
+    ),
+    roots: dict[str, str],
+    members: tuple[m.FunctionalPyramidMemberView, ...],
+    authorities: _AuthorityMap | None = None,
+    route: m.FunctionalRouteIdentity | None = None,
+) -> m.ContentDigest:
+    bindings = authorities or {}
+    return payload_digest(
+        {
+            "result": m.to_canonical(result),
+            "roots": sorted(roots.items()),
+            "members": m.to_canonical(members),
+            "authorities": m.to_canonical(
+                tuple(bindings[key] for key in sorted(bindings))
+            ),
+            "route": m.to_canonical(route),
+        }
+    )
+
+
 _RepositoryPaths = _typing.Callable[
     [tuple[str, ...]],
     tuple[tuple[str, str], ...],
@@ -354,23 +388,47 @@ class FunctionalPyramidService:
     def status(
         self, selector: m.FunctionalPyramidSelector
     ) -> m.FunctionalPyramidStatus:
-        """Project exact durable participation plus live ACTIVE health (FD-83)."""
+        """Complete administrative verdict; delivery never limits validation."""
+        return self._status_projection(selector)[0]
+
+    def _status_projection(
+        self, selector: m.FunctionalPyramidSelector
+    ) -> tuple[m.FunctionalPyramidStatus, m.ContentDigest]:
         participation, pyramid_id, version, members = self._active_participation(
             selector
         )
+        roots = self._root_coordinates()
         if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
-            return m.FunctionalPyramidStatus(state=participation)
+            result = m.FunctionalPyramidStatus(state=participation)
+            return result, _read_fingerprint(result, roots, ())
         assert pyramid_id is not None
         assert version is not None
-        health, findings = self.health(members)
-        roots = self._root_coordinates()
-        return m.FunctionalPyramidStatus(
+        context = self._load_active_context(members)
+        health, findings = _active_health(context)
+        result = m.FunctionalPyramidStatus(
             state=m.FunctionalPyramidParticipationState.ACTIVE,
             health=health,
             pyramid_id=pyramid_id,
             version=version,
             member_repository_ids=tuple(sorted(item.repository_id for item in members)),
             findings=tuple(m.public_pyramid_finding(item, roots) for item in findings),
+        )
+        return result, _read_fingerprint(
+            result, roots, context.current_members, context.authority_bindings
+        )
+
+    def obtain_status(self, selector: m.FunctionalPyramidSelector) -> m.AskResult:
+        result, fingerprint = self._status_projection(selector)
+        return ContinuationService(self._require_state(), self._clock).initial(
+            selector, result, fingerprint, self._policy.max_response_bytes
+        )
+
+    def obtain_candidate(
+        self, selector: m.FunctionalPyramidCandidateSelector
+    ) -> m.AskResult:
+        result, _, fingerprint = self._candidate(selector, self._require_state())
+        return ContinuationService(self._require_state(), self._clock).initial(
+            selector, result, fingerprint, self._policy.max_response_bytes
         )
 
     def route(
@@ -431,13 +489,26 @@ class FunctionalPyramidService:
         | m.ResultPage
     ):
         delivery = ContinuationService(self._require_state(), self._clock)
-        bound = delivery.load_directory(cursor_id, selector)
-        return self._directory_obtain(bound[0].selector, bound)
+        bound = delivery.load(cursor_id, selector)
+        binding = bound[0].binding
+        if isinstance(binding, m.DirectoryReadBinding):
+            return self._directory_obtain(binding.selector, bound)
+        if isinstance(binding, m.PyramidStatusReadBinding):
+            result, fingerprint = self._status_projection(binding.selector)
+            return delivery.resume(
+                bound, result, fingerprint, self._policy.max_response_bytes
+            )
+        candidate, _, fingerprint = self._candidate(
+            binding.selector, self._require_state()
+        )
+        return delivery.resume(
+            bound, candidate, fingerprint, self._policy.max_response_bytes
+        )
 
     def _directory_obtain(
         self,
         selector: m.FunctionalPyramidDirectorySelector,
-        bound: tuple[m.DirectoryDeliverySelection, m.DeliveryPosition] | None = None,
+        bound: tuple[m.DeliverySelection, m.DeliveryPosition] | None = None,
     ) -> (
         m.FunctionalPyramidParticipation
         | m.FunctionalPyramidUnavailable
@@ -451,7 +522,7 @@ class FunctionalPyramidService:
             )
         except ValueError as exc:
             if bound is not None:
-                raise delivery.stale_directory(bound[0]) from exc
+                raise delivery.stale(bound[0]) from exc
             raise RecordingValidationError(
                 "directory ownership cannot be resolved",
                 public_identity=selector.directory,
@@ -468,7 +539,7 @@ class FunctionalPyramidService:
         roots = self._root_coordinates()
         if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
             if bound is not None:
-                raise delivery.stale_directory(bound[0])
+                raise delivery.stale(bound[0])
             return m.FunctionalPyramidParticipation(
                 participation,
                 resolved_repository_id=owner,
@@ -479,7 +550,7 @@ class FunctionalPyramidService:
         try:
             if not self._declarations.directory_exists(owner, directory):
                 if bound is not None:
-                    raise delivery.stale_directory(bound[0])
+                    raise delivery.stale(bound[0])
                 raise RecordingValidationError(
                     f"Functional Pyramid directory does not exist: {selector.directory!r}",
                     public_identity=selector.directory,
@@ -498,28 +569,23 @@ class FunctionalPyramidService:
                 roots=roots,
                 declaration_findings=context.findings,
             )
-            fingerprint = payload_digest(
-                {
-                    "view": m.to_canonical(resolution.view),
-                    "route": m.to_canonical(resolution.identity),
-                    "members": m.to_canonical(context.current_members),
-                    "roots": sorted(roots.items()),
-                    "authorities": m.to_canonical(
-                        tuple(
-                            context.authority_bindings[key]
-                            for key in sorted(context.authority_bindings)
-                        )
-                    ),
-                }
+            fingerprint = _read_fingerprint(
+                resolution.view,
+                roots,
+                context.current_members,
+                context.authority_bindings,
+                resolution.identity,
             )
             limit = self._policy.max_response_bytes
             if bound is not None:
-                return delivery.resume_directory(
+                return delivery.resume(
                     bound, resolution.view, fingerprint, limit
                 )
-            return delivery.initial_directory(
-                selector, resolution.view, fingerprint, limit
+            initial = delivery.initial(selector, resolution.view, fingerprint, limit)
+            assert isinstance(
+                initial, (m.FunctionalPyramidView, m.FunctionalPyramidUnavailable)
             )
+            return initial
         except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid governance cannot be evaluated",
@@ -659,14 +725,18 @@ class FunctionalPyramidService:
         self, selector: m.FunctionalPyramidCandidateSelector
     ) -> m.FunctionalPyramidCandidate:
         """Pure action-aware candidate validation (FD-84)."""
-        candidate, _ = self._candidate(selector, self._require_state())
+        candidate, _, _ = self._candidate(selector, self._require_state())
         return candidate
 
     def _candidate(
         self,
         selector: m.FunctionalPyramidCandidateSelector,
         state: FunctionalPyramidStatePort | FunctionalPyramidStateTransaction,
-    ) -> tuple[m.FunctionalPyramidCandidate, tuple[m.FunctionalPyramidMemberView, ...]]:
+    ) -> tuple[
+        m.FunctionalPyramidCandidate,
+        tuple[m.FunctionalPyramidMemberView, ...],
+        m.ContentDigest,
+    ]:
         (
             target_id,
             target_version,
@@ -675,26 +745,24 @@ class FunctionalPyramidService:
         ) = self._candidate_lifecycle(selector, state)
         roots = self._root_coordinates()
         if not eligible:
-            return (
-                m.FunctionalPyramidCandidate(
-                    action=selector.action,
-                    pyramid_id=target_id,
-                    version=target_version,
-                    activation_ready=False,
-                    validation_findings=tuple(
-                        m.public_pyramid_validation_finding(item, roots)
-                        for item in _ordered_validation_findings(validation)
-                    ),
-                    graph_findings=(),
+            result = m.FunctionalPyramidCandidate(
+                action=selector.action,
+                pyramid_id=target_id,
+                version=target_version,
+                activation_ready=False,
+                validation_findings=tuple(
+                    m.public_pyramid_validation_finding(item, roots)
+                    for item in _ordered_validation_findings(validation)
                 ),
-                (),
+                graph_findings=(),
             )
+            return result, (), _read_fingerprint(result, roots, ())
 
         members, declarations, available, source_validation, source_graph = (
             self.load_candidate_members(eligible)
         )
         validation.extend(source_validation)
-        _, authority_findings = self._authority_bindings(
+        authorities, authority_findings = self._authority_bindings(
             members, declarations, available
         )
         _, structural = _fp.evaluate_functional_pyramid_health(
@@ -704,22 +772,20 @@ class FunctionalPyramidService:
             source_graph + authority_findings,
         )
         ordered_validation = _ordered_validation_findings(validation)
-        return (
-            m.FunctionalPyramidCandidate(
-                action=selector.action,
-                pyramid_id=target_id,
-                version=target_version,
-                activation_ready=not ordered_validation and not structural,
-                validation_findings=tuple(
-                    m.public_pyramid_validation_finding(item, roots)
-                    for item in ordered_validation
-                ),
-                graph_findings=tuple(
-                    m.public_pyramid_finding(item, roots) for item in structural
-                ),
+        result = m.FunctionalPyramidCandidate(
+            action=selector.action,
+            pyramid_id=target_id,
+            version=target_version,
+            activation_ready=not ordered_validation and not structural,
+            validation_findings=tuple(
+                m.public_pyramid_validation_finding(item, roots)
+                for item in ordered_validation
             ),
-            members,
+            graph_findings=tuple(
+                m.public_pyramid_finding(item, roots) for item in structural
+            ),
         )
+        return result, members, _read_fingerprint(result, roots, members, authorities)
 
     def _candidate_lifecycle(
         self,
@@ -1034,7 +1100,7 @@ class FunctionalPyramidService:
             pyramid_id=pyramid_id,
             expected_version=expected_version,
         )
-        candidate, validated_members = self._candidate(selector, transaction)
+        candidate, validated_members, _ = self._candidate(selector, transaction)
         stale = next(
             (
                 finding
@@ -1781,10 +1847,4 @@ class FunctionalPyramidService:
         self, members: tuple[m.FunctionalPyramidMemberView, ...]
     ) -> tuple[m.FunctionalPyramidHealth, tuple[m.FunctionalPyramidFinding, ...]]:
         """Evaluate live structural health from current declarations."""
-        context = self._load_active_context(members)
-        return _fp.evaluate_functional_pyramid_health(
-            context.current_members,
-            context.declarations,
-            context.available,
-            context.findings,
-        )
+        return _active_health(self._load_active_context(members))

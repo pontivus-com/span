@@ -423,11 +423,11 @@ def _call_functional_pyramid(
             return service.continue_delivery(request.continuation)
         selector = request.selector
         if isinstance(selector, m.FunctionalPyramidSelector):
-            return service.status(selector)
+            return service.obtain_status(selector)
         if isinstance(selector, m.FunctionalPyramidDirectorySelector):
             return service.directory(selector)
         if isinstance(selector, m.FunctionalPyramidCandidateSelector):
-            return service.candidate(selector)
+            return service.obtain_candidate(selector)
         if isinstance(selector, m.FunctionalPyramidReceiptSelector):
             receipt = service.receipt(selector)
             if receipt is None:

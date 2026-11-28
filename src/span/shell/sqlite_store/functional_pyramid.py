@@ -327,7 +327,7 @@ class _FunctionalPyramidInstallationReader:
 
     def load_delivery_cursor(
         self, cursor_id: str
-    ) -> tuple[m.DirectoryDeliverySelection, m.DeliveryPosition] | None:
+    ) -> tuple[m.DeliverySelection, m.DeliveryPosition] | None:
         try:
             row = self._connection.execute(
                 "SELECT s.selection_id, s.kind, s.canonical_json, c.position_json"
@@ -341,12 +341,12 @@ class _FunctionalPyramidInstallationReader:
             ) from exc
         if row is None:
             return None
-        if row["kind"] != "directory":
+        if row["kind"] != "pure_read":
             raise FunctionalPyramidInstallationStoreError(
                 "unsupported persisted delivery selection kind"
             )
         selection = m.from_canonical(
-            m.DirectoryDeliverySelection, _json.loads(row["canonical_json"])
+            m.DeliverySelection, _json.loads(row["canonical_json"])
         )
         position = m.from_canonical(
             m.DeliveryPosition, _json.loads(row["position_json"])
@@ -378,7 +378,7 @@ class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationRea
         )
 
     def write_delivery_selection(
-        self, selection: m.DirectoryDeliverySelection
+        self, selection: m.DeliverySelection
     ) -> None:
         self._connection.execute(
             "INSERT INTO delivery_selections"
@@ -386,7 +386,7 @@ class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationRea
             " VALUES(?,?,?,?,?)",
             (
                 selection.selection_id,
-                "directory",
+                "pure_read",
                 selection.created_at.astimezone(_datetime.timezone.utc).isoformat(),
                 selection.expires_at.astimezone(_datetime.timezone.utc).isoformat(),
                 _canonical_json(selection),
