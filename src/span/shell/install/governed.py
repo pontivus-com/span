@@ -609,7 +609,11 @@ def establish(data_dir: Path, pending: dict[str, object]) -> None:
                 if not validation.activation_ready:
                     from span.core.rejection import Rejection
 
-                    findings = (
+                    findings: tuple[
+                        m.FunctionalPyramidValidationFinding
+                        | m.FunctionalPyramidPublicFinding,
+                        ...,
+                    ] = (
                         *validation.validation_findings,
                         *validation.graph_findings,
                     )
