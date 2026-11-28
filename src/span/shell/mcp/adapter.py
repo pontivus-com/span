@@ -429,7 +429,7 @@ def _call_functional_pyramid(
         if isinstance(selector, m.FunctionalPyramidCandidateSelector):
             return service.obtain_candidate(selector)
         if isinstance(selector, m.FunctionalPyramidReceiptSelector):
-            receipt = service.receipt(selector)
+            receipt = service.obtain_receipt(selector)
             if receipt is None:
                 raise RecordingValidationError(
                     "no Functional Pyramid receipt for request",

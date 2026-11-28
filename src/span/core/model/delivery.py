@@ -15,6 +15,7 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidDirectorySelector,
     FunctionalPyramidId,
     FunctionalPyramidPlacementView,
+    FunctionalPyramidReceiptSelector,
     FunctionalPyramidSelector,
     FunctionalPyramidVersion,
 )
@@ -32,12 +33,17 @@ class DeliveryCollection(_enum.Enum):
     STATUS_FINDINGS = "status_findings"
     VALIDATION_FINDINGS = "validation_findings"
     GRAPH_FINDINGS = "graph_findings"
+    MEMBER_DECLARATION_REFS = "member_declaration_refs"
+    PARTICIPATION_EFFECTS = "participation_effects"
+    ACCEPTED_DEPENDENCY_EFFECTS = "accepted_dependency_effects"
+    DEPENDENT_EFFECT_REFS = "dependent_effect_refs"
 
 
 GovernanceReadSelector = (
     FunctionalPyramidDirectorySelector
     | FunctionalPyramidSelector
     | FunctionalPyramidCandidateSelector
+    | FunctionalPyramidReceiptSelector
 )
 
 
@@ -85,8 +91,26 @@ class PyramidCandidateReadBinding:
         _require_non_negative_int("graph_count", self.graph_count)
 
 
+@_dataclass(frozen=True)
+class PyramidReceiptReadBinding:
+    selector: FunctionalPyramidReceiptSelector
+    member_repository_ids: tuple[str, ...]
+    declaration_count: int
+    participation_count: int
+    dependency_count: int
+    historical: bool
+
+    def __post_init__(self) -> None:
+        _require_non_negative_int("declaration_count", self.declaration_count)
+        _require_non_negative_int("participation_count", self.participation_count)
+        _require_non_negative_int("dependency_count", self.dependency_count)
+
+
 GovernanceReadBinding = (
-    DirectoryReadBinding | PyramidStatusReadBinding | PyramidCandidateReadBinding
+    DirectoryReadBinding
+    | PyramidStatusReadBinding
+    | PyramidCandidateReadBinding
+    | PyramidReceiptReadBinding
 )
 
 
@@ -138,6 +162,18 @@ def delivery_extents(
                 len(binding.member_repository_ids),
             ),
             (DeliveryCollection.STATUS_FINDINGS, binding.findings_count),
+        )
+    if isinstance(binding, PyramidReceiptReadBinding):
+        return (
+            (DeliveryCollection.MEMBER_REPOSITORY_IDS, len(binding.member_repository_ids)),
+            (DeliveryCollection.MEMBER_DECLARATION_REFS, binding.declaration_count),
+            (DeliveryCollection.PARTICIPATION_EFFECTS, binding.participation_count),
+            (
+                DeliveryCollection.DEPENDENT_EFFECT_REFS
+                if binding.historical
+                else DeliveryCollection.ACCEPTED_DEPENDENCY_EFFECTS,
+                binding.dependency_count,
+            ),
         )
     return (
         (DeliveryCollection.VALIDATION_FINDINGS, binding.validation_count),

@@ -881,6 +881,64 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             (("repo-a", "/stores/repo-a.db"), ("repo-b", "/stores/repo-b.db")),
         )
 
+    def test_receipt_continuation_preserves_exact_accepted_members(self) -> None:
+        request_id = m.RequestId("receipt-pages")
+        self.admin_service.record(
+            request_id=request_id,
+            action=m.FunctionalPyramidAction.ACTIVATE,
+            members=(self._install_v3("repo-a"), self._install_v3("repo-b")),
+        )
+        retained = self.state.receipt(request_id)
+        assert retained is not None
+        members = tuple(
+            m.FunctionalPyramidMemberView(
+                member.repository_id,
+                tuple(
+                    dataclasses.replace(ref, locator=f"docs/declaration-{index}.json")
+                    for index in range(20)
+                    for ref in member.declaration_refs
+                ),
+            )
+            for member in retained.members
+        )
+        self.state.receipts[request_id.value] = dataclasses.replace(
+            retained, members=members
+        )
+        selector = m.FunctionalPyramidReceiptSelector(request_id)
+        full = self.admin_service.receipt(selector)
+        assert full is not None
+        self.admin_service._policy = dataclasses.replace(
+            DEFAULT_SERVICE_BOUNDS_POLICY, max_response_bytes=2000
+        )
+        first = self.admin_service.obtain_receipt(selector)
+        assert isinstance(first, m.RetrievedFunctionalPyramidReceipt)
+        self.assertTrue(first.truncated)
+        ids = list(first.member_repository_ids)
+        refs = list(first.member_declaration_refs)
+        participation = list(first.participation_effects)
+        token = first.continuation
+        while token is not None:
+            page = self.admin_service.continue_delivery(token)
+            assert isinstance(page, m.ResultPage)
+            self.assertLessEqual(encoded_size(page), 2000)
+            self.assertEqual(page.selection_id, first.selection_id)
+            for part in page.parts:
+                if isinstance(part, m.MemberRepositoryIdsPart):
+                    self.assertEqual(part.start, len(ids))
+                    ids.extend(part.items)
+                elif isinstance(part, m.MemberDeclarationRefsPart):
+                    self.assertEqual(part.start, len(refs))
+                    refs.extend(part.items)
+                elif isinstance(part, m.ParticipationEffectsPart):
+                    self.assertEqual(part.start, len(participation))
+                    participation.extend(part.items)
+                else:
+                    self.fail(f"unexpected receipt part: {part!r}")
+            token = page.continuation
+        self.assertEqual(tuple(ids), full.member_repository_ids)
+        self.assertEqual(tuple(refs), full.member_declaration_refs)
+        self.assertEqual(tuple(participation), full.participation_effects)
+
     def test_activation_replay_is_idempotent_and_conflict_is_rejected(self) -> None:
         intent = self._install_v3("repo-a")
         first = self.admin_service.record(

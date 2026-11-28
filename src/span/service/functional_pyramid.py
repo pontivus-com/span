@@ -498,6 +498,14 @@ class FunctionalPyramidService:
             return delivery.resume(
                 bound, result, fingerprint, self._policy.max_response_bytes
             )
+        if isinstance(binding, m.PyramidReceiptReadBinding):
+            receipt = self.receipt(binding.selector)
+            if receipt is None:
+                raise delivery.stale(bound[0])
+            return delivery.resume(
+                bound, receipt, payload_digest(m.to_canonical(receipt)),
+                self._policy.max_response_bytes,
+            )
         candidate, _, fingerprint = self._candidate(
             binding.selector, self._require_state()
         )
@@ -884,6 +892,19 @@ class FunctionalPyramidService:
             None
             if retained is None
             else m.project_functional_pyramid_receipt(retained)
+        )
+
+    def obtain_receipt(
+        self, selector: m.FunctionalPyramidReceiptSelector
+    ) -> m.AskResult | None:
+        receipt = self.receipt(selector)
+        if receipt is None:
+            return None
+        return ContinuationService(self._require_state(), self._clock).initial(
+            selector,
+            receipt,
+            payload_digest(m.to_canonical(receipt)),
+            self._policy.max_response_bytes,
         )
 
     def record(

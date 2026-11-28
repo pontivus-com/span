@@ -53,6 +53,7 @@ from span.core.model.support import (
     VerificationView,
 )
 from span.core.model.surfaces import (
+    AcceptedDependencyEffect,
     SurfaceAction,
     SurfaceKey,
     SurfaceReference,
@@ -450,6 +451,52 @@ class GraphFindingsPart:
         _validate_part(self.start, self.total, len(self.items))
 
 
+@_dataclass(frozen=True)
+class MemberDeclarationRefsPart:
+    start: int
+    total: int
+    items: tuple[EvidenceRef, ...]
+
+    def __post_init__(self) -> None:
+        _validate_part(self.start, self.total, len(self.items))
+
+
+@_dataclass(frozen=True)
+class ParticipationEffectsPart:
+    start: int
+    total: int
+    items: tuple[FunctionalPyramidParticipationEffect, ...]
+
+    def __post_init__(self) -> None:
+        _validate_part(self.start, self.total, len(self.items))
+
+
+@_dataclass(frozen=True)
+class AcceptedDependencyEffectsPart:
+    parent: tuple[FunctionalPyramidReceiptSelector, ...]
+    start: int
+    total: int
+    items: tuple[AcceptedDependencyEffect, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.parent) != 1:
+            raise ValueError("receipt effect part requires one receipt coordinate")
+        _validate_part(self.start, self.total, len(self.items))
+
+
+@_dataclass(frozen=True)
+class DependentEffectRefsPart:
+    parent: tuple[FunctionalPyramidReceiptSelector, ...]
+    start: int
+    total: int
+    items: tuple[ConclusionRevisionRef, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.parent) != 1:
+            raise ValueError("receipt effect part requires one receipt coordinate")
+        _validate_part(self.start, self.total, len(self.items))
+
+
 ResultPart = _typing.Union[
     PlacementsPart,
     UnresolvedPart,
@@ -457,15 +504,26 @@ ResultPart = _typing.Union[
     StatusFindingsPart,
     ValidationFindingsPart,
     GraphFindingsPart,
+    MemberDeclarationRefsPart,
+    ParticipationEffectsPart,
+    AcceptedDependencyEffectsPart,
+    DependentEffectRefsPart,
 ]
 
 
-def _governance_part_kind(part: ResultPart) -> ResultKind:
+def _part_belongs(part: ResultPart, kind: ResultKind) -> bool:
     if isinstance(part, (PlacementsPart, UnresolvedPart)):
-        return ResultKind.FUNCTIONAL_PYRAMID_VIEW
-    if isinstance(part, (MemberRepositoryIdsPart, StatusFindingsPart)):
-        return ResultKind.FUNCTIONAL_PYRAMID_STATUS
-    return ResultKind.FUNCTIONAL_PYRAMID_CANDIDATE
+        return kind is ResultKind.FUNCTIONAL_PYRAMID_VIEW
+    if isinstance(part, MemberRepositoryIdsPart):
+        return kind in (
+            ResultKind.FUNCTIONAL_PYRAMID_STATUS,
+            ResultKind.RETRIEVED_FUNCTIONAL_PYRAMID_RECEIPT,
+        )
+    if isinstance(part, StatusFindingsPart):
+        return kind is ResultKind.FUNCTIONAL_PYRAMID_STATUS
+    if isinstance(part, (ValidationFindingsPart, GraphFindingsPart)):
+        return kind is ResultKind.FUNCTIONAL_PYRAMID_CANDIDATE
+    return kind is ResultKind.RETRIEVED_FUNCTIONAL_PYRAMID_RECEIPT
 
 
 @_dataclass(frozen=True)
@@ -484,7 +542,7 @@ class ResultPage:
         if not self.parts:
             raise ValueError("a result page must advance")
         if any(
-            _governance_part_kind(part) is not self.result_kind for part in self.parts
+            not _part_belongs(part, self.result_kind) for part in self.parts
         ):
             raise ValueError("result part does not belong to the bound result kind")
         if self.truncated != (self.continuation is not None):

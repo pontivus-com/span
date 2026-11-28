@@ -102,7 +102,10 @@ def decode_continuation(token: str) -> ContinuationCursor:
 
 
 _GovernanceResult = (
-    m.FunctionalPyramidView | m.FunctionalPyramidStatus | m.FunctionalPyramidCandidate
+    m.FunctionalPyramidView
+    | m.FunctionalPyramidStatus
+    | m.FunctionalPyramidCandidate
+    | m.RetrievedFunctionalPyramidReceipt
 )
 _BoundCursor = tuple[m.DeliverySelection, m.DeliveryPosition]
 
@@ -146,6 +149,20 @@ def _binding(
             len(result.validation_findings),
             len(result.graph_findings),
         )
+    if isinstance(selector, m.FunctionalPyramidReceiptSelector) and isinstance(
+        result, m.RetrievedFunctionalPyramidReceipt
+    ):
+        historical = isinstance(
+            result.dependency_effects, m.HistoricalAcceptanceDetailUnavailable
+        )
+        return m.PyramidReceiptReadBinding(
+            selector,
+            result.member_repository_ids,
+            len(result.member_declaration_refs),
+            len(result.participation_effects),
+            len(_receipt_effects(result)),
+            historical,
+        )
     raise ValueError("result does not belong to the supplied exact selector")
 
 
@@ -154,6 +171,8 @@ def _result_kind(binding: m.GovernanceReadBinding) -> m.ResultKind:
         return m.ResultKind.FUNCTIONAL_PYRAMID_VIEW
     if isinstance(binding, m.PyramidStatusReadBinding):
         return m.ResultKind.FUNCTIONAL_PYRAMID_STATUS
+    if isinstance(binding, m.PyramidReceiptReadBinding):
+        return m.ResultKind.RETRIEVED_FUNCTIONAL_PYRAMID_RECEIPT
     return m.ResultKind.FUNCTIONAL_PYRAMID_CANDIDATE
 
 
@@ -188,6 +207,8 @@ def _recovery(binding: m.GovernanceReadBinding) -> str:
             )
         )
         return f"Repeat FunctionalPyramidSelector with {coordinate}"
+    if isinstance(selector, m.FunctionalPyramidReceiptSelector):
+        return f"Repeat FunctionalPyramidReceiptSelector with request_id={selector.request_id.value!r}"
     return (
         f"Repeat the original FunctionalPyramidCandidateSelector for {selector.action.value} "
         "with the same target version and member intents"
@@ -209,6 +230,40 @@ def _unavailable(
             f"{_recovery(selection.binding)} with a narrower existing selection "
             "where applicable; otherwise report the named indivisible delivery blocker"
         ),
+    )
+
+
+def _receipt_effects(
+    result: m.RetrievedFunctionalPyramidReceipt,
+) -> tuple[m.AcceptedDependencyEffect, ...] | tuple[m.ConclusionRevisionRef, ...]:
+    effects = result.dependency_effects
+    if isinstance(effects, m.AcceptedDependencyEffects):
+        return effects.effects
+    return effects.dependent_effect_refs
+
+
+def _receipt_prefix(
+    result: m.RetrievedFunctionalPyramidReceipt, count: int
+) -> m.RetrievedFunctionalPyramidReceipt:
+    members = result.member_repository_ids[:count]
+    count = max(0, count - len(result.member_repository_ids))
+    declarations = result.member_declaration_refs[:count]
+    count = max(0, count - len(result.member_declaration_refs))
+    participation = result.participation_effects[:count]
+    count = max(0, count - len(result.participation_effects))
+    effects = result.dependency_effects
+    if isinstance(effects, m.AcceptedDependencyEffects):
+        effects = _dataclasses.replace(effects, effects=effects.effects[:count])
+    else:
+        effects = _dataclasses.replace(
+            effects, dependent_effect_refs=effects.dependent_effect_refs[:count]
+        )
+    return _dataclasses.replace(
+        result,
+        member_repository_ids=members,
+        member_declaration_refs=declarations,
+        participation_effects=participation,
+        dependency_effects=effects,
     )
 
 
@@ -243,6 +298,15 @@ def _initial_prefix(
             omitted=omitted,
             truncated=True,
         )
+    if isinstance(result, m.RetrievedFunctionalPyramidReceipt):
+        marked = _dataclasses.replace(
+            result,
+            selection_id=selection.selection_id,
+            continuation=cursor,
+            omitted=omitted,
+            truncated=True,
+        )
+        return _receipt_prefix(marked, count)
     return _dataclasses.replace(
         result,
         validation_findings=result.validation_findings[:count],
@@ -294,7 +358,42 @@ def _part(
                 len(result.graph_findings),
                 result.graph_findings[start:end],
             )
+    if isinstance(result, m.RetrievedFunctionalPyramidReceipt):
+        return _receipt_part(result, position, count)
     raise ValueError("collection does not belong to the bound result")
+
+
+def _receipt_part(
+    result: m.RetrievedFunctionalPyramidReceipt,
+    position: m.DeliveryPosition,
+    count: int,
+) -> m.ResultPart:
+    start, end = position.offset, position.offset + count
+    collection = position.collection
+    if collection is m.DeliveryCollection.MEMBER_REPOSITORY_IDS:
+        items = result.member_repository_ids
+        return m.MemberRepositoryIdsPart(start, len(items), items[start:end])
+    if collection is m.DeliveryCollection.MEMBER_DECLARATION_REFS:
+        refs = result.member_declaration_refs
+        return m.MemberDeclarationRefsPart(start, len(refs), refs[start:end])
+    if collection is m.DeliveryCollection.PARTICIPATION_EFFECTS:
+        participation = result.participation_effects
+        return m.ParticipationEffectsPart(
+            start, len(participation), participation[start:end]
+        )
+    parent = (m.FunctionalPyramidReceiptSelector(result.request_id),)
+    effects = result.dependency_effects
+    if isinstance(effects, m.AcceptedDependencyEffects):
+        if collection is m.DeliveryCollection.ACCEPTED_DEPENDENCY_EFFECTS:
+            return m.AcceptedDependencyEffectsPart(
+                parent, start, len(effects.effects), effects.effects[start:end]
+            )
+    elif collection is m.DeliveryCollection.DEPENDENT_EFFECT_REFS:
+        dependent = effects.dependent_effect_refs
+        return m.DependentEffectRefsPart(
+            parent, start, len(dependent), dependent[start:end]
+        )
+    raise ValueError("collection does not belong to the accepted receipt")
 
 
 class ContinuationService:
