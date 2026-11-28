@@ -12,7 +12,6 @@ from span.ports.functional_pyramid import (
     FunctionalPyramidDeclarationInvalid,
     FunctionalPyramidRepositoryUnavailable,
 )
-from span.ports.structural import StaleContinuationError
 from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY, encoded_size
 from span.service.functional_pyramid import FunctionalPyramidService
 from span.shell.filesystem_evidence import FilesystemRegisteredRoots
@@ -168,6 +167,25 @@ class _State:
         self.excluded: set[str] = set()
         self.receipts: dict[str, m.RetrievedFunctionalPyramidReceipt] = {}
         self.transaction_paths: list[tuple[tuple[str, str], ...]] = []
+        self.selections: dict[str, m.DirectoryDeliverySelection] = {}
+        self.cursors: dict[str, tuple[str, m.DeliveryPosition]] = {}
+
+    def load_delivery_cursor(self, cursor_id):
+        bound = self.cursors.get(cursor_id)
+        if bound is None:
+            return None
+        selection_id, position = bound
+        return self.selections[selection_id], position
+
+    def write_delivery_selection(self, selection):
+        self.selections[selection.selection_id] = selection
+
+    def issue_delivery_cursor(self, selection_id, position, cursor_id):
+        for issued, value in self.cursors.items():
+            if value == (selection_id, position):
+                return issued
+        self.cursors[cursor_id] = (selection_id, position)
+        return cursor_id
 
     def active_pyramid_id(self, repository_id: str) -> m.FunctionalPyramidId | None:
         return self.active.get(repository_id)
@@ -656,27 +674,43 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
         self.admin_service._policy = dataclasses.replace(
             DEFAULT_SERVICE_BOUNDS_POLICY, max_response_bytes=2500
         )
-        collected = []
         first = self.admin_service.directory(selector)
         assert isinstance(first, m.FunctionalPyramidView)
         self.assertTrue(first.truncated)
+        self.assertIsNotNone(first.selection_id)
         self.assertIsNotNone(first.next_after)
-        current = first
-        while True:
-            self.assertLessEqual(encoded_size(current), 2500)
-            self.assertEqual(current.unresolved, full.unresolved)
-            collected.extend(current.placements)
-            if current.next_after is None:
-                break
+        self.assertLessEqual(encoded_size(first), 2500)
+        collected = list(first.placements)
+        token = first.next_after
+        while token is not None:
             current = self.admin_service.directory(
-                dataclasses.replace(selector, after=current.next_after)
+                dataclasses.replace(selector, after=token)
             )
-            assert isinstance(current, m.FunctionalPyramidView)
+            assert isinstance(current, m.ResultPage)
+            self.assertEqual(current.selection_id, first.selection_id)
+            self.assertLessEqual(encoded_size(current), 2500)
+            self.assertEqual(self.admin_service.continue_delivery(token), current)
+            for part in current.parts:
+                assert isinstance(part, m.PlacementsPart)
+                self.assertEqual(part.start, len(collected))
+                self.assertEqual(part.total, len(full.placements))
+                collected.extend(part.items)
+            token = current.continuation
         self.assertEqual(tuple(collected), full.placements)
-        with self.assertRaises(StaleContinuationError):
+        self.assertEqual(len(self.state.selections), 1)
+        with self.assertRaises(RecordingValidationError) as mismatch:
             self.admin_service.directory(
                 m.FunctionalPyramidDirectorySelector("repo-a", "src", first.next_after)
             )
+        self.assertIs(
+            mismatch.exception.cause_kind, m.RejectionCauseKind.CONTINUATION_INVALID
+        )
+        assert first.next_after is not None
+        with self.assertRaises(RecordingValidationError):
+            self.admin_service.continue_delivery("cur-srv-forged")
+        self.declarations.roots["repo-a"] = "/moved/repo-a"
+        with self.assertRaises(RecordingValidationError):
+            self.admin_service.continue_delivery(first.next_after)
 
     def test_duplicate_unregistered_and_other_active_members_accumulate(self) -> None:
         intent = self._install_v3("repo-a")

@@ -84,6 +84,14 @@ class FunctionalPyramidStateTransaction(_typing.Protocol):
         self, request_id: m.RequestId
     ) -> m.RetrievedFunctionalPyramidReceipt | None: ...
 
+def write_delivery_selection(
+        self, selection: m.DirectoryDeliverySelection
+    ) -> None: ...
+
+    def issue_delivery_cursor(
+        self, selection_id: str, position: m.DeliveryPosition, cursor_id: str
+    ) -> str: ...
+
     def write_pyramid_version(
         self,
         *,
@@ -144,6 +152,10 @@ class FunctionalPyramidStatePort(_typing.Protocol):
     def receipt(
         self, request_id: m.RequestId
     ) -> m.RetrievedFunctionalPyramidReceipt | None: ...
+
+def load_delivery_cursor(
+        self, cursor_id: str
+    ) -> tuple[m.DirectoryDeliverySelection, m.DeliveryPosition] | None: ...
 
     def transaction(
         self,

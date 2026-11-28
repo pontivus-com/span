@@ -114,6 +114,54 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
             self.assertTrue(readiness["ready"])
             self.assertEqual(readiness["schema_version"], 2)
 
+    def test_bound_delivery_cursor_survives_reopen_and_reuses_position(self) -> None:
+        selection = m.DirectoryDeliverySelection(
+            selection_id="selection",
+            selector=m.FunctionalPyramidDirectorySelector("repo", "."),
+            owner_repository_id="repo",
+            created_at=NOW,
+            expires_at=NOW + DEFAULT_LIFECYCLE_RETENTION.context_lifetime,
+            state_fingerprint=m.ContentDigest("digest"),
+            placements=(),
+            unresolved_count=3,
+        )
+        position = m.DeliveryPosition(
+            m.DeliveryCollection.UNRESOLVED, 1, selection.state_fingerprint
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = functional_pyramid_installation_path(tmp)
+            store = FunctionalPyramidInstallationStore.create(
+                path, retention=DEFAULT_LIFECYCLE_RETENTION
+            )
+            try:
+                with store.transaction() as transaction:
+                    transaction.write_delivery_selection(selection)
+                    self.assertEqual(
+                        transaction.issue_delivery_cursor(
+                            "selection", position, "cur-1"
+                        ),
+                        "cur-1",
+                    )
+            finally:
+                store.close()
+            store = FunctionalPyramidInstallationStore(
+                path, retention=DEFAULT_LIFECYCLE_RETENTION
+            )
+            try:
+                self.assertEqual(
+                    store.load_delivery_cursor("cur-1"), (selection, position)
+                )
+                self.assertIsNone(store.load_delivery_cursor("cur-unknown"))
+                with store.transaction() as transaction:
+                    self.assertEqual(
+                        transaction.issue_delivery_cursor(
+                            "selection", position, "cur-2"
+                        ),
+                        "cur-1",
+                    )
+            finally:
+                store.close()
+
     def test_installation_receipt_retention_is_not_repository_owned(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FunctionalPyramidInstallationStore.create(

@@ -325,6 +325,38 @@ class _FunctionalPyramidInstallationReader:
     ) -> m.RetrievedFunctionalPyramidReceipt | None:
         return _receipt(self._connection, request_id)
 
+    def load_delivery_cursor(
+        self, cursor_id: str
+    ) -> tuple[m.DirectoryDeliverySelection, m.DeliveryPosition] | None:
+        try:
+            row = self._connection.execute(
+                "SELECT s.selection_id, s.kind, s.canonical_json, c.position_json"
+                " FROM delivery_cursors c JOIN delivery_selections s"
+                " ON c.selection_id=s.selection_id WHERE c.cursor_id=?",
+                (cursor_id,),
+            ).fetchone()
+        except _sqlite3.Error as exc:
+            raise FunctionalPyramidInstallationStoreError(
+                "cannot read bound delivery selection"
+            ) from exc
+        if row is None:
+            return None
+        if row["kind"] != "directory":
+            raise FunctionalPyramidInstallationStoreError(
+                "unsupported persisted delivery selection kind"
+            )
+        selection = m.from_canonical(
+            m.DirectoryDeliverySelection, _json.loads(row["canonical_json"])
+        )
+        position = m.from_canonical(
+            m.DeliveryPosition, _json.loads(row["position_json"])
+        )
+        if selection.selection_id != row["selection_id"]:
+            raise FunctionalPyramidInstallationStoreError(
+                "delivery selection identity mismatch"
+            )
+        return selection, position
+
 
 class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationReader):
     """One locked installation write across attached repository stores."""
@@ -344,6 +376,40 @@ class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationRea
         raise FunctionalPyramidInstallationStoreError(
             f"repository is not attached to this pyramid transaction: {repository_id}"
         )
+
+    def write_delivery_selection(
+        self, selection: m.DirectoryDeliverySelection
+    ) -> None:
+        self._connection.execute(
+            "INSERT INTO delivery_selections"
+            "(selection_id, kind, created_at, expires_at, canonical_json)"
+            " VALUES(?,?,?,?,?)",
+            (
+                selection.selection_id,
+                "directory",
+                selection.created_at.astimezone(_datetime.timezone.utc).isoformat(),
+                selection.expires_at.astimezone(_datetime.timezone.utc).isoformat(),
+                _canonical_json(selection),
+            ),
+        )
+
+    def issue_delivery_cursor(
+        self, selection_id: str, position: m.DeliveryPosition, cursor_id: str
+    ) -> str:
+        payload = _canonical_json(position)
+        row = self._connection.execute(
+            "SELECT cursor_id FROM delivery_cursors"
+            " WHERE selection_id=? AND position_json=?",
+            (selection_id, payload),
+        ).fetchone()
+        if row is not None:
+            return str(row["cursor_id"])
+        self._connection.execute(
+            "INSERT INTO delivery_cursors(cursor_id, selection_id, position_json)"
+            " VALUES(?,?,?)",
+            (cursor_id, selection_id, payload),
+        )
+        return cursor_id
 
     def write_pyramid_version(
         self,

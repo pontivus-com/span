@@ -119,7 +119,7 @@ def required_action_for(kind: RejectionCauseKind) -> str:
         return "supply the context that admitted these references, or provide explicit scope with direct source/discovery evidence"
     if kind is RejectionCauseKind.CONTINUATION_INVALID:
         return (
-            "start a new explicit evidence admission for the surface and use its "
+            "repeat the original obtain or explicit evidence admission and use its "
             "returned continuation"
         )
     if kind is RejectionCauseKind.OBSERVATION_NOT_ADMITTED:

@@ -46,6 +46,7 @@ from span.shell.sqlite_store.functional_pyramid import (
     FunctionalPyramidInstallationStoreError,
 )
 from span.service.addressing import AddressingService
+from span.service.continuation import is_bound_delivery
 from span.service.functional_pyramid import FunctionalPyramidService
 
 try:  # Shell-owned provider-error mapping; the port gains no new result.
@@ -388,6 +389,8 @@ def _unavailable(operation: str, exc: Exception) -> m.Unavailable:
 def _is_functional_pyramid_request(tool_name: str, request: object) -> bool:
     """Whether this canonical request belongs to the installation namespace."""
     if tool_name == "ask" and isinstance(request, m.AskRequest):
+        if request.continuation is not None:
+            return is_bound_delivery(request.continuation)
         return isinstance(
             request.selector,
             (
@@ -416,6 +419,8 @@ def _call_functional_pyramid(
         )
 
     if tool_name == "ask" and isinstance(request, m.AskRequest):
+        if request.continuation is not None:
+            return service.continue_delivery(request.continuation)
         selector = request.selector
         if isinstance(selector, m.FunctionalPyramidSelector):
             return service.status(selector)

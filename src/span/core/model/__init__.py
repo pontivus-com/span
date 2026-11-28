@@ -386,6 +386,11 @@ from span.core.model.answers import (  # noqa: F401
     SurfaceDeclared,
     Unavailable,
 )
+from span.core.model.delivery import (  # noqa: F401
+    DeliveryCollection,
+    DeliveryPosition,
+    DirectoryDeliverySelection,
+)
 from span.core.rejection import RejectionCauseKind  # noqa: F401
 from span.core.model.commands import (  # noqa: F401
     AskRequest,
@@ -711,6 +716,9 @@ __all__ = [
     "ResultKind",
     "ResultPart",
     "ResultPage",
+    "DeliveryCollection",
+    "DeliveryPosition",
+    "DirectoryDeliverySelection",
     "Gap",
     "GapReason",
     "HistoricalConclusion",

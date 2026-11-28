@@ -9,11 +9,6 @@ import typing as _typing
 from span.core import containment
 from span.core import functional_pyramid as _fp
 from span.core import model as m
-from span.core.paging import (
-    format_versioned_token,
-    parse_versioned_token,
-    question_digest,
-)
 from span.core import support_rules as _support_rules
 from span.core.identity import functional_pyramid_identity, payload_digest
 from span.core.recording import (
@@ -32,8 +27,8 @@ from span.ports.functional_pyramid import (
     FunctionalPyramidStateTransaction,
 )
 from span.ports.lifecycle import LifecycleAuthorityResolver
-from span.ports.structural import StaleContinuationError
-from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY, encoded_size
+from span.service.bounds import DEFAULT_SERVICE_BOUNDS_POLICY
+from span.service.continuation import ContinuationService
 from span.service.contexts import ContextBinding, build_context
 from span.service.effects import DependencyEffectService
 from span.service.ids import server_context_id
@@ -416,13 +411,47 @@ class FunctionalPyramidService:
         m.FunctionalPyramidParticipation
         | m.FunctionalPyramidUnavailable
         | m.FunctionalPyramidView
+        | m.ResultPage
     ):
-        """Resolve one exact repository-relative directory through current state."""
+        """Resolve the exact directory or its previously issued delivery position."""
+        if selector.after is not None:
+            return self.continue_delivery(
+                selector.after, _dataclasses.replace(selector, after=None)
+            )
+        return self._directory_obtain(selector)
+
+    def continue_delivery(
+        self,
+        cursor_id: str,
+        selector: m.FunctionalPyramidDirectorySelector | None = None,
+    ) -> (
+        m.FunctionalPyramidParticipation
+        | m.FunctionalPyramidUnavailable
+        | m.FunctionalPyramidView
+        | m.ResultPage
+    ):
+        delivery = ContinuationService(self._require_state(), self._clock)
+        bound = delivery.load_directory(cursor_id, selector)
+        return self._directory_obtain(bound[0].selector, bound)
+
+    def _directory_obtain(
+        self,
+        selector: m.FunctionalPyramidDirectorySelector,
+        bound: tuple[m.DirectoryDeliverySelection, m.DeliveryPosition] | None = None,
+    ) -> (
+        m.FunctionalPyramidParticipation
+        | m.FunctionalPyramidUnavailable
+        | m.FunctionalPyramidView
+        | m.ResultPage
+    ):
+        delivery = ContinuationService(self._require_state(), self._clock)
         try:
             owner, directory = self._roots().resolve(
                 selector.repository_id, selector.directory
             )
         except ValueError as exc:
+            if bound is not None:
+                raise delivery.stale_directory(bound[0]) from exc
             raise RecordingValidationError(
                 "directory ownership cannot be resolved",
                 public_identity=selector.directory,
@@ -438,10 +467,8 @@ class FunctionalPyramidService:
         )
         roots = self._root_coordinates()
         if participation is not m.FunctionalPyramidParticipationState.ACTIVE:
-            if selector.after is not None:
-                raise StaleContinuationError(
-                    "pyramid participation changed; restart the directory listing"
-                )
+            if bound is not None:
+                raise delivery.stale_directory(bound[0])
             return m.FunctionalPyramidParticipation(
                 participation,
                 resolved_repository_id=owner,
@@ -451,6 +478,8 @@ class FunctionalPyramidService:
         assert version is not None
         try:
             if not self._declarations.directory_exists(owner, directory):
+                if bound is not None:
+                    raise delivery.stale_directory(bound[0])
                 raise RecordingValidationError(
                     f"Functional Pyramid directory does not exist: {selector.directory!r}",
                     public_identity=selector.directory,
@@ -469,72 +498,33 @@ class FunctionalPyramidService:
                 roots=roots,
                 declaration_findings=context.findings,
             )
-            return self._directory_page(
-                selector, resolution.view, context.current_members, owner
+            fingerprint = payload_digest(
+                {
+                    "view": m.to_canonical(resolution.view),
+                    "route": m.to_canonical(resolution.identity),
+                    "members": m.to_canonical(context.current_members),
+                    "roots": sorted(roots.items()),
+                    "authorities": m.to_canonical(
+                        tuple(
+                            context.authority_bindings[key]
+                            for key in sorted(context.authority_bindings)
+                        )
+                    ),
+                }
+            )
+            limit = self._policy.max_response_bytes
+            if bound is not None:
+                return delivery.resume_directory(
+                    bound, resolution.view, fingerprint, limit
+                )
+            return delivery.initial_directory(
+                selector, resolution.view, fingerprint, limit
             )
         except (OSError, FunctionalPyramidRepositoryUnavailable):
             return m.FunctionalPyramidUnavailable(
                 failure="Functional Pyramid governance cannot be evaluated",
                 recovery="restore the registered member repository and retry",
             )
-
-    def _directory_page(
-        self,
-        selector: m.FunctionalPyramidDirectorySelector,
-        view: m.FunctionalPyramidView,
-        members: tuple[m.FunctionalPyramidMemberView, ...],
-        owner: str,
-    ) -> m.FunctionalPyramidView | m.FunctionalPyramidUnavailable:
-        """Return a version-bound, size-bounded page of the same live projection."""
-        version = question_digest(
-            "functional-pyramid-directory",
-            selector.repository_id,
-            selector.directory,
-            owner,
-            payload_digest(m.to_canonical(members)).value,
-            payload_digest(m.to_canonical(view)).value,
-        )
-        try:
-            offset = parse_versioned_token(selector.after, version=version)
-        except ValueError as exc:
-            raise StaleContinuationError(str(exc)) from exc
-        total = len(view.placements)
-        if selector.after is not None and not 0 < offset < total:
-            raise StaleContinuationError(
-                "invalid directory continuation; restart the listing"
-            )
-        limit = self._policy.max_response_bytes
-
-        def page(count: int) -> m.FunctionalPyramidView:
-            end = offset + count
-            more = end < total
-            return _dataclasses.replace(
-                view,
-                placements=view.placements[offset:end],
-                truncated=more,
-                omitted=("Further governing placements are available",) if more else (),
-                next_after=format_versioned_token(version, end) if more else None,
-            )
-
-        full = page(total - offset)
-        if encoded_size(full) <= limit:
-            return full
-        low, high = 1, total - offset - 1
-        best = None
-        while low <= high:
-            mid = (low + high) // 2
-            candidate = page(mid)
-            if encoded_size(candidate) <= limit:
-                best = candidate
-                low = mid + 1
-            else:
-                high = mid - 1
-        if best is not None:
-            return best
-        return m.FunctionalPyramidUnavailable(
-            failure="The directory response cannot fit within the server response budget",
-            recovery="Ask for a narrower directory or increase the configured host response budget",
-        )
 
     def orientation(
         self,
