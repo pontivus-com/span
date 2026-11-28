@@ -690,7 +690,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             affected.support.state,
             m.SupportState.REASSESSMENT_REQUIRED,
         )
-        self.assertEqual(refs, (affected.ref,))
+        self.assertEqual(tuple(item.ref for item in refs.effects), (affected.ref,))
         self.assertEqual(
             tuple(context.repository_id for context in contexts),
             ("repo-1",),
@@ -729,7 +729,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             affected.support.state,
             m.SupportState.REASSESSMENT_REQUIRED,
         )
-        self.assertIn(affected.ref, refs)
+        self.assertIn(affected.ref, tuple(item.ref for item in refs.effects))
         self.assertEqual(
             tuple(context.repository_id for context in contexts),
             ("repo-1",),
@@ -753,7 +753,9 @@ class ReconsiderServiceTest(unittest.TestCase):
             newly_active_repositories=("repo-1",)
         )
 
-        surfaces, contexts = effects.retained_functional_pyramid_effects(refs)
+        surfaces, contexts = effects.retained_effects(
+            refs, required_governance=frozenset({"repo-1"})
+        )
 
         retained = next(
             conclusion
@@ -809,7 +811,7 @@ class ReconsiderServiceTest(unittest.TestCase):
             affected.support.state,
             m.SupportState.REASSESSMENT_REQUIRED,
         )
-        self.assertIn(affected.ref, refs)
+        self.assertIn(affected.ref, tuple(item.ref for item in refs.effects))
         self.assertEqual(contexts[0].repository_id, "repo-1")
 
     def test_authority_source_change_is_considered_not_forced_stale(self) -> None:
@@ -932,8 +934,8 @@ class ReconsiderServiceTest(unittest.TestCase):
         surfaces, contexts, refs = effects.functional_pyramid_change(
             changed_authority_refs=(authority.evidence_ref,)
         )
-        self.assertEqual(len(refs), 1)
-        self.assertEqual(refs[0].understanding_id.value, "u-authority")
+        self.assertEqual(len(refs.effects), 1)
+        self.assertEqual(refs.effects[0].ref.understanding_id.value, "u-authority")
         self.assertEqual(len(contexts), 1)
         self.assertEqual(
             surfaces[0].conclusions[0].support.state,

@@ -152,6 +152,8 @@ class DependencyEffectService:
     def retained_effects(
         self,
         accepted: m.AcceptedDependencyEffects,
+        *,
+        required_governance: frozenset[str] = frozenset(),
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
@@ -162,7 +164,7 @@ class DependencyEffectService:
         ] = {}
         for effect in accepted.effects:
             affected.setdefault(effect.surface, []).append(
-                self._retained_effect(effect)
+                self._retained_effect(effect, required_governance)
             )
         reasons = {
             surface: {reason for item in items for reason in item.reasons}
@@ -179,7 +181,9 @@ class DependencyEffectService:
         return surfaces, self._reestablishment_contexts(surfaces, {})
 
     def _retained_effect(
-        self, effect: m.AcceptedDependencyEffect
+        self,
+        effect: m.AcceptedDependencyEffect,
+        required_governance: frozenset[str],
     ) -> m.ChangedConclusion | m.EffectDisposition:
         ref = effect.ref
         try:
@@ -209,7 +213,22 @@ class DependencyEffectService:
                     m.EffectDispositionState.WITHDRAWN,
                     "exact revision was explicitly withdrawn",
                 )
-            support = self._support_state(ref)
+            missing_required_route = (
+                effect.surface.repository_id in required_governance
+                and isinstance(revision.content, m.SupportedConclusion)
+                and revision.content.assertion_nature is m.AssertionNature.NORMATIVE
+                and not any(
+                    isinstance(dependency, m.FunctionalRouteSupport)
+                    for dependency in revision.content.support
+                )
+            )
+            support = (
+                self._forced_reassessment(
+                    "ACTIVE normative revision predates required governing support"
+                )
+                if missing_required_route
+                else self._support_state(ref)
+            )
         except (OSError, RecordingValidationError) + store.operational_errors:
             return self._unavailable_effect(effect, "retained detail is unavailable")
         if (

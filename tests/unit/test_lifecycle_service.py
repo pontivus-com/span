@@ -204,7 +204,26 @@ class LifecycleServiceTest(unittest.TestCase):
             clock=lambda: self.clock[0],
             new_context_id=lambda: "ctx-1",
         )
+        from span.service.effects import DependencyEffectService
+        from span.shell.context import RepositoryRuntime
+
+        runtime = RepositoryRuntime(
+            repository_id="repo-1",
+            root="/repo/one",
+            structural=mock.Mock(),
+            evidence=_CurrentEvidence(),
+            store=self.store,
+        )
+        effects = DependencyEffectService(
+            repository_runtime=lambda _: runtime,
+            registered_repository_ids=lambda: ("repo-1",),
+            support_for_repository=lambda _: self.support,
+            functional_route_impacts=lambda *_: (),
+            clock=lambda: self.clock[0],
+            new_context_id=lambda: f"ctx-effect-{next(self._context_ids)}",
+        )
         self.service = LifecycleService(
+            effects=effects,
             store=self.store,
             authority=self.authority,
             support=self.support,
@@ -814,7 +833,7 @@ class LifecycleServiceTest(unittest.TestCase):
             ),
         )
         self.assertEqual(receipt.understanding_versions[0].version.value, 1)
-        self.assertEqual(self.authority.requests, [("repo-1", "auth-1")] * 4)
+        self.assertEqual(self.authority.requests, [("repo-1", "auth-1")] * 3)
         with self.assertRaises(RecordingValidationError):
             self.service.record(
                 _create_wire(
@@ -1220,7 +1239,7 @@ class LifecycleServiceTest(unittest.TestCase):
             self.store.get_understanding("u:sub-create").current_version.value, 1
         )
         self.assertEqual(
-            self.store.get_challenge("ch-reject").state,
+            self.store.get_challenge("ch-reject").facts.state,
             m.ChallengeState.OPEN,
         )
 
@@ -2521,7 +2540,7 @@ class LifecycleServiceTest(unittest.TestCase):
         observation = self.store.list_discovery_observations("repo-1")[0]
         self.assertEqual(observation.scope, m.EvidenceScope())
         identity_context = self.store.get_context(
-            _receipt(self.store, result).identity.context_id.value
+            _receipt(self.store, result).context.context_id.value
         )
         self.assertEqual(identity_context.scope, m.EvidenceScope())
 
@@ -2827,24 +2846,26 @@ class LifecycleServiceTest(unittest.TestCase):
                     "locator": "src/a.py",
                 }
                 with mock.patch.object(
-                    self.store, "list_understandings", side_effect=error
+                    context.lifecycle._support,
+                    "evaluate_revision",
+                    side_effect=error,
                 ):
                     result = adapter.dispatch("record", payload)
                 self.assertFalse(result.is_error)
                 response = result.structured_content
                 self.assertEqual(response["$type"], "UnderstandingRecorded")
+                self.assertEqual(response["surface"]["locator"], "src/a.py")
                 self.assertEqual(
-                    response["status"]["$type"], "SurfaceStatusUnavailable"
-                )
-                self.assertEqual(response["status"]["surface"]["locator"], "src/a.py")
-                self.assertEqual(
-                    response["qualification"]["$type"], "UnderstandingQualification"
+                    response["revision_effects"][0]["qualification"]["$type"],
+                    "SupportUnavailable",
                 )
                 retry = adapter.dispatch("record", payload).structured_content
                 self.assertEqual(
                     retry["receipt_selector"], response["receipt_selector"]
                 )
-                self.assertEqual(retry["status"]["$type"], "SurfaceStatus")
+                self.assertEqual(
+                    retry["revision_effects"][0]["qualification"]["state"], "CURRENT"
+                )
 
     def test_verification_store_failure_preserves_accepted_receipt(self):
         wire = w.RecordRequestWire(
