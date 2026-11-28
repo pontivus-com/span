@@ -291,6 +291,16 @@ class LifecycleStorePort(_typing.Protocol):
         """Apply a compare-and-set boundary update and keep its history."""
         ...
 
+    def record_surface(
+        self,
+        key: m.RecordingKey,
+        surface: m.Surface,
+        action: m.SurfaceAction,
+        digest: m.ContentDigest,
+    ) -> m.RecordReceipt:
+        """Atomically accept one surface boundary and its receipt."""
+        ...
+
     def find_surface(self, key: m.SurfaceKey) -> m.Surface | None:
         """Return one surface, or None when it has never been declared."""
         ...

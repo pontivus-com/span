@@ -31,7 +31,7 @@ from span.core.model.investigation import (
     InvestigationContextRef as _InvestigationContextRef,
     SourceRange as _SourceRange,
 )
-from span.core.model.recording import ContentDigest
+from span.core.model.primitives import ContentDigest
 from span.core.model.claims import AssertionNature
 from span.core.model.understanding import (
     ConclusionRevision as _ConclusionRevision,

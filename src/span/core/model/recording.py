@@ -8,28 +8,27 @@ from __future__ import annotations
 
 import datetime as _datetime
 import enum as _enum
+import typing as _typing
 from dataclasses import dataclass as _dataclass
 
+from span.core.model.investigation import InvestigationContextRef
 from span.core.model.primitives import (
+    ContentDigest,
     ChallengeId,
     ConclusionRevisionRef,
     InvestigationContextId,
+    HistoricalAcceptanceDetailUnavailable,
+    UnderstandingVersionRef,
     RequestId,
-    UnderstandingId,
-    UnderstandingVersionNumber,
     VerificationRunId,
     _require_non_empty,
 )
-
-
-@_dataclass(frozen=True)
-class ContentDigest:
-    """Canonical content digest; the server owns its derivation."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        _require_non_empty("ContentDigest", self.value)
+from span.core.model.surfaces import AcceptedSurfaceEffect
+from span.core.model.understanding import (
+    AcceptedChallengeOpeningEffect,
+    AcceptedUnderstandingEffect,
+    ReceiptRetrievalSelector,
+)
 
 
 @_dataclass(frozen=True)
@@ -79,21 +78,31 @@ class AcceptedVerificationEffect:
     run_id: VerificationRunId
 
 
+RuntimeAcceptedEffect = _typing.Union[
+    AcceptedUnderstandingEffect,
+    AcceptedVerificationEffect,
+    AcceptedSurfaceEffect,
+    AcceptedChallengeOpeningEffect,
+]
+AcceptedEffect = RuntimeAcceptedEffect | HistoricalAcceptanceDetailUnavailable
+
+
 @_dataclass(frozen=True)
 class RecordReceipt:
-    """Immutable evidence that one recording submission committed."""
+    """Immutable acceptance at its original request key (TD §12)."""
 
-    identity: RecordingIdentity
+    key: RecordingKey
+    original_addressing_repository_id: str
     content_digest: ContentDigest
     committed_at: _datetime.datetime
-    accepted_understanding_ids: tuple[UnderstandingId, ...] = ()
-    accepted_understanding_versions: tuple[UnderstandingVersionNumber, ...] = ()
-    accepted_verification_run_ids: tuple[VerificationRunId, ...] = ()
-    accepted_challenge_ids: tuple[ChallengeId, ...] = ()
-    dependent_effects: tuple[ConclusionRevisionRef, ...] = ()
+    context: InvestigationContextRef | None
+    accepted_effect: AcceptedEffect
     replay_expires_at: _datetime.datetime | None = None
 
     def __post_init__(self) -> None:
+        _require_non_empty(
+            "original addressing repository", self.original_addressing_repository_id
+        )
         if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
             raise ValueError("RecordReceipt.committed_at must be timezone-aware")
         if self.replay_expires_at is not None:
@@ -104,17 +113,57 @@ class RecordReceipt:
                 raise ValueError("RecordReceipt.replay_expires_at must be aware")
             if self.replay_expires_at < self.committed_at:
                 raise ValueError("replay_expires_at cannot precede committed_at")
-        if self.accepted_understanding_ids and (
-            len(self.accepted_understanding_ids)
-            != len(self.accepted_understanding_versions)
+        if isinstance(self.accepted_effect, AcceptedSurfaceEffect):
+            if self.context is not None:
+                raise ValueError("surface acceptance cannot carry a context")
+            if self.accepted_effect.surface.repository_id != self.key.repository_id:
+                raise ValueError("surface acceptance belongs to another repository")
+        elif (
+            self.context is None or self.context.repository_id != self.key.repository_id
         ):
-            raise ValueError("accepted understanding IDs and versions must correspond")
-        if not (
-            self.accepted_understanding_ids
-            or self.accepted_verification_run_ids
-            or self.accepted_challenge_ids
-        ):
-            raise ValueError("a receipt must record at least one accepted effect")
+            raise ValueError("semantic acceptance requires its exact owner context")
+
+    @property
+    def selector(self) -> ReceiptRetrievalSelector:
+        return ReceiptRetrievalSelector(
+            repository_id=self.key.repository_id, request_id=self.key.request_id.value
+        )
+
+    @property
+    def understanding_versions(self) -> tuple[UnderstandingVersionRef, ...]:
+        effect = self.accepted_effect
+        if isinstance(effect, HistoricalAcceptanceDetailUnavailable):
+            return effect.understanding_versions
+        if isinstance(effect, AcceptedUnderstandingEffect):
+            return (UnderstandingVersionRef(effect.understanding_id, effect.version),)
+        return ()
+
+    @property
+    def verification_run_ids(self) -> tuple[VerificationRunId, ...]:
+        effect = self.accepted_effect
+        if isinstance(effect, HistoricalAcceptanceDetailUnavailable):
+            return effect.verification_run_ids
+        if isinstance(effect, AcceptedVerificationEffect):
+            return (effect.run_id,)
+        return ()
+
+    @property
+    def challenge_ids(self) -> tuple[ChallengeId, ...]:
+        effect = self.accepted_effect
+        if isinstance(effect, HistoricalAcceptanceDetailUnavailable):
+            return effect.challenge_ids
+        if isinstance(effect, AcceptedChallengeOpeningEffect):
+            return (effect.challenge_id,)
+        return ()
+
+    @property
+    def dependency_refs(self) -> tuple[ConclusionRevisionRef, ...]:
+        effect = self.accepted_effect
+        if isinstance(effect, HistoricalAcceptanceDetailUnavailable):
+            return effect.dependent_effect_refs
+        if isinstance(effect, AcceptedUnderstandingEffect):
+            return tuple(item.ref for item in effect.dependency_effects.effects)
+        return ()
 
 
 class ReceiptDecisionKind(_enum.Enum):

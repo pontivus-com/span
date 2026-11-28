@@ -12,6 +12,7 @@ from span.core.model.canonical import to_canonical
 from span.core.model.commands import RecordCommand
 from span.core.model.investigation import SourceRange
 from span.core.model.primitives import (
+    ContentDigest,
     ChallengeId,
     ConclusionId,
     DiscoveryObservationId,
@@ -22,7 +23,6 @@ from span.core.model.primitives import (
 )
 from span.core.model.functional_pyramid import FunctionalPyramidId
 from span.core.model.recording import (
-    ContentDigest,
     RecordingIdentity,
     RecordingKey,
     RequestBinding,

@@ -15,15 +15,19 @@ from dataclasses import dataclass as _dataclass
 
 from span.core.model.investigation import EvidenceRequest
 from span.core.model.primitives import (
+    ContentDigest,
     AuthorityBinding,
     ConclusionRevisionRef,
     EvidenceRef,
     EvidenceScope,
+    HistoricalAcceptanceDetailUnavailable,
     RequestId,
     _require_non_empty,
     _require_positive_int,
 )
-from span.core.model.recording import ContentDigest
+
+
+from span.core.model.surfaces import AcceptedDependencyEffects
 
 
 class FunctionalPyramidParticipationState(_enum.Enum):
@@ -803,7 +807,7 @@ class RetrievedFunctionalPyramidReceipt:
     version: FunctionalPyramidVersion | None
     members: tuple[FunctionalPyramidMemberView, ...]
     participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]
-    dependent_effect_refs: tuple[ConclusionRevisionRef, ...]
+    dependency_effects: AcceptedDependencyEffects | HistoricalAcceptanceDetailUnavailable
 
     def __post_init__(self) -> None:
         if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
@@ -814,8 +818,15 @@ class RetrievedFunctionalPyramidReceipt:
             self.participation_effects
         ):
             raise ValueError("participation effects must be unique per repository")
-        if len(set(self.dependent_effect_refs)) != len(self.dependent_effect_refs):
-            raise ValueError("dependent effect refs must be distinct")
+        if isinstance(self.dependency_effects, HistoricalAcceptanceDetailUnavailable):
+            detail = self.dependency_effects
+            if (
+                detail.understanding_versions
+                or detail.verification_run_ids
+                or detail.challenge_ids
+                or not detail.dependent_effect_refs
+            ):
+                raise ValueError("invalid historical participation effects")
         if self.action in (
             FunctionalPyramidAction.ACTIVATE,
             FunctionalPyramidAction.REVISE,
@@ -834,6 +845,13 @@ class RetrievedFunctionalPyramidReceipt:
         if self.action is FunctionalPyramidAction.EXCLUDE:
             if self.pyramid_id is not None or self.version is not None:
                 raise ValueError("exclude receipt has no pyramid identity/version")
+
+
+    @property
+    def dependency_refs(self) -> tuple[ConclusionRevisionRef, ...]:
+        if isinstance(self.dependency_effects, HistoricalAcceptanceDetailUnavailable):
+            return self.dependency_effects.dependent_effect_refs
+        return tuple(item.ref for item in self.dependency_effects.effects)
 
 
 @_dataclass(frozen=True)

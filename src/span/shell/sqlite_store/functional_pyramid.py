@@ -23,7 +23,7 @@ from span.shell.sqlite_store.contexts import (
 from span.shell.sqlite_store.schema import SCHEMA_VERSION as REPOSITORY_SCHEMA_VERSION
 from span.shell.sqlite_store.transactions import immediate_transaction
 
-INSTALLATION_SCHEMA_VERSION = 1
+INSTALLATION_SCHEMA_VERSION = 2
 INSTALLATION_STORE_RELATIVE = _pathlib.Path("installation") / "functional-pyramid.db"
 
 _DDL = (
@@ -87,7 +87,7 @@ _DDL = (
 # SQLite owner. The offline transition initializes them before activation.
 SCHEMA2_DDL = (
     """
-    CREATE TABLE delivery_selections(
+    CREATE TABLE IF NOT EXISTS delivery_selections(
         selection_id TEXT PRIMARY KEY,
         kind TEXT NOT NULL,
         owner_repository_id TEXT,
@@ -98,7 +98,7 @@ SCHEMA2_DDL = (
     )
     """,
     """
-    CREATE TABLE delivery_cursors(
+    CREATE TABLE IF NOT EXISTS delivery_cursors(
         cursor_id TEXT PRIMARY KEY,
         selection_id TEXT NOT NULL
             REFERENCES delivery_selections(selection_id) ON DELETE CASCADE,
@@ -107,7 +107,7 @@ SCHEMA2_DDL = (
     )
     """,
     """
-    CREATE TABLE addressed_requests(
+    CREATE TABLE IF NOT EXISTS addressed_requests(
         addressing_repository_id TEXT NOT NULL,
         request_id TEXT NOT NULL,
         owner_repository_id TEXT NOT NULL,
@@ -245,7 +245,7 @@ def _is_excluded(connection: _sqlite3.Connection, repository_id: str) -> bool:
 def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
     members_raw = _json.loads(str(row["members_json"]))
     effects_raw = _json.loads(str(row["participation_effects_json"]))
-    refs_raw = _json.loads(str(row["dependent_effect_refs_json"]))
+    accepted_raw = _json.loads(str(row["dependent_effect_refs_json"]))
     if not isinstance(members_raw, list):
         raise FunctionalPyramidInstallationStoreError(
             "stored receipt members are invalid"
@@ -253,10 +253,6 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
     if not isinstance(effects_raw, list):
         raise FunctionalPyramidInstallationStoreError(
             "stored receipt participation effects are invalid"
-        )
-    if not isinstance(refs_raw, list):
-        raise FunctionalPyramidInstallationStoreError(
-            "stored receipt dependent effects are invalid"
         )
     pyramid_value = row["pyramid_id"]
     version_value = row["version"]
@@ -278,8 +274,11 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
             m.from_canonical(m.FunctionalPyramidParticipationEffect, item)
             for item in effects_raw
         ),
-        dependent_effect_refs=tuple(
-            m.from_canonical(m.ConclusionRevisionRef, item) for item in refs_raw
+        dependency_effects=(
+            m.from_canonical(m.AcceptedDependencyEffects, accepted_raw)
+            if isinstance(accepted_raw, dict)
+            and accepted_raw.get("$type") == "AcceptedDependencyEffects"
+            else m.from_canonical(m.HistoricalAcceptanceDetailUnavailable, accepted_raw)
         ),
     )
 
@@ -472,7 +471,7 @@ class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationRea
                     separators=(",", ":"),
                 ),
                 _json.dumps(
-                    [m.to_canonical(ref) for ref in receipt.dependent_effect_refs],
+                    m.to_canonical(receipt.dependency_effects),
                     sort_keys=True,
                     separators=(",", ":"),
                 ),
@@ -557,7 +556,18 @@ class FunctionalPyramidInstallationStore(_FunctionalPyramidInstallationReader):
                 )
             connection.execute("PRAGMA synchronous = FULL")
             connection.execute("BEGIN IMMEDIATE")
-            for statement in _DDL:
+            existing = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'"
+            ).fetchone()
+            if existing is not None:
+                row = connection.execute(
+                    "SELECT value FROM meta WHERE key='schema_version'"
+                ).fetchone()
+                if row is None or int(row["value"]) != INSTALLATION_SCHEMA_VERSION:
+                    raise FunctionalPyramidInstallationSchemaError(
+                        "existing installation store requires an offline transition"
+                    )
+            for statement in (*_DDL, *SCHEMA2_DDL):
                 connection.execute(statement)
             row = connection.execute(
                 "SELECT value FROM meta WHERE key='schema_version'"
@@ -613,6 +623,9 @@ class FunctionalPyramidInstallationStore(_FunctionalPyramidInstallationReader):
             "functional_pyramid_active_members",
             "functional_pyramid_exclusions",
             "functional_pyramid_receipts",
+            "delivery_selections",
+            "delivery_cursors",
+            "addressed_requests",
         }
         missing = required - tables
         if missing:

@@ -105,11 +105,14 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
                     "functional_pyramid_active_members",
                     "functional_pyramid_exclusions",
                     "functional_pyramid_receipts",
+                    "delivery_selections",
+                    "delivery_cursors",
+                    "addressed_requests",
                 },
             )
             readiness = probe_functional_pyramid_installation_store(tmp)
             self.assertTrue(readiness["ready"])
-            self.assertEqual(readiness["schema_version"], 1)
+            self.assertEqual(readiness["schema_version"], 2)
 
     def test_installation_receipt_retention_is_not_repository_owned(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -250,7 +253,7 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
                         state=m.FunctionalPyramidParticipationState.ACTIVE,
                     ),
                 ),
-                dependent_effect_refs=(),
+                dependency_effects=m.AcceptedDependencyEffects(()),
             )
 
             with self.assertRaisesRegex(RuntimeError, "force rollback"):

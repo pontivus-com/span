@@ -62,6 +62,7 @@ jobs:
       # pinned package and points the server at it through the documented
       # SPAN_GRAFT_BIN override.
       - name: Provision the managed structural indexer
+        id: provision-indexer
         run: |
           npm install --prefix "$RUNNER_TEMP/span-tools" \
             --no-audit --no-fund \
@@ -89,14 +90,19 @@ jobs:
 
       - name: Lint and format
         run: |
-          ruff check .
-          black --check --diff .
+          ruff_status=0
+          black_status=0
+          ruff check . || ruff_status=$?
+          black --check --diff . || black_status=$?
+          test "$ruff_status" -eq 0 && test "$black_status" -eq 0
 
       - name: Typing ratchet
+        if: ${{ !cancelled() && steps['provision-indexer'].outcome == 'success' }}
         run: |
           python scripts/typecheck.py
 
       - name: Test
+        if: ${{ !cancelled() && steps['provision-indexer'].outcome == 'success' }}
         run: |
           coverage run -m pytest -q
           coverage report --show-missing

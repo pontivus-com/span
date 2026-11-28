@@ -208,6 +208,52 @@ def _legacy_store(
     return path
 
 
+def _legacy_record_facts(connection):
+    from span.shell import store_transition_schema15 as migration
+
+    for table, restore in (
+        ("verification_runs", migration._restore_verification),
+        ("challenges", migration._restore_challenge),
+    ):
+        for rowid, payload in connection.execute(
+            f"SELECT rowid, canonical_json FROM {table}"
+        ).fetchall():
+            connection.execute(
+                f"UPDATE {table} SET canonical_json=? WHERE rowid=?",
+                (json.dumps(restore(json.loads(payload)), sort_keys=True), rowid),
+            )
+    for rowid, payload in connection.execute(
+        "SELECT rowid, canonical_json FROM record_receipts"
+    ).fetchall():
+        receipt = m.from_canonical(m.RecordReceipt, json.loads(payload))
+        assert receipt.context is not None
+        legacy = {
+            "$type": "RecordReceipt",
+            "identity": m.to_canonical(
+                m.RecordingIdentity(receipt.key.repository_id, receipt.key.request_id, receipt.context.context_id)
+            ),
+            "content_digest": m.to_canonical(receipt.content_digest),
+            "committed_at": receipt.committed_at.isoformat(),
+            "accepted_understanding_ids": m.to_canonical(tuple(item.understanding_id for item in receipt.understanding_versions)),
+            "accepted_understanding_versions": m.to_canonical(tuple(item.version for item in receipt.understanding_versions)),
+            "accepted_verification_run_ids": m.to_canonical(receipt.verification_run_ids),
+            "accepted_challenge_ids": m.to_canonical(receipt.challenge_ids),
+            "dependent_effects": m.to_canonical(receipt.dependency_refs),
+            "replay_expires_at": m.to_canonical(receipt.replay_expires_at),
+        }
+        connection.execute(
+            "UPDATE record_receipts SET canonical_json=? WHERE rowid=?",
+            (json.dumps(legacy, sort_keys=True), rowid),
+        )
+
+
+def _legacy_installation(path):
+    with sqlite3.connect(path) as connection:
+        for table in ("delivery_cursors", "delivery_selections", "addressed_requests"):
+            connection.execute(f"DROP TABLE {table}")
+        connection.execute("UPDATE meta SET value='1' WHERE key='schema_version'")
+
+
 def _schema11_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
     """Build one schema-11-shaped store with a stored excerpt."""
     from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
@@ -244,6 +290,7 @@ def _schema11_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
         connection.execute(
             "UPDATE source_observations SET excerpt='a\n' WHERE observation_id='obs-a'"
         )
+        _legacy_record_facts(connection)
         connection.execute("UPDATE meta SET value='11' WHERE key='schema_version'")
         connection.commit()
     finally:
@@ -429,6 +476,7 @@ def _schema10_store(
         connection.execute(
             "UPDATE source_observations SET excerpt='a\n' WHERE observation_id='obs-a'"
         )
+        _legacy_record_facts(connection)
         connection.execute("UPDATE meta SET value='10' WHERE key='schema_version'")
         connection.execute("DROP TABLE surfaces")
         connection.execute("DROP TABLE surface_boundary_versions")
@@ -574,7 +622,7 @@ def _schema12_store(
             ),
         )
     )
-    assert receipt.accepted_verification_run_ids
+    assert receipt.verification_run_ids
     store.close()
 
     connection = sqlite3.connect(path)
@@ -599,6 +647,7 @@ def _schema12_store(
                 " WHERE context_id=?",
                 (json.dumps(payload, sort_keys=True), persisted_expiry, context_id),
             )
+        _legacy_record_facts(connection)
         connection.execute("UPDATE meta SET value='12' WHERE key='schema_version'")
         connection.commit()
     finally:
@@ -694,6 +743,7 @@ def _schema13_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
         connection.execute("PRAGMA foreign_keys=OFF")
         connection.execute("DROP TABLE conclusion_curations")
         connection.execute("DROP TABLE functional_route_dependency_index")
+        _legacy_record_facts(connection)
         connection.execute("UPDATE meta SET value='13' WHERE key='schema_version'")
         connection.commit()
     finally:
@@ -795,6 +845,7 @@ def _schema14_store(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
             ("u-schema14", "c-schema14", 1, "p-1", "demo", "route-1"),
         )
         connection.execute("DROP TABLE conclusion_curations")
+        _legacy_record_facts(connection)
         connection.execute("UPDATE meta SET value='14' WHERE key='schema_version'")
         connection.commit()
     finally:
@@ -886,7 +937,7 @@ class Schema13To15Test(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "15",
+                    "16",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -1120,7 +1171,7 @@ class Schema14To15Test(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "15",
+                    "16",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -1200,7 +1251,7 @@ class ApplyTest(unittest.TestCase):
                 version = connection.execute(
                     "SELECT value FROM meta WHERE key='schema_version'"
                 ).fetchone()[0]
-                self.assertEqual(version, "15")
+                self.assertEqual(version, "16")
                 root_row = connection.execute(
                     "SELECT root FROM repositories WHERE repository_id='demo'"
                 ).fetchone()[0]
@@ -1415,7 +1466,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "15",
+                    "16",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -1505,7 +1556,7 @@ class RefusalTest(unittest.TestCase):
                     connection.execute(
                         "SELECT value FROM meta WHERE key='schema_version'"
                     ).fetchone()[0],
-                    "15",
+                    "16",
                 )
                 self.assertEqual(
                     connection.execute(
@@ -1557,13 +1608,13 @@ class RefusalTest(unittest.TestCase):
                 )
                 self.assertIsNotNone(receipt)
                 assert receipt is not None
-                self.assertEqual(len(receipt.accepted_verification_run_ids), 1)
+                self.assertEqual(len(receipt.verification_run_ids), 1)
                 run = store.get_verification_run(
-                    receipt.accepted_verification_run_ids[0].value
+                    receipt.verification_run_ids[0].value
                 )
-                self.assertEqual(run.command, "python3 -m unittest")
-                self.assertEqual(run.repository_id, "demo")
-                self.assertEqual(run.scope.scope.paths, ("src/a.py",))
+                self.assertEqual(run.facts.command, "python3 -m unittest")
+                self.assertEqual(run.facts.repository_id, "demo")
+                self.assertEqual(run.facts.scope.scope.paths, ("src/a.py",))
             finally:
                 store.close()
 
@@ -1575,7 +1626,7 @@ class RefusalTest(unittest.TestCase):
             data.mkdir()
             _legacy_store(data / "demo.db", seeds=(_seed(),))
             st.apply(_config(root, data))
-            with self.assertRaisesRegex(st.TransitionError, "already schema 15"):
+            with self.assertRaisesRegex(st.TransitionError, "already schema 16"):
                 st.apply(_config(root, data))
             inspection, _, state = st.inspect_store_report(_config(root, data))
             self.assertEqual(state, st.TransitionState.ALREADY_CURRENT)
@@ -1965,7 +2016,7 @@ class InstallerCommandTest(unittest.TestCase):
             mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
             self.assertEqual(mapping["counts"]["unresolved"], 0)
             self.assertGreaterEqual(mapping["counts"]["transformed"], 1)
-            self.assertEqual(st._read_schema_version_ro(source), 15)
+            self.assertEqual(st._read_schema_version_ro(source), 16)
             from span.shell.policy import DEFAULT_LIFECYCLE_RETENTION
             from span.shell.sqlite_store.lifecycle import LifecycleStore
 
@@ -1992,7 +2043,7 @@ class InstallerCommandTest(unittest.TestCase):
                 )
                 self.assertIsNotNone(receipt)
                 assert receipt is not None
-                self.assertEqual(receipt.identity.context_id.value, "ctx-1")
+                self.assertEqual(receipt.context.context_id.value, "ctx-1")
             finally:
                 store.close()
 
@@ -2018,11 +2069,14 @@ class PubSchemaTransitionTest(unittest.TestCase):
                 )
                 store.register_repository(root.name, str(root))
                 store.close()
+                with sqlite3.connect(data / f"{root.name}.db") as connection:
+                    connection.execute("UPDATE meta SET value='15' WHERE key='schema_version'")
             installation = functional_pyramid_installation_path(data)
             store = FunctionalPyramidInstallationStore.create(
                 installation, retention=DEFAULT_LIFECYCLE_RETENTION
             )
             store.close()
+            _legacy_installation(functional_pyramid_installation_path(data))
             members = st._cutover_members(data, roots)
             before = {paths.active: paths.active.read_bytes() for _, paths in members}
             manifests = st._prepare_installation_cutover(data, roots)
@@ -2060,11 +2114,14 @@ class PubSchemaTransitionTest(unittest.TestCase):
                 )
                 store.register_repository(root.name, str(root))
                 store.close()
+                with sqlite3.connect(data / f"{root.name}.db") as connection:
+                    connection.execute("UPDATE meta SET value='15' WHERE key='schema_version'")
             store = FunctionalPyramidInstallationStore.create(
                 functional_pyramid_installation_path(data),
                 retention=DEFAULT_LIFECYCLE_RETENTION,
             )
             store.close()
+            _legacy_installation(functional_pyramid_installation_path(data))
             members = st._cutover_members(data, roots)
             before = {paths.active: paths.active.read_bytes() for _, paths in members}
             activate = st._activate
@@ -2150,6 +2207,7 @@ class PubSchemaTransitionTest(unittest.TestCase):
                 retention=DEFAULT_LIFECYCLE_RETENTION,
             )
             installation.close()
+            _legacy_installation(functional_pyramid_installation_path(data))
             active = data / "demo.db"
             before = active.read_bytes()
             st._prepare_installation_cutover(data, (root,))
@@ -2225,41 +2283,47 @@ class PubSchemaTransitionTest(unittest.TestCase):
             revision_or_fingerprint="original",
         )
         run = m.VerificationRun(
-            run_id=m.VerificationRunId("run"),
-            repository_id="demo",
-            scope=m.VerificationScope(
-                "exact run", m.EvidenceScope(paths=("src/a.py",))
+            facts=m.VerificationRunFacts(
+                run_id=m.VerificationRunId("run"),
+                repository_id="demo",
+                scope=m.VerificationScope(
+                    "exact run", m.EvidenceScope(paths=("src/a.py",))
+                ),
+                command="pytest -q",
+                scenario="regression",
+                outcome=m.VerificationOutcome.FAIL,
+                observed_at=NOW,
+                observer="reviewer",
+                provenance="run provenance",
             ),
             observations=(
                 m.SourceObservationId("obs-2"),
                 m.SourceObservationId("obs-1"),
             ),
-            command="pytest -q",
-            scenario="regression",
-            outcome=m.VerificationOutcome.FAIL,
-            observed_at=NOW,
-            observer="reviewer",
             environment_limitations=("first limit", "second limit"),
-            provenance="run provenance",
         )
         resolution = m.ChallengeResolution(
-            reasoning="exact resolution",
-            resulting_understanding_id=ref.understanding_id,
-            resulting_version=m.UnderstandingVersionNumber(2),
+            facts=m.ChallengeResolutionFacts(
+                reasoning="exact resolution",
+                resulting_understanding_id=ref.understanding_id,
+                resulting_version=m.UnderstandingVersionNumber(2),
+            ),
             conclusions=(ref,),
             evidence=(evidence,),
         )
         challenge = m.Challenge(
-            challenge_id=m.ChallengeId("challenge"),
-            understanding_id=ref.understanding_id,
-            target_version=m.UnderstandingVersionNumber(1),
+            facts=m.ChallengeFacts(
+                challenge_id=m.ChallengeId("challenge"),
+                understanding_id=ref.understanding_id,
+                target_version=m.UnderstandingVersionNumber(1),
+                reason="disputed statement",
+                provenance="challenge provenance",
+                challenge_revision=m.ChallengeRevision(3),
+                state=m.ChallengeState.RESOLVED,
+                created_at=NOW,
+            ),
             target_conclusions=(ref,),
-            reason="disputed statement",
             evidence=(evidence,),
-            provenance="challenge provenance",
-            challenge_revision=m.ChallengeRevision(3),
-            state=m.ChallengeState.RESOLVED,
-            created_at=NOW,
             resolution=resolution,
             dispositions=(
                 m.UnresolvedChallengeRecord(
@@ -2269,9 +2333,11 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     recorded_at=NOW,
                 ),
                 m.ResolvedChallengeRecord(
-                    challenge_revision=m.ChallengeRevision(3),
+                    decision=m.ChallengeDispositionDecision(
+                        challenge_revision=m.ChallengeRevision(3),
+                        recorded_at=NOW,
+                    ),
                     resolution=resolution,
-                    recorded_at=NOW,
                 ),
             ),
         )
@@ -2280,20 +2346,23 @@ class PubSchemaTransitionTest(unittest.TestCase):
             (challenge, migration.challenge_payload, migration._restore_challenge),
         ):
             with self.subTest(carrier=type(value).__name__):
-                source = m.to_canonical(value)
+                canonical = m.to_canonical(value)
+                source = restore(canonical)
                 staged = convert(source)
+                self.assertEqual(staged, canonical)
                 self.assertEqual(restore(staged), source)
+                self.assertEqual(m.from_canonical(type(value), staged), value)
                 if isinstance(value, m.VerificationRun):
                     facts = m.from_canonical(m.VerificationRunFacts, staged["facts"])
-                    self.assertEqual(facts.run_id, value.run_id)
-                    self.assertEqual(facts.scope, value.scope)
-                    self.assertEqual(facts.outcome, value.outcome)
+                    self.assertEqual(facts.run_id, value.facts.run_id)
+                    self.assertEqual(facts.scope, value.facts.scope)
+                    self.assertEqual(facts.outcome, value.facts.outcome)
                 else:
                     challenge_facts = m.from_canonical(
                         m.ChallengeFacts, staged["facts"]
                     )
-                    self.assertEqual(challenge_facts.challenge_id, value.challenge_id)
-                    self.assertEqual(challenge_facts.state, value.state)
+                    self.assertEqual(challenge_facts.challenge_id, value.facts.challenge_id)
+                    self.assertEqual(challenge_facts.state, value.facts.state)
 
     def test_accepted_dependency_coordinates_are_strict_and_round_trip(self):
         ref = m.ConclusionRevisionRef(
@@ -2410,6 +2479,7 @@ class PubSchemaTransitionTest(unittest.TestCase):
                 paths.archive, retention=DEFAULT_LIFECYCLE_RETENTION
             )
             store.close()
+            _legacy_installation(paths.archive)
             ref = m.ConclusionRevisionRef(
                 m.UnderstandingId("u"),
                 m.ConclusionId("c"),

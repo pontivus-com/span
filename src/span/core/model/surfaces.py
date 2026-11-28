@@ -14,12 +14,12 @@ from dataclasses import field as _field
 from span.core.schema import constraints as _constraints
 from span.core.model.primitives import (
     ConclusionRevisionRef,
+    SupportState,
     UnderstandingId,
     UnderstandingVersionNumber,
     _require_non_empty,
     _require_positive_int,
 )
-from span.core.model.support import SupportState
 
 
 class ChangeReason(_enum.Enum):
@@ -126,8 +126,8 @@ class AcceptedSurfaceEffect:
         _require_positive_int(
             "accepted surface boundary version", self.boundary_version
         )
-        if not self.surface.kind.is_declared:
-            raise ValueError("accepted declaration requires a declared surface")
+        if self.action is SurfaceAction.UPDATE and not self.surface.kind.is_declared:
+            raise ValueError("only declared surfaces accept boundary updates")
         if (self.action is SurfaceAction.CREATE) != (self.boundary_version == 1):
             raise ValueError("surface creation alone accepts boundary version one")
 

@@ -98,9 +98,9 @@ def immediate_children(
 def verification_covers(
     run: m.VerificationRun, repository_id: str, scope: m.EvidenceScope
 ) -> bool:
-    if run.repository_id != repository_id:
+    if run.facts.repository_id != repository_id:
         return False
-    outer = run.scope.scope
+    outer = run.facts.scope.scope
     if any(ref.repository_id != repository_id for ref in outer.evidence_refs):
         return False
     if any(ref.repository_id != repository_id for ref in scope.evidence_refs):
@@ -125,16 +125,16 @@ def _verification_group(
                     ref.revision_or_fingerprint or "",
                     ref.section_or_span or "",
                 )
-                for ref in run.scope.scope.evidence_refs
+                for ref in run.facts.scope.scope.evidence_refs
             }
         )
     )
     return (
-        tuple(sorted(set(run.scope.scope.paths))),
+        tuple(sorted(set(run.facts.scope.scope.paths))),
         refs,
-        run.scope.description,
-        run.command or "",
-        run.scenario or "",
+        run.facts.scope.description,
+        run.facts.command or "",
+        run.facts.scenario or "",
         tuple(item.strip() for item in view.environment_limitations),
     )
 

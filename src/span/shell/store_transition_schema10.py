@@ -602,11 +602,13 @@ def _import_challenges(
         " WHERE understandings.repository_id=?",
         (repository_id,),
     ).fetchall():
-        challenge = m.from_canonical(m.Challenge, _json.loads(row[1]))
+        from span.shell.store_transition_schema15 import challenge_payload
+
+        challenge = m.from_canonical(m.Challenge, challenge_payload(_json.loads(row[1])))
         if (
             connection.execute(
                 "SELECT 1 FROM understandings WHERE understanding_id=?",
-                (challenge.understanding_id.value,),
+                (challenge.facts.understanding_id.value,),
             ).fetchone()
             is None
         ):
@@ -614,7 +616,7 @@ def _import_challenges(
                 records,
                 limitations,
                 "challenges",
-                challenge.challenge_id.value,
+                challenge.facts.challenge_id.value,
                 row[1],
                 "owning understanding is unresolved",
             )
@@ -622,14 +624,14 @@ def _import_challenges(
         connection.execute(
             "INSERT OR REPLACE INTO challenges"
             "(challenge_id, understanding_id, canonical_json) VALUES(?,?,?)",
-            (challenge.challenge_id.value, challenge.understanding_id.value, row[1]),
+            (challenge.facts.challenge_id.value, challenge.facts.understanding_id.value, row[1]),
         )
         _mapping(
             records,
             source_table="challenges",
-            source_id=challenge.challenge_id.value,
+            source_id=challenge.facts.challenge_id.value,
             target_table="challenges",
-            target_id=challenge.challenge_id.value,
+            target_id=challenge.facts.challenge_id.value,
             classification="preserved",
             source_payload=row[1],
             target_payload=row[1],
@@ -646,18 +648,22 @@ def _import_verifications(
         "SELECT run_id, canonical_json FROM verification_runs" " WHERE repository_id=?",
         (config.repository_id,),
     ).fetchall():
-        run = m.from_canonical(m.VerificationRun, _json.loads(row[1]))
+        from span.shell.store_transition_schema15 import verification_payload
+
+        run = m.from_canonical(
+            m.VerificationRun, verification_payload(_json.loads(row[1]))
+        )
         connection.execute(
             "INSERT OR REPLACE INTO verification_runs"
             "(run_id, repository_id, canonical_json) VALUES(?,?,?)",
-            (run.run_id.value, run.repository_id, row[1]),
+            (run.facts.run_id.value, run.facts.repository_id, row[1]),
         )
         _mapping(
             records,
             source_table="verification_runs",
-            source_id=run.run_id.value,
+            source_id=run.facts.run_id.value,
             target_table="verification_runs",
-            target_id=run.run_id.value,
+            target_id=run.facts.run_id.value,
             classification="preserved",
             source_payload=row[1],
             target_payload=row[1],
@@ -743,14 +749,18 @@ def _import_receipts(
                 "receipt effect is unresolved: " + ", ".join(missing),
             )
             continue
-        receipt_canonical = _json.dumps(m.to_canonical(receipt), sort_keys=True)
+        from span.shell.store_transition_schema15 import _restore_receipt
+
+        receipt_canonical = _json.dumps(
+            _restore_receipt(m.to_canonical(receipt)), sort_keys=True
+        )
         connection.execute(
             "INSERT OR REPLACE INTO record_receipts"
             "(repository_id, request_id, content_digest, canonical_json,"
             " replay_expires_at) VALUES(?,?,?,?,?)",
             (
-                receipt.identity.repository_id,
-                receipt.identity.request_id.value,
+                receipt.key.repository_id,
+                receipt.key.request_id.value,
                 receipt.content_digest.value,
                 receipt_canonical,
                 (
@@ -779,7 +789,8 @@ def _missing_receipt_effects(
     connection: _sqlite3.Connection, receipt: m.RecordReceipt
 ) -> tuple[str, ...]:
     missing: list[str] = []
-    for understanding_id in receipt.accepted_understanding_ids:
+    for coordinate in receipt.understanding_versions:
+        understanding_id = coordinate.understanding_id
         if (
             connection.execute(
                 "SELECT 1 FROM understandings WHERE understanding_id=?",
@@ -788,7 +799,7 @@ def _missing_receipt_effects(
             is None
         ):
             missing.append(f"understanding {understanding_id.value}")
-    for run_id in receipt.accepted_verification_run_ids:
+    for run_id in receipt.verification_run_ids:
         if (
             connection.execute(
                 "SELECT 1 FROM verification_runs WHERE run_id=?", (run_id.value,)
@@ -796,7 +807,7 @@ def _missing_receipt_effects(
             is None
         ):
             missing.append(f"verification run {run_id.value}")
-    for challenge_id in receipt.accepted_challenge_ids:
+    for challenge_id in receipt.challenge_ids:
         if (
             connection.execute(
                 "SELECT 1 FROM challenges WHERE challenge_id=?",
@@ -836,37 +847,31 @@ def _receipt_from_schema10(
     request_id: str,
     context_id: str,
 ) -> m.RecordReceipt:
-    identity = m.RecordingIdentity(
-        repository_id=repository_id,
-        request_id=m.RequestId(request_id),
-        context_id=m.InvestigationContextId(context_id),
-    )
-    return m.RecordReceipt(
-        identity=identity,
-        content_digest=m.from_canonical(m.ContentDigest, payload["content_digest"]),
-        committed_at=_datetime.datetime.fromisoformat(str(payload["committed_at"])),
-        accepted_understanding_ids=tuple(
-            m.from_canonical(m.UnderstandingId, item)
-            for item in _items(payload, "accepted_understanding_ids")
+    from span.shell.store_transition_schema15 import receipt_payload
+
+    legacy = {
+        "$type": "RecordReceipt",
+        "identity": m.to_canonical(
+            m.RecordingIdentity(
+                repository_id=repository_id,
+                request_id=m.RequestId(request_id),
+                context_id=m.InvestigationContextId(context_id),
+            )
         ),
-        accepted_understanding_versions=tuple(
-            m.from_canonical(m.UnderstandingVersionNumber, item)
-            for item in _items(payload, "accepted_understanding_versions")
+        "content_digest": payload["content_digest"],
+        "committed_at": payload["committed_at"],
+        "accepted_understanding_ids": list(_items(payload, "accepted_understanding_ids")),
+        "accepted_understanding_versions": list(
+            _items(payload, "accepted_understanding_versions")
         ),
-        accepted_verification_run_ids=tuple(
-            m.from_canonical(m.VerificationRunId, item)
-            for item in _items(payload, "accepted_verification_run_ids")
+        "accepted_verification_run_ids": list(
+            _items(payload, "accepted_verification_run_ids")
         ),
-        accepted_challenge_ids=tuple(
-            m.from_canonical(m.ChallengeId, item)
-            for item in _items(payload, "accepted_challenge_ids")
-        ),
-        replay_expires_at=(
-            _datetime.datetime.fromisoformat(str(payload["replay_expires_at"]))
-            if payload.get("replay_expires_at")
-            else None
-        ),
-    )
+        "accepted_challenge_ids": list(_items(payload, "accepted_challenge_ids")),
+        "dependent_effects": [],
+        "replay_expires_at": payload.get("replay_expires_at"),
+    }
+    return m.from_canonical(m.RecordReceipt, receipt_payload(legacy))
 
 
 def verify_schema10_staging(paths: TransitionPaths, config: TransitionConfig) -> None:

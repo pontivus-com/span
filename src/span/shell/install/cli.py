@@ -271,6 +271,7 @@ def _run_one_shot(env: _Environment) -> bool:
             TransitionError,
             TransitionPhase,
             dispatch,
+            dispatch_installation,
             parse_phase,
             report_payload,
         )
@@ -289,6 +290,24 @@ def _run_one_shot(env: _Environment) -> bool:
             )
             phase = TransitionPhase.INSPECT
         try:
+            from span.shell.sqlite_store.functional_pyramid import (
+                functional_pyramid_installation_path,
+            )
+
+            if functional_pyramid_installation_path(env.data_dir).is_file():
+                receipt = read_receipt(env.data_dir)
+                if receipt is None:
+                    raise TransitionError("complete registered installation roots are unavailable")
+                roots = tuple(Path(root).resolve() for root in receipt["repos"])
+                if args.transition_store not in {root.name for root in roots}:
+                    raise TransitionError("transition selector is not a registered repository")
+                if args.transition_root is not None and Path(args.transition_root).resolve() not in roots:
+                    raise TransitionError("transition root is not registered")
+                reports = dispatch_installation(env.data_dir, roots, phase)
+                print(json.dumps({"phase": phase.value, "members": [
+                    report_payload(item) for item in reports
+                ]}, sort_keys=True))
+                return True
             report = dispatch(config, phase)
         except TransitionError as exc:
             print(str(exc), file=sys.stderr)

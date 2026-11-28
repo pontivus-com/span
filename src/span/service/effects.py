@@ -149,68 +149,102 @@ class DependencyEffectService:
         )
         return tuple(direct)
 
-    def retained_functional_pyramid_effects(
+    def retained_effects(
         self,
-        refs: tuple[m.ConclusionRevisionRef, ...],
+        accepted: m.AcceptedDependencyEffects,
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
     ]:
-        """Live-project only immutable accepted effect refs; discover nothing new."""
-        affected: dict[m.SurfaceKey, list[m.ChangedConclusion]] = {}
-        for ref in sorted(set(refs), key=lambda value: value.sort_key):
-            try:
-                surface = self._surface_of(ref)
-                store = self._store_for_ref(ref)
-                version = store.get_understanding(
-                    ref.understanding_id.value
-                ).current_version
-            except (OSError, ValueError):
-                continue
-            current = store.get_version(ref.understanding_id.value, version.value)
-            if ref not in current.conclusions:
-                continue
-            revision = self._conclusion_revision(ref)
-            missing_required_route = (
-                isinstance(revision.content, m.SupportedConclusion)
-                and revision.content.assertion_nature is m.AssertionNature.NORMATIVE
-                and not any(
-                    isinstance(dependency, m.FunctionalRouteSupport)
-                    for dependency in revision.content.support
-                )
-            )
-            support = (
-                self._forced_reassessment(
-                    "ACTIVE normative revision predates required governing support"
-                )
-                if missing_required_route
-                else self._support_state(ref)
-            )
-            if (
-                isinstance(support, m.SupportQualification)
-                and support.state is m.SupportState.CURRENT
-            ):
-                continue
-            affected.setdefault(surface, []).append(
-                m.ChangedConclusion(
-                    ref=ref,
-                    expected_version=current.version,
-                    reasons=(m.ChangeReason.DIRECT,),
-                    support=support,
-                )
-            )
-
+        """Project every pinned ref at its accepted owner, preserving causes."""
+        affected: dict[m.SurfaceKey, list[m.ChangedConclusion | m.EffectDisposition]] = {}
+        for effect in accepted.effects:
+            affected.setdefault(effect.surface, []).append(self._retained_effect(effect))
+        reasons = {
+            surface: {reason for item in items for reason in item.reasons}
+            for surface, items in affected.items()
+        }
         surfaces = tuple(
             m.ChangedSurface(
                 surface=surface,
-                reasons=(m.ChangeReason.DIRECT,),
+                reasons=tuple(sorted(reasons[surface], key=lambda item: item.value)),
                 conclusions=tuple(affected[surface]),
             )
-            for surface in containment.order_surfaces(
-                {surface: {m.ChangeReason.DIRECT} for surface in affected}
-            )
+            for surface in containment.order_surfaces(reasons)
         )
         return surfaces, self._reestablishment_contexts(surfaces, {})
+
+    def _retained_effect(
+        self, effect: m.AcceptedDependencyEffect
+    ) -> m.ChangedConclusion | m.EffectDisposition:
+        ref = effect.ref
+        try:
+            store = self._store_for_repository(effect.surface.repository_id)
+        except (OSError, ValueError):
+            return self._unavailable_effect(effect, "accepted owner is unavailable")
+        try:
+            owner = store.get_understanding(ref.understanding_id.value)
+            if owner.surface != effect.surface:
+                return self._unavailable_effect(effect, "accepted owner differs")
+            current = store.get_version(ref.understanding_id.value, owner.current_version.value)
+            if not store.has_conclusion_revision(
+                ref.understanding_id.value, ref.conclusion_id.value, ref.revision.value
+            ):
+                return self._unavailable_effect(effect, "accepted revision is unavailable")
+            if ref not in current.conclusions:
+                return self._retained_successor(effect, current)
+            revision = self._conclusion_revision(ref)
+            if isinstance(revision.content, m.WithdrawnConclusion):
+                return m.EffectDisposition(
+                    ref, effect.reasons, m.EffectDispositionState.WITHDRAWN,
+                    "exact revision was explicitly withdrawn",
+                )
+            support = self._support_state(ref)
+        except (OSError, RecordingValidationError) + store.operational_errors:
+            return self._unavailable_effect(effect, "retained detail is unavailable")
+        if isinstance(support, m.SupportQualification) and support.state is m.SupportState.CURRENT:
+            return m.EffectDisposition(
+                ref, effect.reasons, m.EffectDispositionState.CURRENT,
+                "accepted revision has current support", support=support,
+            )
+        return m.ChangedConclusion(ref, current.version, effect.reasons, support)
+
+    def _retained_successor(
+        self, effect: m.AcceptedDependencyEffect, current: m.UnderstandingVersion
+    ) -> m.EffectDisposition:
+        ref = effect.ref
+        successor = next(
+            (item for item in current.conclusions if item.conclusion_id == ref.conclusion_id),
+            None,
+        )
+        if successor is None or successor.revision.value <= ref.revision.value:
+            return self._unavailable_effect(
+                effect, "accepted replacement disposition cannot be established"
+            )
+        revision = self._conclusion_revision(successor)
+        if isinstance(revision.content, m.WithdrawnConclusion):
+            return m.EffectDisposition(
+                ref, effect.reasons, m.EffectDispositionState.WITHDRAWN,
+                f"explicit withdrawal {successor.label}",
+            )
+        support = self._support_state(successor)
+        if isinstance(support, m.SupportQualification) and support.state is m.SupportState.CURRENT:
+            return m.EffectDisposition(
+                ref, effect.reasons, m.EffectDispositionState.SUPERSEDED,
+                f"verified current successor {successor.label}",
+            )
+        return self._unavailable_effect(
+            effect, f"successor {successor.label} still requires re-establishment"
+        )
+
+    @staticmethod
+    def _unavailable_effect(
+        effect: m.AcceptedDependencyEffect, reason: str
+    ) -> m.EffectDisposition:
+        return m.EffectDisposition(
+            effect.ref, effect.reasons, m.EffectDispositionState.UNAVAILABLE,
+            reason, recovery="retrieve the exact accepted revision and its current understanding",
+        )
 
     def functional_pyramid_change(
         self,
@@ -223,7 +257,7 @@ class DependencyEffectService:
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
-        tuple[m.ConclusionRevisionRef, ...],
+        m.AcceptedDependencyEffects,
     ]:
         """Project an accepted/proposed Functional Pyramid delta.
 
@@ -292,7 +326,7 @@ class DependencyEffectService:
     ) -> tuple[
         tuple[m.ChangedSurface, ...],
         tuple[m.InvestigationContextRef, ...],
-        tuple[m.ConclusionRevisionRef, ...],
+        m.AcceptedDependencyEffects,
     ]:
         roots = set(direct)
         indirect, forced_descendants = self._premise_closure(
@@ -313,7 +347,7 @@ class DependencyEffectService:
         ordered = containment.order_surfaces(reasons)
         current_versions: dict[str, m.UnderstandingVersion] = {}
         changed_surfaces: list[m.ChangedSurface] = []
-        effect_refs: list[m.ConclusionRevisionRef] = []
+        accepted: list[m.AcceptedDependencyEffect] = []
         for surface in ordered:
             conclusions: list[m.ChangedConclusion] = []
             for ref in sorted(
@@ -329,7 +363,7 @@ class DependencyEffectService:
                 if conclusion is None:
                     continue
                 conclusions.append(conclusion)
-                effect_refs.append(ref)
+                accepted.append(m.AcceptedDependencyEffect(surface, ref, conclusion.reasons))
             changed_surfaces.append(
                 m.ChangedSurface(
                     surface=surface,
@@ -349,7 +383,7 @@ class DependencyEffectService:
         return (
             projection,
             contexts,
-            tuple(dict.fromkeys(effect_refs)),
+            m.AcceptedDependencyEffects(tuple(accepted)),
         )
 
     def _changed_conclusion(
@@ -545,7 +579,7 @@ class DependencyEffectService:
         for surface in surfaces:
             repository_id = surface.surface.repository_id
             for conclusion in surface.conclusions:
-                if self._is_actionable(conclusion):
+                if isinstance(conclusion, m.ChangedConclusion) and self._is_actionable(conclusion):
                     actionable.setdefault(repository_id, []).append(conclusion)
 
         pending: list[tuple[str, ContextBinding, tuple[str, ...], tuple[str, ...]]] = []

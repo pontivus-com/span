@@ -7,20 +7,21 @@ import typing as _typing
 from dataclasses import dataclass as _dataclass
 
 from span.core.model.primitives import (
-    ConclusionRevisionRef,
     UnderstandingId,
     UnderstandingVersionNumber,
     VerificationRunId,
 )
 from span.core.model.recording import RecordReceipt
 from span.core.model.support import (
-    SupportQualification,
     SupportUnavailable,
-    UnderstandingQualification,
+    SupportQualification,
     VerificationQualification,
 )
-from span.core.model.surfaces import SurfaceStatus, SurfaceStatusUnavailable
+from span.core.model.effects import ChangedSurface
+from span.core.model.investigation import InvestigationContextRef
+from span.core.model.surfaces import SurfaceKey
 from span.core.model.understanding import (
+    AcceptedChallengeDisposition,
     AcceptedRevisionEffect,
     Challenge,
     ReceiptRetrievalSelector,
@@ -31,10 +32,11 @@ from span.core.model.verification import VerificationOutcome
 
 @_dataclass(frozen=True)
 class RecordedRevisionEffect:
-    """An immutable accepted action and its independent live qualification."""
+    """The exact accepted action with independently evaluated live support."""
 
     effect: AcceptedRevisionEffect
     qualification: SupportQualification | SupportUnavailable | None
+
 
     def __post_init__(self) -> None:
         if (self.qualification is None) != (
@@ -51,10 +53,11 @@ class UnderstandingRecorded:
     committed_at: _datetime.datetime
     understanding_id: UnderstandingId
     version: UnderstandingVersionNumber
-    affected_revisions: tuple[ConclusionRevisionRef, ...]
-    dependent_effects: tuple[ConclusionRevisionRef, ...]
-    qualification: UnderstandingQualification | SupportUnavailable
-    status: SurfaceStatus | SurfaceStatusUnavailable
+    surface: SurfaceKey
+    revision_effects: tuple[RecordedRevisionEffect, ...]
+    challenge_dispositions: tuple[AcceptedChallengeDisposition, ...]
+    dependent_effects: tuple[ChangedSurface, ...]
+    reestablishment_contexts: tuple[InvestigationContextRef, ...]
 
 
 @_dataclass(frozen=True)

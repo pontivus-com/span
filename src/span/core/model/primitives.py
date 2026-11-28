@@ -31,6 +31,24 @@ def _require_non_negative_int(name: str, value: int) -> int:
     return value
 
 
+@_dataclass(frozen=True)
+class ContentDigest:
+    """Canonical content digest; the server owns its derivation."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("ContentDigest", self.value)
+
+
+class SupportState(_enum.Enum):
+    """Support currency, independent of retrieval/page availability."""
+
+    CURRENT = "CURRENT"
+    REASSESSMENT_REQUIRED = "REASSESSMENT_REQUIRED"
+    UNVERIFIABLE = "UNVERIFIABLE"
+
+
 class SubjectKind(_enum.Enum):
     REPOSITORY = "REPOSITORY"
     SUBSYSTEM = "SUBSYSTEM"
@@ -724,3 +742,25 @@ class CanonicalDecodeError(ValueError):
     def with_segment(self, segment: str) -> CanonicalDecodeError:
         """Return a copy with one outer path segment prepended (pure)."""
         return CanonicalDecodeError(self.reason, path=(segment,) + self.path)
+
+
+@_dataclass(frozen=True)
+class UnderstandingVersionRef:
+    understanding_id: UnderstandingId
+    version: UnderstandingVersionNumber
+
+
+@_dataclass(frozen=True)
+class HistoricalAcceptanceDetailUnavailable:
+    """Retained acceptance coordinates whose original effect detail was not stored."""
+
+    understanding_versions: tuple[UnderstandingVersionRef, ...]
+    verification_run_ids: tuple[VerificationRunId, ...]
+    challenge_ids: tuple[ChallengeId, ...]
+    dependent_effect_refs: tuple[ConclusionRevisionRef, ...]
+    reason: str
+    recovery: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("historical acceptance reason", self.reason)
+        _require_non_empty("historical acceptance recovery", self.recovery)

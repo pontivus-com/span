@@ -123,41 +123,12 @@ class VerificationRunFacts:
 
 @_dataclass(frozen=True)
 class VerificationRun:
-    """One immutable accepted execution, independent of semantic submission."""
+    """Complete immutable execution; fixed facts are shared with audit delivery."""
 
-    run_id: VerificationRunId
-    repository_id: str
-    scope: VerificationScope
+    facts: VerificationRunFacts
     observations: tuple[SourceObservationId, ...]
-    command: str | None
-    scenario: str | None
-    outcome: VerificationOutcome
-    observed_at: _datetime.datetime
-    observer: str
     environment_limitations: tuple[str, ...] = ()
-    provenance: str = ""
 
     def __post_init__(self) -> None:
-        _validate_run(
-            repository_id=self.repository_id,
-            observations=self.observations,
-            command=self.command,
-            scenario=self.scenario,
-            observer=self.observer,
-            observed_at=self.observed_at,
-        )
-
-
-def verification_facts(run: VerificationRun) -> VerificationRunFacts:
-    """Project exact recorded execution facts independently of live support."""
-    return VerificationRunFacts(
-        run_id=run.run_id,
-        repository_id=run.repository_id,
-        scope=run.scope,
-        command=run.command,
-        scenario=run.scenario,
-        outcome=run.outcome,
-        observed_at=run.observed_at,
-        observer=run.observer,
-        provenance=run.provenance,
-    )
+        if not self.observations:
+            raise ValueError("a verification run requires source observations")

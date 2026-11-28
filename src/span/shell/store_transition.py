@@ -70,8 +70,8 @@ __all__ = [
 ]
 
 
-TARGET_SCHEMA = 15
-SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12, 13, 14})
+TARGET_SCHEMA = 16
+SUPPORTED_SOURCE_SCHEMAS = frozenset({7, 8, 9, 10, 11, 12, 13, 14, 15})
 
 #: Every table the schema-7/8/9 runtime could own. A table outside this set is
 #: preserved and reported, never silently omitted.
@@ -1149,6 +1149,10 @@ def _stage(
         store.register_repository(config.repository_id, root, authority_seeds=seeds)
     finally:
         store.close()
+    # The historical mappings copy their schema-15 shape offline. No runtime
+    # opens this intermediate database; it is converted and verified below.
+    with _sqlite3.connect(paths.staging) as mapped:
+        mapped.execute("UPDATE meta SET value='15' WHERE key='schema_version'")
     if source_schema == 10:
         from span.shell.store_transition_schema10 import stage_schema10
 
@@ -1223,9 +1227,9 @@ def _verify_staged(
         if _integrity(connection) != "ok":
             raise TransitionError("staged store failed integrity check")
         version = _read_schema_version(connection)
-        if version != TARGET_SCHEMA:
+        if version != 15:
             raise TransitionError(
-                f"staged store reports schema {version}, expected {TARGET_SCHEMA}"
+                f"historical mapping reports schema {version}, expected 15"
             )
         row = connection.execute(
             "SELECT repository_id, root FROM repositories" " WHERE repository_id=?",
@@ -1243,50 +1247,40 @@ def _verify_staged(
         from span.shell.store_transition_schema10 import verify_schema10_staging
 
         verify_schema10_staging(paths, config)
-        _smoke(paths, config)
         return (
             "staged store carries the schema-10 mapping with reconciled references",
-            "fresh lifecycle smoke test passed on an isolated copy",
         )
     if source_schema == 11:
         from span.shell.store_transition_schema11 import verify_schema11_staging
 
         verify_schema11_staging(paths, config)
-        _smoke(paths, config)
         return (
             "staged store carries the schema-11 durable copy with operational "
             "contexts drained",
-            "fresh lifecycle smoke test passed on an isolated copy",
         )
     if source_schema == 12:
         from span.shell.store_transition_schema12 import verify_schema12_staging
 
         verify_schema12_staging(paths, config)
-        _smoke(paths, config)
         return (
             "staged store carries the schema-12 durable copy with operational "
             "contexts drained",
-            "fresh lifecycle smoke test passed on an isolated copy",
         )
     if source_schema == 13:
         from span.shell.store_transition_schema13 import verify_schema13_staging
 
         verify_schema13_staging(paths, config)
-        _smoke(paths, config)
         return (
             "staged store carries the source schema-13 state into the current target without semantic reinterpretation",
             "Functional Pyramid state is empty until explicit activation",
-            "fresh lifecycle smoke test passed on an isolated copy",
         )
     if source_schema == 14:
         from span.shell.store_transition_schema14 import verify_schema14_staging
 
         verify_schema14_staging(paths, config)
-        _smoke(paths, config)
         return (
             "staged store carries schema-14 state without semantic reinterpretation",
             "schema-15 curation storage begins empty",
-            "fresh lifecycle smoke test passed on an isolated copy",
         )
     counts = _semantic_counts(paths.staging)
     if any(counts.values()):
@@ -1294,12 +1288,7 @@ def _verify_staged(
             "staged store contains migrated semantic content: "
             + ", ".join(f"{name}={count}" for name, count in counts.items())
         )
-    _smoke(paths, config)
-    return (
-        f"staged store is schema {TARGET_SCHEMA} with the bound root and no "
-        "semantic rows",
-        "fresh lifecycle smoke test passed on an isolated copy",
-    )
+    return ("historical mapping has bound root and no semantic rows",)
 
 
 def _verify_staged_references(
@@ -1347,13 +1336,16 @@ def _verify_staged_references(
     for row in connection.execute(
         "SELECT canonical_json FROM record_receipts"
     ).fetchall():
-        receipt = m.from_canonical(m.RecordReceipt, _json.loads(row[0]))
-        if receipt.identity.repository_id != config.repository_id:
+        from span.shell.store_transition_schema15 import receipt_payload
+
+        receipt = m.from_canonical(m.RecordReceipt, receipt_payload(_json.loads(row[0])))
+        if receipt.key.repository_id != config.repository_id:
             raise TransitionError(
                 "a mapped receipt names another repository: "
-                f"{receipt.identity.repository_id}"
+                f"{receipt.key.repository_id}"
             )
-        for understanding_id in receipt.accepted_understanding_ids:
+        for coordinate in receipt.understanding_versions:
+            understanding_id = coordinate.understanding_id
             if (
                 connection.execute(
                     "SELECT 1 FROM understandings WHERE understanding_id=?",
@@ -1365,7 +1357,7 @@ def _verify_staged_references(
                     "a mapped receipt names a missing understanding: "
                     f"{understanding_id.value}"
                 )
-        for run_id in receipt.accepted_verification_run_ids:
+        for run_id in receipt.verification_run_ids:
             if (
                 connection.execute(
                     "SELECT 1 FROM verification_runs WHERE run_id=?",
@@ -1377,7 +1369,7 @@ def _verify_staged_references(
                     f"a mapped receipt names a missing verification run: "
                     f"{run_id.value}"
                 )
-        for challenge_id in receipt.accepted_challenge_ids:
+        for challenge_id in receipt.challenge_ids:
             if (
                 connection.execute(
                     "SELECT 1 FROM challenges WHERE challenge_id=?",
@@ -1657,13 +1649,7 @@ def _prepare_member(
         effects += step_effects
         limitations += step_limits
     if not manifest.staged_sha256:
-        _verify_staged(
-            paths, config, root, manifest.tables, manifest.source_schema_version
-        )
-        manifest = _dataclasses.replace(
-            manifest, staged_sha256=_sha256_file(paths.staging)
-        )
-        _write_manifest(paths, manifest)
+        raise TransitionError("historical staging lacks target proof; roll back and restage")
     _require_export_reconciliation(paths, manifest)
     _require_staged_digest(paths, manifest)
     return manifest, effects, limitations
@@ -2177,21 +2163,25 @@ def _stage_candidate(
 
         stage_installation_schema1(paths)
         return ("verified installation schema-2 staging",), ()
-    if manifest.source_schema_version == 15 and target == 16:
+    if manifest.source_schema_version == 15 and target == TARGET_SCHEMA:
         from span.shell.store_transition_schema15 import stage_schema15
 
         stage_schema15(paths)
+        _smoke(paths, config)
         return ("verified repository schema-16 staging",), ()
     _require_schema12_context_drain(paths.archive, config)
     _, limitations = _stage(paths, config, root, manifest.source_schema_version)
     effects = _verify_staged(
         paths, config, root, manifest.tables, manifest.source_schema_version
     )
-    if target == 16:
-        from span.shell.store_transition_schema15 import upgrade_staged_repository
+    from span.shell.store_transition_schema15 import upgrade_staged_repository
 
-        upgrade_staged_repository(paths)
-        effects += ("verified mapped repository schema-16 staging",)
+    upgrade_staged_repository(paths)
+    _smoke(paths, config)
+    effects += (
+        "verified mapped repository schema-16 staging",
+        "fresh lifecycle smoke test passed on an isolated copy",
+    )
     return effects, limitations
 
 
@@ -2528,6 +2518,72 @@ def report_payload(report: TransitionReport) -> dict[str, object]:
         ),
         "limitations": list(report.limitations),
     }
+
+
+def dispatch_installation(
+    data_dir: _pathlib.Path,
+    roots: tuple[_pathlib.Path, ...],
+    phase: TransitionPhase,
+) -> tuple[TransitionReport, ...]:
+    """Administrative dispatch for the complete registered 16/2 transition."""
+    members = _cutover_members(data_dir, roots)
+    if phase is TransitionPhase.INSPECT:
+        return tuple(
+            _installation_member_report(config, paths, phase)
+            for config, paths in members
+        )
+    if phase is TransitionPhase.APPLY:
+        _apply_installation_cutover(data_dir, roots)
+    elif phase is TransitionPhase.ROLLBACK:
+        _rollback_installation_cutover(data_dir, roots)
+    elif phase is TransitionPhase.VERIFY:
+        for config, paths in members:
+            _verify_installation_member(config, paths)
+    else:
+        raise TransitionError(f"unknown transition phase: {phase}")
+    return tuple(
+        _installation_member_report(config, paths, phase)
+        for config, paths in members
+    )
+
+
+def _installation_member_report(
+    config: TransitionConfig, paths: TransitionPaths, phase: TransitionPhase
+) -> TransitionReport:
+    inspection = _inspect_paths(config, paths)
+    manifest = _read_manifest(paths)
+    state = manifest.state if manifest is not None else (
+        TransitionState.ALREADY_CURRENT
+        if inspection.schema_version == paths.target_schema
+        else TransitionState.INSPECTED
+    )
+    return TransitionReport(
+        phase=phase,
+        state=state,
+        repository_id=config.repository_id,
+        changed=phase in {TransitionPhase.APPLY, TransitionPhase.ROLLBACK},
+        effects=(),
+        inspection=inspection,
+        manifest=manifest,
+        limitations=inspection.limitations,
+    )
+
+
+def _verify_installation_member(
+    config: TransitionConfig, paths: TransitionPaths
+) -> None:
+    inspection = _inspect_paths(config, paths)
+    manifest = _read_manifest(paths)
+    if inspection.integrity != "ok" or inspection.schema_version != paths.target_schema:
+        raise TransitionError(f"active cutover member is not verified: {paths.active}")
+    if manifest is not None:
+        _require_manifest_binding(config, paths, manifest, _member_root(config))
+        if manifest.state is not TransitionState.VERIFIED:
+            raise TransitionError("coordinated cutover is incomplete")
+        _require_export_reconciliation(paths, manifest)
+        _verify_previous(paths, manifest)
+    if not paths.installation:
+        _verify_active_binding(paths, config)
 
 
 def dispatch(config: TransitionConfig, phase: TransitionPhase) -> TransitionReport:

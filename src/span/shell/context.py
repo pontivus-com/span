@@ -166,13 +166,6 @@ def compose_context(
 
     support = support_for(repository_id)
     evidence_service = EvidenceService(store=store, evidence=evidence, policy=policy)
-    lifecycle = LifecycleService(
-        store=store,
-        authority=store,
-        support=support,
-        evidence=evidence_service,
-        functional_pyramid_route=functional_pyramid.route,
-    )
     effects = DependencyEffectService(
         repository_runtime=repository_runtime,
         registered_repository_ids=lambda: tuple(
@@ -180,6 +173,14 @@ def compose_context(
         ),
         support_for_repository=support_for,
         functional_route_impacts=functional_pyramid.changed_route_identities,
+    )
+    lifecycle = LifecycleService(
+        store=store,
+        authority=store,
+        support=support,
+        evidence=evidence_service,
+        functional_pyramid_route=functional_pyramid.route,
+        effects=effects,
     )
     understand = UnderstandService(store=store, support=support)
     reconsider = ReconsiderService(

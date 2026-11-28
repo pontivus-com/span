@@ -318,7 +318,7 @@ class LifecycleStoreTest(unittest.TestCase):
         row = self.store._connection.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
-        self.assertEqual(row["value"], "15")
+        self.assertEqual(row["value"], "16")
 
     def test_schema_fifteen_adds_only_curation_to_repository_lifecycle(self) -> None:
         tables = {
@@ -377,7 +377,7 @@ class LifecycleStoreTest(unittest.TestCase):
         receipt = self.store.record_understanding(
             command, understanding_id=m.UnderstandingId("u-1")
         )
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
+        self.assertEqual(receipt.understanding_versions[0].version.value, 1)
         self.assertEqual(receipt.replay_expires_at, NOW + RETENTION.replay_retention)
         replay = self.store.record_understanding(
             command, understanding_id=m.UnderstandingId("u-1")
@@ -400,7 +400,7 @@ class LifecycleStoreTest(unittest.TestCase):
         receipt = self.store.record_understanding(
             command, current_confirmations=current
         )
-        self.assertEqual(receipt.accepted_understanding_versions, (version.version,))
+        self.assertEqual(tuple(item.version for item in receipt.understanding_versions), (version.version,))
         self.assertEqual(self.store.get_version("u-1", 1), version)
         self.store.record_understanding(_update_command())
         self.assertEqual(
@@ -421,7 +421,7 @@ class LifecycleStoreTest(unittest.TestCase):
         receipt = self.store.record_understanding(
             _update_command(), understanding_id=m.UnderstandingId("u-1")
         )
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(receipt.understanding_versions[0].version.value, 2)
         understanding = self.store.get_understanding("u-1")
         self.assertEqual(understanding.current_version.value, 2)
         version = self.store.get_version("u-1", 2)
@@ -444,7 +444,7 @@ class LifecycleStoreTest(unittest.TestCase):
 
         receipt = self.store.record_understanding(command)
 
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(receipt.understanding_versions[0].version.value, 2)
         self.assertEqual(self.store.get_understanding("u-1").current_version.value, 2)
         self.assertEqual(len(self.store.get_conclusions("u-1")), 1)
         version = self.store.get_version("u-1", 2)
@@ -502,7 +502,7 @@ class LifecycleStoreTest(unittest.TestCase):
         confirm_receipt = self.store.record_understanding(
             _same_confirm_command(expected=2, submission="sub-confirm")
         )
-        self.assertEqual(confirm_receipt.accepted_understanding_versions[0].value, 3)
+        self.assertEqual(confirm_receipt.understanding_versions[0].version.value, 3)
         confirmed_ref = self.store.get_version("u-1", 3).conclusions[0]
         self.assertEqual(confirmed_ref.revision.value, 2)
         inherited = self.store.find_curation(confirmed_ref)
@@ -699,11 +699,11 @@ class LifecycleStoreTest(unittest.TestCase):
     def test_verification_run(self) -> None:
         self.store.put_context(_context())
         receipt = self.store.record_verification(_verification_command())
-        self.assertEqual(len(receipt.accepted_verification_run_ids), 1)
+        self.assertEqual(len(receipt.verification_run_ids), 1)
         run = self.store.get_verification_run(
-            receipt.accepted_verification_run_ids[0].value
+            receipt.verification_run_ids[0].value
         )
-        self.assertEqual(run.outcome, m.VerificationOutcome.PASS)
+        self.assertEqual(run.facts.outcome, m.VerificationOutcome.PASS)
 
     def _seed_understanding(self) -> None:
         self.store.put_context(_context())
@@ -823,7 +823,7 @@ class LifecycleStoreTest(unittest.TestCase):
         command = _challenge_command()
         receipt = self.store.record_challenge(command)
         self.assertEqual(
-            receipt.accepted_challenge_ids[0].value,
+            receipt.challenge_ids[0].value,
             "ch:sub-ch-create",
         )
         replay = self.store.record_challenge(command)
@@ -845,10 +845,10 @@ class LifecycleStoreTest(unittest.TestCase):
         receipt = self.store.record_understanding(
             _disposition_command(1, "sub-ch-1", (_unresolved("ch-1", 1),))
         )
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(receipt.understanding_versions[0].version.value, 2)
         updated = self.store.get_challenge("ch-1")
-        self.assertEqual(updated.challenge_revision.value, 2)
-        self.assertEqual(updated.state, m.ChallengeState.UNRESOLVED)
+        self.assertEqual(updated.facts.challenge_revision.value, 2)
+        self.assertEqual(updated.facts.state, m.ChallengeState.UNRESOLVED)
         replay = self.store.record_understanding(
             _disposition_command(1, "sub-ch-1", (_unresolved("ch-1", 1),))
         )
@@ -861,13 +861,13 @@ class LifecycleStoreTest(unittest.TestCase):
         receipt = self.store.record_understanding(
             _disposition_command(1, "sub-ch-r", (_resolved("ch-1", 1),))
         )
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(receipt.understanding_versions[0].version.value, 2)
         updated = self.store.get_challenge("ch-1")
-        self.assertEqual(updated.state, m.ChallengeState.RESOLVED)
-        self.assertEqual(updated.challenge_revision.value, 2)
+        self.assertEqual(updated.facts.state, m.ChallengeState.RESOLVED)
+        self.assertEqual(updated.facts.challenge_revision.value, 2)
         self.assertIsNotNone(updated.resolution)
         assert updated.resolution is not None
-        self.assertEqual(updated.resolution.resulting_version.value, 2)
+        self.assertEqual(updated.resolution.facts.resulting_version.value, 2)
 
     def test_mixed_resolved_and_unresolved_challenges(self) -> None:
         self._seed_understanding()
@@ -916,7 +916,7 @@ class LifecycleStoreTest(unittest.TestCase):
             (_unresolved("ch-1", 1), _unresolved("ch-2", 1)),
         )
         receipt = self.store.record_understanding(command)
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 2)
+        self.assertEqual(receipt.understanding_versions[0].version.value, 2)
         self.assertEqual(self.store.get_challenge("ch-1").challenge_revision.value, 2)
         self.assertEqual(self.store.get_challenge("ch-2").challenge_revision.value, 2)
         replay = self.store.record_understanding(command)
@@ -976,7 +976,7 @@ class LifecycleStoreTest(unittest.TestCase):
         )
         self.store.create_challenge(_challenge())
         verification = self.store.record_verification(_verification_command())
-        run_id = verification.accepted_verification_run_ids[0]
+        run_id = verification.verification_run_ids[0]
         self.store.reap_expired(
             NOW + RETENTION.context_lifetime + datetime.timedelta(minutes=1)
         )
@@ -1031,7 +1031,7 @@ class LifecycleStoreTest(unittest.TestCase):
         receipt = self.store.record_understanding(
             _create_command(), understanding_id=m.UnderstandingId("u-1")
         )
-        self.assertEqual(receipt.accepted_understanding_versions[0].value, 1)
+        self.assertEqual(receipt.understanding_versions[0].version.value, 1)
 
     def test_abandon_context_keeps_accepted_state(self) -> None:
         self.store.put_context(_context())
@@ -1185,7 +1185,7 @@ class LifecycleStoreTest(unittest.TestCase):
             _update_command(expected=4, submission="change-root")
         )
         self.assertEqual(
-            receipt.dependent_effects,
+            receipt.dependency_refs,
             (
                 m.ConclusionRevisionRef(
                     root.understanding_id,
@@ -1458,7 +1458,7 @@ class LifecycleStoreTest(unittest.TestCase):
             _create_command(), understanding_id=m.UnderstandingId("u-1")
         )
         now[0] = NOW + RETENTION.replay_retention + datetime.timedelta(minutes=1)
-        self.assertIsNone(store.get_receipt(receipt.identity))
+        self.assertIsNone(store.get_receipt(receipt.key))
         with self.assertRaises(Exception):
             store.record_understanding(
                 _create_command(), understanding_id=m.UnderstandingId("u-1")

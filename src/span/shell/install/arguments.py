@@ -11,10 +11,10 @@ def _add_transition_arguments(parser) -> None:
         "--transition-store",
         default=None,
         metavar="REPOSITORY_ID",
-        help="Explicitly transition one repository's schema-7/8/9/10 store to "
-        "the schema-11 lifecycle store. Requires --transition-phase. This "
-        "is the only supported store upgrade path; the runtime never "
-        "migrates at open.",
+        help="Explicitly transition a registered installation to repository schema "
+        "16 and installation schema 2. All registered stores are staged and "
+        "verified before publication. Requires --transition-phase; runtime "
+        "never migrates at open.",
     )
     parser.add_argument(
         "--transition-phase",

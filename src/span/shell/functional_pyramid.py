@@ -142,6 +142,13 @@ def open_functional_pyramid_service(
         return
 
     with store_use_ownership(root):
+        from span.shell.sqlite_store.schema import SCHEMA_VERSION
+        from span.shell.store_transition import _read_schema_version_ro
+
+        for repository_id in registered_roots.repository_ids():
+            repository = root / f"{repository_id}.db"
+            if repository.is_file() and _read_schema_version_ro(repository) != SCHEMA_VERSION:
+                raise ValueError("registered repository requires a coordinated offline transition")
         state = FunctionalPyramidInstallationStore(
             path,
             retention=DEFAULT_LIFECYCLE_RETENTION,

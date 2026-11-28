@@ -37,7 +37,8 @@ from span.service.contexts import context_binding, issue_context
 from span.service.evidence import EvidenceService
 from span.service.support import SupportService
 from span.service.ids import server_context_id
-from span.service.surface_status import compose_surface_status
+from span.service.understand import UnderstandService
+from span.service.effects import DependencyEffectService
 
 __all__ = ["LifecycleService"]
 
@@ -167,6 +168,7 @@ class LifecycleService:
         clock: _typing.Callable[[], _datetime.datetime] | None = None,
         new_context_id: _typing.Callable[[], str] | None = None,
         functional_pyramid_route: _FunctionalPyramidRouteLookup | None = None,
+        effects: DependencyEffectService | None = None,
     ) -> None:
         self._store = store
         self._authority = authority
@@ -175,6 +177,7 @@ class LifecycleService:
         self._clock = clock or (lambda: _datetime.datetime.now(_datetime.timezone.utc))
         self._new_context_id = new_context_id or server_context_id
         self._functional_pyramid_route = functional_pyramid_route
+        self._effects = effects
 
     # -- context issuance --------------------------------------------------
 
@@ -209,40 +212,50 @@ class LifecycleService:
             return self._record_verification_request(wire)
         return self._record_understanding_request(wire)
 
-    def _declare_surface(self, wire: _rw.RecordRequestWire) -> m.SurfaceDeclared:
-        surface = _rw.surface_declaration(wire)
-        if surface.key.kind.is_declared:
-            self._require_valid_parent(surface)
-        try:
-            if wire.action is m.SurfaceAction.CREATE:
-                return m.SurfaceDeclared(
-                    action="create", surface=self._store.put_surface(surface)
+    def _declare_surface(self, wire: _rw.RecordRequestWire) -> m.RecordResult:
+        digest = _rw.wire_content_digest(wire)
+        receipt = self._replay(wire.bound_repository_id, wire.request_id, digest)
+        if receipt is None:
+            surface = _rw.surface_declaration(wire)
+            if surface.key.kind.is_declared:
+                self._require_valid_parent(surface)
+            action = _typing.cast(m.SurfaceAction, wire.action)
+            if action is m.SurfaceAction.UPDATE:
+                if not surface.key.kind.is_declared:
+                    raise RecordingValidationError(
+                        "only a service or domain surface has a mutable boundary"
+                    )
+                if self._store.find_surface(surface.key) is None:
+                    raise RecordingValidationError(
+                        f"unknown surface: {surface.key.locator}",
+                        public_identity=surface.key.locator,
+                        public_cause=(
+                            f"the exact surface {surface.key.locator!r} does not exist"
+                        ),
+                    )
+            try:
+                receipt = self._store.record_surface(
+                    m.RecordingKey(wire.bound_repository_id, m.RequestId(wire.request_id)),
+                    surface,
+                    action,
+                    digest,
                 )
-            if not surface.key.kind.is_declared:
-                raise RecordingValidationError(
-                    "only a service or domain surface has a mutable boundary"
-                )
-            if self._store.find_surface(surface.key) is None:
-                raise RecordingValidationError(
-                    f"unknown surface: {surface.key.locator}",
-                    public_identity=surface.key.locator,
-                    public_cause=(
-                        f"the exact surface {surface.key.locator!r} does not exist"
-                    ),
-                )
-            updated = self._store.update_surface(
-                surface,
-                expected_boundary_version=_typing.cast(
-                    int, wire.expected_boundary_version
-                ),
-            )
-            return m.SurfaceDeclared(action="update", surface=updated)
-        except SurfaceConflict as exc:
-            raise Rejection(
-                exc.cause,
-                cause_kind=RejectionCauseKind.SURFACE_CONFLICT,
-                current_boundary_version=exc.current_boundary_version,
-            ) from exc
+            except SurfaceConflict as exc:
+                raise Rejection(
+                    exc.cause,
+                    cause_kind=RejectionCauseKind.SURFACE_CONFLICT,
+                    current_boundary_version=exc.current_boundary_version,
+                ) from exc
+        effect = receipt.accepted_effect
+        if not isinstance(effect, m.AcceptedSurfaceEffect):
+            return self._unavailable_acceptance(receipt)
+        return m.SurfaceDeclared(
+            receipt_selector=receipt.selector,
+            committed_at=receipt.committed_at,
+            action=effect.action,
+            surface=effect.surface,
+            boundary_version=effect.boundary_version,
+        )
 
     def _flat_conclusion(
         self,
@@ -397,7 +410,7 @@ class LifecycleService:
             wire.identity.repository_id, wire.identity.request_id, digest
         )
         if replay is not None:
-            if replay.accepted_verification_run_ids:
+            if isinstance(replay.accepted_effect, m.AcceptedVerificationEffect):
                 return self.qualify_verification(replay)
             return self.qualify_understanding(replay)
         create = wire.conclusion is not None
@@ -777,87 +790,80 @@ class LifecycleService:
             cause_kind=RejectionCauseKind.REPLAY_CONFLICT,
         )
 
-    def qualify_understanding(
-        self, receipt: m.RecordReceipt
-    ) -> m.UnderstandingRecorded:
-        if not receipt.accepted_understanding_ids:
-            raise RecordingValidationError(
-                "an understanding receipt has no accepted understanding"
-            )
-        understanding_id = receipt.accepted_understanding_ids[0].value
-        version = receipt.accepted_understanding_versions[0].value
-        operational_errors: tuple[type[Exception], ...] = (
-            OSError,
-        ) + self._store.operational_errors
-        try:
-            qualification: m.UnderstandingQualification | m.SupportUnavailable = (
-                self._support.qualify_understanding(
-                    self._support.evaluate_version(understanding_id, version)
-                )
-            )
-        except operational_errors:
-            qualification = m.SupportUnavailable(
-                "understanding support evaluation is unavailable"
-            )
-        owner: m.SurfaceKey | None = None
-        try:
-            owner = self._store.get_understanding(understanding_id).surface
-            status: m.SurfaceStatus | m.SurfaceStatusUnavailable = (
-                compose_surface_status(
-                    m.SurfaceStatusSubject(owner),
-                    store=self._store,
-                    support=self._support,
-                    evidence=self._evidence,
-                )
-            )
-        except operational_errors:
-            status = m.SurfaceStatusUnavailable(
-                reason="surface status evaluation is unavailable", surface=owner
-            )
-        snapshot = self._store.get_version(understanding_id, version)
-        accepted_curations = tuple(
-            disposition.ref
-            for disposition in self._store.get_curations(
-                understanding_id,
-                as_of_version=m.UnderstandingVersionNumber(version),
-            )
-            if disposition.accepted_in_version.value == version
-        )
-        semantic_effects = tuple(
-            m.ConclusionRevisionRef(
-                understanding_id=revision.understanding_id,
-                conclusion_id=revision.conclusion_id,
-                revision=revision.revision,
-            )
-            for revision in self._store.get_conclusions(understanding_id)
-            if revision.originating_version.value == version
-        )
-        affected_revisions = (
-            accepted_curations
-            if accepted_curations and not semantic_effects
-            else snapshot.conclusions
-        )
-        return m.UnderstandingRecorded(
-            receipt_selector=m.ReceiptRetrievalSelector(
-                repository_id=receipt.identity.repository_id,
-                request_id=receipt.identity.request_id.value,
-            ),
+    @staticmethod
+    def _unavailable_acceptance(receipt: m.RecordReceipt) -> m.AcceptedDetailUnavailable:
+        return m.AcceptedDetailUnavailable(
+            receipt_selector=receipt.selector,
             committed_at=receipt.committed_at,
-            understanding_id=m.UnderstandingId(understanding_id),
-            version=m.UnderstandingVersionNumber(version),
-            affected_revisions=affected_revisions,
-            dependent_effects=receipt.dependent_effects,
-            qualification=qualification,
-            status=status,
+            detail=UnderstandService.unavailable_acceptance(receipt),
         )
 
-    def qualify_verification(self, receipt: m.RecordReceipt) -> m.VerificationRecorded:
-        if not receipt.accepted_verification_run_ids:
-            raise RecordingValidationError("a verification receipt has no accepted run")
-        run_id = receipt.accepted_verification_run_ids[0].value
-        operational_errors: tuple[type[Exception], ...] = (
-            OSError,
-        ) + self._store.operational_errors
+    def qualify_understanding(
+        self, receipt: m.RecordReceipt
+    ) -> m.UnderstandingRecorded | m.AcceptedDetailUnavailable:
+        effect = receipt.accepted_effect
+        if not isinstance(effect, m.AcceptedUnderstandingEffect):
+            return self._unavailable_acceptance(receipt)
+        operational_errors = (OSError,) + self._store.operational_errors
+        try:
+            owner = self._store.get_understanding(effect.understanding_id.value).surface
+            dispositions = []
+            for coordinate in effect.challenge_dispositions:
+                challenge = self._store.get_challenge(coordinate.challenge_id.value)
+                record = next(
+                    item for item in challenge.dispositions
+                    if item.challenge_revision == coordinate.challenge_revision
+                )
+                dispositions.append(m.accepted_challenge_disposition(
+                    coordinate.challenge_id, record
+                ))
+            effects = []
+            for revision in effect.revision_effects:
+                qualification: m.SupportQualification | m.SupportUnavailable | None = None
+                if revision.action is not m.RevisionEffectAction.WITHDRAW:
+                    try:
+                        qualification = self._support.qualify_support(
+                            self._support.evaluate_revision(revision.ref)
+                        )
+                    except operational_errors:
+                        qualification = m.SupportUnavailable(
+                            "conclusion support evaluation is unavailable"
+                        )
+                effects.append(m.RecordedRevisionEffect(revision, qualification))
+            dependent: tuple[m.ChangedSurface, ...] = ()
+            contexts: tuple[m.InvestigationContextRef, ...] = ()
+            if effect.dependency_effects.effects:
+                if self._effects is None:
+                    return self._unavailable_acceptance(receipt)
+                dependent, contexts = self._effects.retained_effects(
+                    effect.dependency_effects
+                )
+        except (StopIteration,) + operational_errors:
+            return self._unavailable_acceptance(receipt)
+        return m.UnderstandingRecorded(
+            receipt_selector=receipt.selector,
+            committed_at=receipt.committed_at,
+            understanding_id=effect.understanding_id,
+            version=effect.version,
+            surface=owner,
+            revision_effects=tuple(effects),
+            challenge_dispositions=tuple(dispositions),
+            dependent_effects=dependent,
+            reestablishment_contexts=contexts,
+        )
+
+    def qualify_verification(
+        self, receipt: m.RecordReceipt
+    ) -> m.VerificationRecorded | m.AcceptedDetailUnavailable:
+        effect = receipt.accepted_effect
+        if not isinstance(effect, m.AcceptedVerificationEffect):
+            return self._unavailable_acceptance(receipt)
+        run_id = effect.run_id.value
+        operational_errors = (OSError,) + self._store.operational_errors
+        try:
+            run = self._store.get_verification_run(run_id)
+        except operational_errors:
+            return self._unavailable_acceptance(receipt)
         try:
             qualification: m.VerificationQualification | m.SupportUnavailable = (
                 self._support.qualify_verification(
@@ -868,26 +874,22 @@ class LifecycleService:
             qualification = m.SupportUnavailable(
                 "verification support evaluation is unavailable"
             )
-        run = self._store.get_verification_run(run_id)
         return m.VerificationRecorded(
-            receipt_selector=m.ReceiptRetrievalSelector(
-                repository_id=receipt.identity.repository_id,
-                request_id=receipt.identity.request_id.value,
-            ),
+            receipt_selector=receipt.selector,
             committed_at=receipt.committed_at,
-            run_id=run.run_id,
-            command=run.command,
-            scenario=run.scenario,
-            outcome=run.outcome,
+            run_id=run.facts.run_id,
+            command=run.facts.command,
+            scenario=run.facts.scenario,
+            outcome=run.facts.outcome,
             qualification=qualification,
         )
 
     def qualify_challenge(self, receipt: m.RecordReceipt) -> m.ChallengeRecorded:
-        if not receipt.accepted_challenge_ids:
-            raise RecordingValidationError("a challenge receipt has no challenge")
-        challenge_id = receipt.accepted_challenge_ids[0].value
+        effect = receipt.accepted_effect
+        if not isinstance(effect, m.AcceptedChallengeOpeningEffect):
+            raise RecordingValidationError("a challenge receipt has no exact opening")
         return m.ChallengeRecorded(
-            receipt=receipt, challenge=self._store.get_challenge(challenge_id)
+            receipt=receipt, challenge=self._store.get_challenge(effect.challenge_id.value)
         )
 
     # -- reference resolution and admission --------------------------------
