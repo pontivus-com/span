@@ -1309,7 +1309,9 @@ class FunctionalPyramidService:
         transaction: FunctionalPyramidStateTransaction,
         receipt: m.RetrievedFunctionalPyramidReceipt,
     ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
-        if isinstance(receipt.dependency_effects, m.HistoricalAcceptanceDetailUnavailable):
+        if isinstance(
+            receipt.dependency_effects, m.HistoricalAcceptanceDetailUnavailable
+        ):
             return m.AcceptedDetailUnavailable(
                 m.FunctionalPyramidReceiptSelector(receipt.request_id),
                 receipt.committed_at,

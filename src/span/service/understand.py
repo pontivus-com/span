@@ -100,7 +100,11 @@ class UnderstandService:
         if isinstance(effect, m.AcceptedVerificationEffect):
             try:
                 accepted_effect = m.AcceptedVerificationReceipt(
-                    (m.verification_view(self._store.get_verification_run(effect.run_id.value), None),)
+                    (
+                        m.verification_view(
+                            self._store.get_verification_run(effect.run_id.value), None
+                        ),
+                    )
                 )
             except (OSError,) + self._store.operational_errors:
                 accepted_effect = self.unavailable_acceptance(receipt)
@@ -133,7 +137,10 @@ class UnderstandService:
         selector = receipt.selector
         effect = receipt.accepted_effect
         try:
-            if not isinstance(effect, m.AcceptedChallengeOpeningEffect) or receipt.context is None:
+            if (
+                not isinstance(effect, m.AcceptedChallengeOpeningEffect)
+                or receipt.context is None
+            ):
                 raise RecordingValidationError("receipt has no exact challenge opening")
             retained = self._store.get_challenge(effect.challenge_id.value)
             if (
@@ -141,7 +148,9 @@ class UnderstandService:
                 or retained.facts.target_version != effect.target_version
                 or retained.target_conclusions != effect.target_conclusions
             ):
-                raise RecordingValidationError("accepted challenge target differs from retained detail")
+                raise RecordingValidationError(
+                    "accepted challenge target differs from retained detail"
+                )
             opening = create_challenge(
                 challenge_id=retained.facts.challenge_id,
                 understanding_id=retained.facts.understanding_id,

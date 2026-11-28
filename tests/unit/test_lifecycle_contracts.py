@@ -338,7 +338,9 @@ class RecordedAuditProjectionTest(unittest.TestCase):
             dispositions=(history,),
         )
         view = m.challenge_view(settled)
-        self.assertEqual(view.facts.challenge_revision, settled.facts.challenge_revision)
+        self.assertEqual(
+            view.facts.challenge_revision, settled.facts.challenge_revision
+        )
         self.assertEqual(view.target_conclusions, challenge.target_conclusions)
         self.assertEqual(view.evidence, challenge.evidence)
         self.assertIsNone(view.resolution)
@@ -349,7 +351,8 @@ class RecordedAuditProjectionTest(unittest.TestCase):
         inconsistent = dataclasses.replace(
             settled,
             resolution=dataclasses.replace(
-                resolution, facts=dataclasses.replace(resolution.facts, reasoning="different")
+                resolution,
+                facts=dataclasses.replace(resolution.facts, reasoning="different"),
             ),
         )
         separate = m.challenge_view(inconsistent)
@@ -392,7 +395,13 @@ class ReceiptDecisionTest(unittest.TestCase):
         command = _create_command()
         digest = record_content_digest(command)
         self.assertEqual(
-            receipt_decision(None, m.RecordingKey(command.identity.repository_id, command.identity.request_id), digest).kind,
+            receipt_decision(
+                None,
+                m.RecordingKey(
+                    command.identity.repository_id, command.identity.request_id
+                ),
+                digest,
+            ).kind,
             m.ReceiptDecisionKind.NEW,
         )
         receipt = build_receipt(
@@ -406,12 +415,22 @@ class ReceiptDecisionTest(unittest.TestCase):
             original_addressing_repository_id="repo-1",
         )
         self.assertEqual(
-            receipt_decision(receipt, m.RecordingKey(command.identity.repository_id, command.identity.request_id), digest).kind,
+            receipt_decision(
+                receipt,
+                m.RecordingKey(
+                    command.identity.repository_id, command.identity.request_id
+                ),
+                digest,
+            ).kind,
             m.ReceiptDecisionKind.REPLAY,
         )
         self.assertEqual(
             receipt_decision(
-                receipt, m.RecordingKey(command.identity.repository_id, command.identity.request_id), m.ContentDigest("sha256:other")
+                receipt,
+                m.RecordingKey(
+                    command.identity.repository_id, command.identity.request_id
+                ),
+                m.ContentDigest("sha256:other"),
             ).kind,
             m.ReceiptDecisionKind.CONFLICT,
         )
@@ -429,7 +448,11 @@ class ReceiptDecisionTest(unittest.TestCase):
             original_addressing_repository_id="repo-1",
         )
         with self.assertRaises(RecordingConflict):
-            receipt_decision(receipt, m.RecordingKey("repo-1", m.RequestId("sub-other")), receipt.content_digest)
+            receipt_decision(
+                receipt,
+                m.RecordingKey("repo-1", m.RequestId("sub-other")),
+                receipt.content_digest,
+            )
 
 
 class AcceptedRevisionEffectTest(unittest.TestCase):

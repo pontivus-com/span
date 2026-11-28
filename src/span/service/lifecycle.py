@@ -235,7 +235,9 @@ class LifecycleService:
                     )
             try:
                 receipt = self._store.record_surface(
-                    m.RecordingKey(wire.bound_repository_id, m.RequestId(wire.request_id)),
+                    m.RecordingKey(
+                        wire.bound_repository_id, m.RequestId(wire.request_id)
+                    ),
                     surface,
                     action,
                     digest,
@@ -791,7 +793,9 @@ class LifecycleService:
         )
 
     @staticmethod
-    def _unavailable_acceptance(receipt: m.RecordReceipt) -> m.AcceptedDetailUnavailable:
+    def _unavailable_acceptance(
+        receipt: m.RecordReceipt,
+    ) -> m.AcceptedDetailUnavailable:
         return m.AcceptedDetailUnavailable(
             receipt_selector=receipt.selector,
             committed_at=receipt.committed_at,
@@ -811,15 +815,18 @@ class LifecycleService:
             for coordinate in effect.challenge_dispositions:
                 challenge = self._store.get_challenge(coordinate.challenge_id.value)
                 record = next(
-                    item for item in challenge.dispositions
+                    item
+                    for item in challenge.dispositions
                     if item.challenge_revision == coordinate.challenge_revision
                 )
-                dispositions.append(m.accepted_challenge_disposition(
-                    coordinate.challenge_id, record
-                ))
+                dispositions.append(
+                    m.accepted_challenge_disposition(coordinate.challenge_id, record)
+                )
             effects = []
             for revision in effect.revision_effects:
-                qualification: m.SupportQualification | m.SupportUnavailable | None = None
+                qualification: m.SupportQualification | m.SupportUnavailable | None = (
+                    None
+                )
                 if revision.action is not m.RevisionEffectAction.WITHDRAW:
                     try:
                         qualification = self._support.qualify_support(
@@ -889,7 +896,8 @@ class LifecycleService:
         if not isinstance(effect, m.AcceptedChallengeOpeningEffect):
             raise RecordingValidationError("a challenge receipt has no exact opening")
         return m.ChallengeRecorded(
-            receipt=receipt, challenge=self._store.get_challenge(effect.challenge_id.value)
+            receipt=receipt,
+            challenge=self._store.get_challenge(effect.challenge_id.value),
         )
 
     # -- reference resolution and admission --------------------------------

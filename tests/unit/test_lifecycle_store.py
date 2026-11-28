@@ -400,7 +400,10 @@ class LifecycleStoreTest(unittest.TestCase):
         receipt = self.store.record_understanding(
             command, current_confirmations=current
         )
-        self.assertEqual(tuple(item.version for item in receipt.understanding_versions), (version.version,))
+        self.assertEqual(
+            tuple(item.version for item in receipt.understanding_versions),
+            (version.version,),
+        )
         self.assertEqual(self.store.get_version("u-1", 1), version)
         self.store.record_understanding(_update_command())
         self.assertEqual(
@@ -700,9 +703,7 @@ class LifecycleStoreTest(unittest.TestCase):
         self.store.put_context(_context())
         receipt = self.store.record_verification(_verification_command())
         self.assertEqual(len(receipt.verification_run_ids), 1)
-        run = self.store.get_verification_run(
-            receipt.verification_run_ids[0].value
-        )
+        run = self.store.get_verification_run(receipt.verification_run_ids[0].value)
         self.assertEqual(run.facts.outcome, m.VerificationOutcome.PASS)
 
     def _seed_understanding(self) -> None:

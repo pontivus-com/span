@@ -1215,10 +1215,18 @@ class LifecycleStore:
                 connection.execute(
                     "INSERT INTO verification_observations"
                     "(repository_id, run_id, observation_id) VALUES(?,?,?)",
-                    (run.facts.repository_id, run.facts.run_id.value, observation.value),
+                    (
+                        run.facts.repository_id,
+                        run.facts.run_id.value,
+                        observation.value,
+                    ),
                 )
             receipt = self._accepted_receipt(
-                key, context, digest, now, m.AcceptedVerificationEffect(run.facts.run_id)
+                key,
+                context,
+                digest,
+                now,
+                m.AcceptedVerificationEffect(run.facts.run_id),
             )
             self._write_receipt(connection, receipt)
             return receipt

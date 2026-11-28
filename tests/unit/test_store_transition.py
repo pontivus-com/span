@@ -230,13 +230,23 @@ def _legacy_record_facts(connection):
         legacy = {
             "$type": "RecordReceipt",
             "identity": m.to_canonical(
-                m.RecordingIdentity(receipt.key.repository_id, receipt.key.request_id, receipt.context.context_id)
+                m.RecordingIdentity(
+                    receipt.key.repository_id,
+                    receipt.key.request_id,
+                    receipt.context.context_id,
+                )
             ),
             "content_digest": m.to_canonical(receipt.content_digest),
             "committed_at": receipt.committed_at.isoformat(),
-            "accepted_understanding_ids": m.to_canonical(tuple(item.understanding_id for item in receipt.understanding_versions)),
-            "accepted_understanding_versions": m.to_canonical(tuple(item.version for item in receipt.understanding_versions)),
-            "accepted_verification_run_ids": m.to_canonical(receipt.verification_run_ids),
+            "accepted_understanding_ids": m.to_canonical(
+                tuple(item.understanding_id for item in receipt.understanding_versions)
+            ),
+            "accepted_understanding_versions": m.to_canonical(
+                tuple(item.version for item in receipt.understanding_versions)
+            ),
+            "accepted_verification_run_ids": m.to_canonical(
+                receipt.verification_run_ids
+            ),
             "accepted_challenge_ids": m.to_canonical(receipt.challenge_ids),
             "dependent_effects": m.to_canonical(receipt.dependency_refs),
             "replay_expires_at": m.to_canonical(receipt.replay_expires_at),
@@ -1609,9 +1619,7 @@ class RefusalTest(unittest.TestCase):
                 self.assertIsNotNone(receipt)
                 assert receipt is not None
                 self.assertEqual(len(receipt.verification_run_ids), 1)
-                run = store.get_verification_run(
-                    receipt.verification_run_ids[0].value
-                )
+                run = store.get_verification_run(receipt.verification_run_ids[0].value)
                 self.assertEqual(run.facts.command, "python3 -m unittest")
                 self.assertEqual(run.facts.repository_id, "demo")
                 self.assertEqual(run.facts.scope.scope.paths, ("src/a.py",))
@@ -2070,7 +2078,9 @@ class PubSchemaTransitionTest(unittest.TestCase):
                 store.register_repository(root.name, str(root))
                 store.close()
                 with sqlite3.connect(data / f"{root.name}.db") as connection:
-                    connection.execute("UPDATE meta SET value='15' WHERE key='schema_version'")
+                    connection.execute(
+                        "UPDATE meta SET value='15' WHERE key='schema_version'"
+                    )
             installation = functional_pyramid_installation_path(data)
             store = FunctionalPyramidInstallationStore.create(
                 installation, retention=DEFAULT_LIFECYCLE_RETENTION
@@ -2115,7 +2125,9 @@ class PubSchemaTransitionTest(unittest.TestCase):
                 store.register_repository(root.name, str(root))
                 store.close()
                 with sqlite3.connect(data / f"{root.name}.db") as connection:
-                    connection.execute("UPDATE meta SET value='15' WHERE key='schema_version'")
+                    connection.execute(
+                        "UPDATE meta SET value='15' WHERE key='schema_version'"
+                    )
             store = FunctionalPyramidInstallationStore.create(
                 functional_pyramid_installation_path(data),
                 retention=DEFAULT_LIFECYCLE_RETENTION,
@@ -2361,7 +2373,9 @@ class PubSchemaTransitionTest(unittest.TestCase):
                     challenge_facts = m.from_canonical(
                         m.ChallengeFacts, staged["facts"]
                     )
-                    self.assertEqual(challenge_facts.challenge_id, value.facts.challenge_id)
+                    self.assertEqual(
+                        challenge_facts.challenge_id, value.facts.challenge_id
+                    )
                     self.assertEqual(challenge_facts.state, value.facts.state)
 
     def test_accepted_dependency_coordinates_are_strict_and_round_trip(self):

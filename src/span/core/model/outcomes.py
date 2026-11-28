@@ -37,7 +37,6 @@ class RecordedRevisionEffect:
     effect: AcceptedRevisionEffect
     qualification: SupportQualification | SupportUnavailable | None
 
-
     def __post_init__(self) -> None:
         if (self.qualification is None) != (
             self.effect.action is RevisionEffectAction.WITHDRAW

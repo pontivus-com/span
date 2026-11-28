@@ -604,7 +604,9 @@ def _import_challenges(
     ).fetchall():
         from span.shell.store_transition_schema15 import challenge_payload
 
-        challenge = m.from_canonical(m.Challenge, challenge_payload(_json.loads(row[1])))
+        challenge = m.from_canonical(
+            m.Challenge, challenge_payload(_json.loads(row[1]))
+        )
         if (
             connection.execute(
                 "SELECT 1 FROM understandings WHERE understanding_id=?",
@@ -624,7 +626,11 @@ def _import_challenges(
         connection.execute(
             "INSERT OR REPLACE INTO challenges"
             "(challenge_id, understanding_id, canonical_json) VALUES(?,?,?)",
-            (challenge.facts.challenge_id.value, challenge.facts.understanding_id.value, row[1]),
+            (
+                challenge.facts.challenge_id.value,
+                challenge.facts.understanding_id.value,
+                row[1],
+            ),
         )
         _mapping(
             records,
@@ -860,7 +866,9 @@ def _receipt_from_schema10(
         ),
         "content_digest": payload["content_digest"],
         "committed_at": payload["committed_at"],
-        "accepted_understanding_ids": list(_items(payload, "accepted_understanding_ids")),
+        "accepted_understanding_ids": list(
+            _items(payload, "accepted_understanding_ids")
+        ),
         "accepted_understanding_versions": list(
             _items(payload, "accepted_understanding_versions")
         ),

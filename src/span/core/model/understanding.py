@@ -370,7 +370,8 @@ class Challenge:
         if self.facts.state is ChallengeState.RESOLVED and self.resolution is None:
             raise ValueError("a resolved challenge requires a resolution")
         if (
-            self.facts.state is not ChallengeState.RESOLVED and self.resolution is not None
+            self.facts.state is not ChallengeState.RESOLVED
+            and self.resolution is not None
         ):
             raise ValueError("only a resolved challenge carries a resolution")
         for ref in self.target_conclusions:

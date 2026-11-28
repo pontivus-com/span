@@ -994,7 +994,9 @@ def apply_challenge_dispositions(
     now: _datetime.datetime,
 ) -> tuple[ChallengeEffect, ...]:
     """Validate and apply only explicitly addressed challenge dispositions."""
-    by_id = {challenge.facts.challenge_id: challenge for challenge in existing_challenges}
+    by_id = {
+        challenge.facts.challenge_id: challenge for challenge in existing_challenges
+    }
     by_revision = {
         (item.conclusion_id, item.revision.value): item for item in known_revisions
     }
@@ -1013,7 +1015,10 @@ def apply_challenge_dispositions(
             raise RecordingValidationError(
                 "challenge targets a different understanding"
             )
-        if challenge.facts.challenge_revision != disposition.expected_challenge_revision:
+        if (
+            challenge.facts.challenge_revision
+            != disposition.expected_challenge_revision
+        ):
             raise RecordingConflict(
                 "challenge revision "
                 f"{disposition.expected_challenge_revision.value} does not match "

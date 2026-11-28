@@ -807,7 +807,9 @@ class RetrievedFunctionalPyramidReceipt:
     version: FunctionalPyramidVersion | None
     members: tuple[FunctionalPyramidMemberView, ...]
     participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]
-    dependency_effects: AcceptedDependencyEffects | HistoricalAcceptanceDetailUnavailable
+    dependency_effects: (
+        AcceptedDependencyEffects | HistoricalAcceptanceDetailUnavailable
+    )
 
     def __post_init__(self) -> None:
         if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
@@ -845,7 +847,6 @@ class RetrievedFunctionalPyramidReceipt:
         if self.action is FunctionalPyramidAction.EXCLUDE:
             if self.pyramid_id is not None or self.version is not None:
                 raise ValueError("exclude receipt has no pyramid identity/version")
-
 
     @property
     def dependency_refs(self) -> tuple[ConclusionRevisionRef, ...]:

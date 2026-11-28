@@ -1338,7 +1338,9 @@ def _verify_staged_references(
     ).fetchall():
         from span.shell.store_transition_schema15 import receipt_payload
 
-        receipt = m.from_canonical(m.RecordReceipt, receipt_payload(_json.loads(row[0])))
+        receipt = m.from_canonical(
+            m.RecordReceipt, receipt_payload(_json.loads(row[0]))
+        )
         if receipt.key.repository_id != config.repository_id:
             raise TransitionError(
                 "a mapped receipt names another repository: "
@@ -1649,7 +1651,9 @@ def _prepare_member(
         effects += step_effects
         limitations += step_limits
     if not manifest.staged_sha256:
-        raise TransitionError("historical staging lacks target proof; roll back and restage")
+        raise TransitionError(
+            "historical staging lacks target proof; roll back and restage"
+        )
     _require_export_reconciliation(paths, manifest)
     _require_staged_digest(paths, manifest)
     return manifest, effects, limitations
@@ -2542,8 +2546,7 @@ def dispatch_installation(
     else:
         raise TransitionError(f"unknown transition phase: {phase}")
     return tuple(
-        _installation_member_report(config, paths, phase)
-        for config, paths in members
+        _installation_member_report(config, paths, phase) for config, paths in members
     )
 
 
@@ -2552,10 +2555,14 @@ def _installation_member_report(
 ) -> TransitionReport:
     inspection = _inspect_paths(config, paths)
     manifest = _read_manifest(paths)
-    state = manifest.state if manifest is not None else (
-        TransitionState.ALREADY_CURRENT
-        if inspection.schema_version == paths.target_schema
-        else TransitionState.INSPECTED
+    state = (
+        manifest.state
+        if manifest is not None
+        else (
+            TransitionState.ALREADY_CURRENT
+            if inspection.schema_version == paths.target_schema
+            else TransitionState.INSPECTED
+        )
     )
     return TransitionReport(
         phase=phase,
