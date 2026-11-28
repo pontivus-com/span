@@ -161,6 +161,18 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
                         ),
                         "cur-1",
                     )
+                self.assertEqual(store.reap_expired(NOW), 0)
+                self.assertEqual(
+                    store.load_delivery_cursor("cur-1"), (selection, position)
+                )
+                self.assertEqual(store.reap_expired(selection.expires_at), 1)
+                self.assertIsNone(store.load_delivery_cursor("cur-1"))
+                self.assertEqual(
+                    store._connection.execute(
+                        "SELECT COUNT(*) FROM delivery_cursors"
+                    ).fetchone()[0],
+                    0,
+                )
             finally:
                 store.close()
 

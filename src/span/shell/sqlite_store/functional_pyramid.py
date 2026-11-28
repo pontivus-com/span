@@ -767,17 +767,23 @@ class FunctionalPyramidInstallationStore(_FunctionalPyramidInstallationReader):
                     pass
 
     def reap_expired(self, moment: _datetime.datetime | None = None) -> int:
-        """Reap installation-scoped replay receipts under the shared retention policy."""
+        """Reap expired pure-read selections and installation replay receipts."""
         now = moment or self._clock()
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("reap time must be timezone-aware")
+        cutoff = now.astimezone(_datetime.timezone.utc).isoformat()
         with immediate_transaction(self._connection) as connection:
-            result = connection.execute(
+            selections = connection.execute(
+                "DELETE FROM delivery_selections"
+                " WHERE kind='pure_read' AND expires_at <= ?",
+                (cutoff,),
+            )
+            receipts = connection.execute(
                 "DELETE FROM functional_pyramid_receipts"
                 " WHERE replay_expires_at IS NOT NULL AND replay_expires_at < ?",
-                (now.astimezone(_datetime.timezone.utc).isoformat(),),
+                (cutoff,),
             )
-            return result.rowcount
+            return selections.rowcount + receipts.rowcount
 
 
 def functional_pyramid_installation_path(
