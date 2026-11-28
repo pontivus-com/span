@@ -768,6 +768,7 @@ class FunctionalPyramidView:
     truncated: bool = False
     omitted: tuple[str, ...] = ()
     next_after: str | None = None
+    selection_id: str | None = None
 
     def __post_init__(self) -> None:
         if (self.directory is None) == (self.semantic_scope is None):
@@ -783,6 +784,7 @@ class FunctionalPyramidView:
         if (
             self.status is FunctionalPyramidRouteStatus.UNRESOLVED
             and not self.unresolved
+            and self.selection_id is None
         ):
             raise ValueError("UNRESOLVED FunctionalPyramidView requires findings")
         if len(set(self.placements)) != len(self.placements):
@@ -793,6 +795,10 @@ class FunctionalPyramidView:
             raise ValueError(
                 "directory continuation requires a truncated directory view"
             )
+        if (self.selection_id is None) != (self.next_after is None):
+            raise ValueError("directory continuation requires a bound selection")
+        if self.selection_id is not None:
+            _require_non_empty("FunctionalPyramidView.selection_id", self.selection_id)
         if self.truncated != bool(self.omitted):
             raise ValueError(
                 "FunctionalPyramidView truncation requires exactly omitted entries"

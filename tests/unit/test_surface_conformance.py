@@ -127,6 +127,32 @@ class SurfaceConformanceTest(unittest.TestCase):
         self.assertNotIn("FunctionalDocumentRoute", schema["$defs"])
         self.assertNotIn("FunctionalRouteProvenance", schema["$defs"])
 
+    def test_result_page_is_typed_advancing_and_schema_valid(self):
+        from span.core.schema import canonical_result_payload
+
+        finding = m.FunctionalPyramidPublicFinding(
+            m.FunctionalPyramidPublicReason.GOVERNANCE_UNAVAILABLE,
+            "Unavailable",
+            "Restore governance",
+        )
+        page = m.ResultPage(
+            "selection",
+            m.ResultKind.FUNCTIONAL_PYRAMID_VIEW,
+            (m.UnresolvedPart(1, 2, (finding,)),),
+            None,
+            (),
+            False,
+        )
+        payload = canonical_result_payload(page)
+        Draft202012Validator(TOOL_OUTPUT_SCHEMAS["ask"]).validate(payload)
+        self.assertEqual(m.from_canonical(m.ResultPage, m.to_canonical(page)), page)
+        with self.assertRaises(ValueError):
+            m.UnresolvedPart(2, 2, (finding,))
+        with self.assertRaises(ValueError):
+            m.UnresolvedPart(0, 2, ())
+        with self.assertRaises(ValueError):
+            m.ResultPage("selection", page.result_kind, (), "cursor", ("more",), True)
+
     def test_public_result_schemas_exclude_private_semantic_carriers(self):
         """P2 §4.2/§5, API-10/15/18: inspect all reachable definitions."""
         # The canonical generator already prunes definitions unreachable

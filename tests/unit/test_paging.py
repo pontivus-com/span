@@ -13,6 +13,16 @@ import unittest
 from span.core import paging
 
 
+class FittingPrefixTest(unittest.TestCase):
+    def test_maximal_prefix_and_terminal_envelope(self):
+        self.assertEqual(paging.largest_fitting_prefix(10, lambda n: n <= 4), 4)
+        self.assertEqual(
+            paging.largest_fitting_prefix(10, lambda n: n <= 4 or n == 10), 10
+        )
+        self.assertEqual(paging.largest_fitting_prefix(0, lambda n: n == 0), 0)
+        self.assertIsNone(paging.largest_fitting_prefix(4, lambda _: False))
+
+
 class PageTokenTest(unittest.TestCase):
     def test_none_starts_at_zero(self):
         self.assertEqual(paging.parse_page_token(None), 0)

@@ -18,7 +18,7 @@ here: pure slicing plus ``BoundInfo``.
 from __future__ import annotations
 
 import hashlib as _hashlib
-from typing import TypeVar as _TypeVar
+from typing import Callable as _Callable, TypeVar as _TypeVar
 
 from span.core import model as m
 
@@ -36,6 +36,7 @@ __all__ = [
     "parse_scope_token",
     "parse_service_token_bound",
     "paginate",
+    "largest_fitting_prefix",
     "INVALID_PAGE_TOKEN_MESSAGE",
     "STALE_CONTINUATION_PREFIX",
 ]
@@ -279,3 +280,25 @@ def paginate(
         truncated_category=category if truncated else None,
         continuation_token=(next_page_token(offset + len(kept)) if truncated else None),
     )
+
+
+def largest_fitting_prefix(total: int, fits: _Callable[[int], bool]) -> int | None:
+    """Choose a maximal ordered prefix under the exact encoded-size predicate.
+
+    The supplied candidate for the full prefix may have a smaller envelope
+    (no continuation), so evaluate it before searching the truncated range.
+    """
+    if total < 0:
+        raise ValueError("collection size must be non-negative")
+    if fits(total):
+        return total
+    low, high = 0, total - 1
+    best = None
+    while low <= high:
+        middle = (low + high) // 2
+        if fits(middle):
+            best = middle
+            low = middle + 1
+        else:
+            high = middle - 1
+    return best

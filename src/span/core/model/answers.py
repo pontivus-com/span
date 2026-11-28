@@ -23,6 +23,8 @@ from span.core.model.functional_pyramid import (
     FunctionalPyramidId,
     FunctionalPyramidParticipation,
     FunctionalPyramidParticipationEffect,
+    FunctionalPyramidPlacementView,
+    FunctionalPyramidPublicFinding,
     FunctionalPyramidReceiptSelector,
     FunctionalPyramidStatus,
     FunctionalPyramidUnavailable,
@@ -361,7 +363,80 @@ class AcceptedDetailUnavailable:
             raise ValueError("acceptance commitment timestamp must be aware")
 
 
+class ResultKind(_enum.Enum):
+    """Semantic classification of the original bounded result (L1–L4)."""
+
+    ANSWER = "Answer"
+    GAP = "Gap"
+    RETRIEVED_UNDERSTANDING = "RetrievedUnderstanding"
+    RETRIEVED_RECEIPT = "RetrievedReceipt"
+    FUNCTIONAL_PYRAMID_VIEW = "FunctionalPyramidView"
+    FUNCTIONAL_PYRAMID_STATUS = "FunctionalPyramidStatus"
+    FUNCTIONAL_PYRAMID_CANDIDATE = "FunctionalPyramidCandidate"
+    FUNCTIONAL_PYRAMID_RECORDED = "FunctionalPyramidRecorded"
+    RETRIEVED_FUNCTIONAL_PYRAMID_RECEIPT = "RetrievedFunctionalPyramidReceipt"
+    UNDERSTANDING_RECORDED = "UnderstandingRecorded"
+    VERIFICATION_RECORDED = "VerificationRecorded"
+    SURFACE_DECLARED = "SurfaceDeclared"
+    CHANGED = "Changed"
+    CHALLENGED = "Challenged"
+    AMBIGUOUS_SURFACE = "AmbiguousSurface"
+    ACCEPTED_DETAIL_UNAVAILABLE = "AcceptedDetailUnavailable"
+
+
+def _validate_part(start: int, total: int, count: int) -> None:
+    if not 0 <= start < total or not 0 < count <= total - start:
+        raise ValueError("a result part must advance within its exact collection")
+
+
+@_dataclass(frozen=True)
+class PlacementsPart:
+    start: int
+    total: int
+    items: tuple[FunctionalPyramidPlacementView, ...]
+
+    def __post_init__(self) -> None:
+        _validate_part(self.start, self.total, len(self.items))
+
+
+@_dataclass(frozen=True)
+class UnresolvedPart:
+    start: int
+    total: int
+    items: tuple[FunctionalPyramidPublicFinding, ...]
+
+    def __post_init__(self) -> None:
+        _validate_part(self.start, self.total, len(self.items))
+
+
+ResultPart = _typing.Union[PlacementsPart, UnresolvedPart]
+
+
+@_dataclass(frozen=True)
+class ResultPage:
+    """An advancing slice of one bound selection, never a repeated obtain."""
+
+    selection_id: str
+    result_kind: ResultKind
+    parts: tuple[ResultPart, ...]
+    continuation: str | None
+    omitted: tuple[str, ...]
+    truncated: bool
+
+    def __post_init__(self) -> None:
+        _require_non_empty("ResultPage.selection_id", self.selection_id)
+        if not self.parts:
+            raise ValueError("a result page must advance")
+        if self.truncated != (self.continuation is not None):
+            raise ValueError("truncation requires an exact continuation")
+        if self.truncated != bool(self.omitted):
+            raise ValueError("omission metadata must match truncation")
+        if self.continuation is not None:
+            _require_non_empty("ResultPage.continuation", self.continuation)
+
+
 AskResult = _typing.Union[
+    ResultPage,
     Answer,
     Gap,
     AmbiguousSurface,
