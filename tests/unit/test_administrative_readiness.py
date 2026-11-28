@@ -79,7 +79,7 @@ class StoreProbeTest(unittest.TestCase):
             _ready(data, "repo", root)
             readiness = probe_store(data, "repo")
             self.assertTrue(readiness.ready)
-            self.assertEqual(readiness.expected_version, 15)
+            self.assertEqual(readiness.expected_version, 16)
             self.assertEqual(readiness.bound_root, str(root.resolve()))
 
     def test_provider_probe_reports_presence(self):
@@ -475,7 +475,7 @@ class InstallVerifyTest(unittest.TestCase):
                 install_verify.main(["--data-dir", str(data), "--repo", str(root)])
             payload = json.loads(stream.getvalue())
             self.assertTrue(payload["repos"][0]["store"]["ready"])
-            self.assertEqual(payload["repos"][0]["store"]["schema_version"], 15)
+            self.assertEqual(payload["repos"][0]["store"]["schema_version"], 16)
 
 
 class FunctionalPyramidProvenanceTest(unittest.TestCase):

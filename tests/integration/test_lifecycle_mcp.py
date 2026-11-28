@@ -94,8 +94,8 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
 
     def _qualification_ids(self, recorded: dict) -> set[str]:
         return {
-            item["ref"]["conclusion_id"]["value"]
-            for item in recorded["qualification"]["conclusions"]
+            item["effect"]["ref"]["conclusion_id"]["value"]
+            for item in recorded["revision_effects"]
         }
 
     def _created_conclusion_id(self, recorded: dict) -> str:
@@ -182,7 +182,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
             self.assertEqual(recorded["$type"], "UnderstandingRecorded")
-            self.assertEqual(recorded["qualification"]["state"], "CURRENT")
+            self.assertEqual(recorded["revision_effects"][0]["qualification"]["state"], "CURRENT")
             curated = await self._curate_recorded(
                 session, recorded, "large-range-curate"
             )
@@ -501,7 +501,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
                     },
                 },
             )
-            self.assertEqual(created["surface"]["boundary_version"], 1)
+            self.assertEqual(created["boundary_version"], 1)
             return await self._call(
                 session,
                 "record",
@@ -522,7 +522,7 @@ class LifecycleMcpTest(unittest.IsolatedAsyncioTestCase):
 
         updated = await self._session(journey)
         self.assertEqual(updated["$type"], "SurfaceDeclared")
-        self.assertEqual(updated["surface"]["boundary_version"], 2)
+        self.assertEqual(updated["boundary_version"], 2)
 
     async def test_verification_run_is_returned_with_qualification(self) -> None:
         async def journey(session: ClientSession) -> dict:

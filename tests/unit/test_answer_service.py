@@ -1915,15 +1915,13 @@ class AnswerServiceTest(unittest.TestCase):
         self.assertEqual(result.receipt_selector.request_id, "req-u-a")
         self.assertEqual(result.committed_at, NOW)
         effect = result.accepted_effect
-        self.assertIsInstance(effect, m.HistoricalAcceptanceDetailUnavailable)
-        assert isinstance(effect, m.HistoricalAcceptanceDetailUnavailable)
+        self.assertIsInstance(effect, m.AcceptedUnderstandingEffect)
+        assert isinstance(effect, m.AcceptedUnderstandingEffect)
+        self.assertEqual(effect.understanding_id, m.UnderstandingId("u-a"))
+        self.assertEqual(effect.version, m.UnderstandingVersionNumber(1))
+        self.assertEqual(len(effect.revision_effects), 1)
         self.assertEqual(
-            effect.understanding_versions,
-            (
-                m.UnderstandingVersionRef(
-                    m.UnderstandingId("u-a"), m.UnderstandingVersionNumber(1)
-                ),
-            ),
+            effect.revision_effects[0].action, m.RevisionEffectAction.CREATE
         )
         payload = m.to_canonical(result)
         self.assertNotIn("content_digest", str(payload))
@@ -1934,7 +1932,7 @@ class AnswerServiceTest(unittest.TestCase):
     ) -> None:
         receipt = self._record_verification_paths("receipt-run", ("src/a.py",))
         run = self.store.get_verification_run(
-            receipt.accepted_verification_run_ids[0].value
+            receipt.verification_run_ids[0].value
         )
         (self.root / "src/a.py").write_text("changed\n", encoding="utf-8")
         result = self.service.ask(

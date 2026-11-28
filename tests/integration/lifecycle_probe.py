@@ -74,7 +74,7 @@ async def _run(exe, repo, data_dir, repository_id):
                 },
             )
             understanding_id = created["understanding_id"]["value"]
-            conclusion_id = created["affected_revisions"][0]["conclusion_id"]["value"]
+            conclusion_id = created["revision_effects"][0]["effect"]["ref"]["conclusion_id"]["value"]
             curated, curated_error = await _call(
                 session,
                 "record",

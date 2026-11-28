@@ -47,7 +47,6 @@ from span.core.model.primitives import (
 )
 from span.core.model.support import (
     SupportQualification,
-    SupportUnavailable,
     VerificationView,
 )
 from span.core.model.surfaces import (

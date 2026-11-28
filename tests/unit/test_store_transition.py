@@ -2041,7 +2041,7 @@ class InstallerCommandTest(unittest.TestCase):
                 self.assertEqual(len(store.get_version("u-1", 1).gaps), 1)
                 self.assertEqual(len(store.get_challenges("u-1")), 1)
                 self.assertEqual(
-                    store.get_verification_run("run:ctx-2:req-2").run_id.value,
+                    store.get_verification_run("run:ctx-2:req-2").facts.run_id.value,
                     "run:ctx-2:req-2",
                 )
                 receipt = store.get_receipt(

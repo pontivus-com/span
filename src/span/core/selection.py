@@ -125,16 +125,16 @@ def _verification_group(
                     ref.revision_or_fingerprint or "",
                     ref.section_or_span or "",
                 )
-                for ref in run.facts.scope.scope.evidence_refs
+                for ref in run.scope.scope.evidence_refs
             }
         )
     )
     return (
-        tuple(sorted(set(run.facts.scope.scope.paths))),
+        tuple(sorted(set(run.scope.scope.paths))),
         refs,
-        run.facts.scope.description,
-        run.facts.command or "",
-        run.facts.scenario or "",
+        run.scope.description,
+        run.command or "",
+        run.scenario or "",
         tuple(item.strip() for item in view.environment_limitations),
     )
 
