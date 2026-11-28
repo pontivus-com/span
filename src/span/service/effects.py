@@ -204,7 +204,7 @@ class DependencyEffectService:
                     effect, "accepted revision is unavailable"
                 )
             if ref not in current.conclusions:
-                return self._retained_successor(effect, current)
+                return self._retained_successor(effect, current, required_governance)
             revision = self._conclusion_revision(ref)
             if isinstance(revision.content, m.WithdrawnConclusion):
                 return m.EffectDisposition(
@@ -213,21 +213,8 @@ class DependencyEffectService:
                     m.EffectDispositionState.WITHDRAWN,
                     "exact revision was explicitly withdrawn",
                 )
-            missing_required_route = (
-                effect.surface.repository_id in required_governance
-                and isinstance(revision.content, m.SupportedConclusion)
-                and revision.content.assertion_nature is m.AssertionNature.NORMATIVE
-                and not any(
-                    isinstance(dependency, m.FunctionalRouteSupport)
-                    for dependency in revision.content.support
-                )
-            )
-            support = (
-                self._forced_reassessment(
-                    "ACTIVE normative revision predates required governing support"
-                )
-                if missing_required_route
-                else self._support_state(ref)
+            support = self._retained_support(
+                effect.surface.repository_id, ref, revision, required_governance
             )
         except (OSError, RecordingValidationError) + store.operational_errors:
             return self._unavailable_effect(effect, "retained detail is unavailable")
@@ -244,19 +231,44 @@ class DependencyEffectService:
             )
         return m.ChangedConclusion(ref, current.version, effect.reasons, support)
 
+    def _retained_support(
+        self,
+        repository_id: str,
+        ref: m.ConclusionRevisionRef,
+        revision: m.ConclusionRevision,
+        required_governance: frozenset[str],
+    ) -> m.SupportQualification | m.SupportUnavailable:
+        missing_required_route = (
+            repository_id in required_governance
+            and isinstance(revision.content, m.SupportedConclusion)
+            and revision.content.assertion_nature is m.AssertionNature.NORMATIVE
+            and not any(
+                isinstance(dependency, m.FunctionalRouteSupport)
+                for dependency in revision.content.support
+            )
+        )
+        return (
+            self._forced_reassessment(
+                "ACTIVE normative revision predates required governing support"
+            )
+            if missing_required_route
+            else self._support_state(ref)
+        )
+
     def _retained_successor(
-        self, effect: m.AcceptedDependencyEffect, current: m.UnderstandingVersion
+        self,
+        effect: m.AcceptedDependencyEffect,
+        current: m.UnderstandingVersion,
+        required_governance: frozenset[str],
     ) -> m.EffectDisposition:
         ref = effect.ref
-        successor = next(
-            (
-                item
-                for item in current.conclusions
-                if item.conclusion_id == ref.conclusion_id
-            ),
-            None,
+        store = self._store_for_repository(effect.surface.repository_id)
+        successor = _support_rules.retained_successor(
+            ref,
+            current.conclusions,
+            store.accepted_understanding_effects(ref.understanding_id),
         )
-        if successor is None or successor.revision.value <= ref.revision.value:
+        if successor is None or successor == ref:
             return self._unavailable_effect(
                 effect, "accepted replacement disposition cannot be established"
             )
@@ -268,7 +280,9 @@ class DependencyEffectService:
                 m.EffectDispositionState.WITHDRAWN,
                 f"explicit withdrawal {successor.label}",
             )
-        support = self._support_state(successor)
+        support = self._retained_support(
+            effect.surface.repository_id, successor, revision, required_governance
+        )
         if (
             isinstance(support, m.SupportQualification)
             and support.state is m.SupportState.CURRENT

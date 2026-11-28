@@ -2699,6 +2699,63 @@ class LifecycleServiceTest(unittest.TestCase):
             dataclasses.replace(wire, request_id="corrected", locator="src/a.py")
         )
 
+    def test_record_does_not_evaluate_owner_wide_status(self) -> None:
+        wire = self._scope_create(locator="src/a.py")
+        with mock.patch(
+            "span.service.surface_status.compose_surface_status",
+            side_effect=AssertionError("record must not evaluate owner-wide status"),
+        ):
+            result = self.service.record(wire)
+            self.assertIsInstance(result, m.UnderstandingRecorded)
+            self.assertEqual(result.surface.locator, "src/a.py")
+            self.assertEqual(
+                _receipt(self.store, self.service.record(wire)),
+                _receipt(self.store, result),
+            )
+
+    def test_retained_replacement_successor_uses_exact_acceptance(self) -> None:
+        from span.core import support_rules
+
+        result = self.service.record(_create_wire())
+        original = self.store.get_version("u:sub-create", 1).conclusions[0]
+        replacement = self._update(
+            "sub-replace-pinned",
+            w.RecordActionsWire(
+                replace=(
+                    w.ReplaceActionWire(
+                        conclusion_id=original.conclusion_id.value,
+                        conclusion="A replacement statement.",
+                        reason="Superseded behavior",
+                        locator="src/a.py",
+                    ),
+                )
+            ),
+            1,
+        )
+        membership = self.store.get_version(
+            "u:sub-create", replacement.version.value
+        ).conclusions
+        accepted = self.store.accepted_understanding_effects(result.understanding_id)
+        self.assertEqual(
+            support_rules.retained_successor(original, membership, accepted),
+            membership[0],
+        )
+        self.assertIsNone(support_rules.retained_successor(original, membership, ()))
+        surfaces, _ = self.service._effects.retained_effects(
+            m.AcceptedDependencyEffects(
+                (
+                    m.AcceptedDependencyEffect(
+                        result.surface, original, (m.ChangeReason.DIRECT,)
+                    ),
+                )
+            )
+        )
+        self.assertEqual(len(surfaces), 1)
+        disposition = surfaces[0].conclusions[0]
+        self.assertIsInstance(disposition, m.EffectDisposition)
+        self.assertEqual(disposition.ref, original)
+        self.assertEqual(disposition.state, m.EffectDispositionState.SUPERSEDED)
+
     def test_revision_support_failure_preserves_committed_receipt_and_owner(self):
         wire = self._scope_create(locator="src/a.py")
         result = self.service.record(wire)
