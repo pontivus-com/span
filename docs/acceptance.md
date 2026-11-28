@@ -19,7 +19,27 @@ The live requirement-to-test mapping is the
 [Invariant audit matrix](invariants.md) records architectural enforcement.
 Neither matrix is a release receipt.
 
-### Repository implementation candidate
+### Current public-boundary implementation candidate (2026-11-28)
+
+Exact code head `053bc712e6bb5f113041dfedda04dbe114b56ddf` on the
+canonical Beta-5 release branch failed
+[CI run 46090133337](https://github.com/pontivus-com/span/actions/runs/46090133337).
+Build/distribution job 140808905712 passed. Test job 140808905961 passed
+diff hygiene, Ruff/Black and the zero-error typing ratchet, then reported
+**1093 passed, 1 failed, 1 skipped, 252 subtests passed**. The failure was
+`tests/unit/test_surface_conformance.py::SurfaceConformanceTest::test_result_union_declarations_agree`
+(ask result union: five refreshed initial effect families absent and
+retired EvidencePage still present). Plugin notice delivery and coverage
+upload were skipped. This is failing diagnostic evidence, not acceptance.
+
+The subsequent selective replacement-lineage/regression commit
+`afd76fe4297dc7993c77963b305f7ce229dc2f77` and documentation/history
+reconciliation require their own exact-head verification. No result from
+the earlier run establishes these later changes. PUB-02–10 and S-FIELD-04
+remain open under the single implementation plan.
+
+### Historical repository implementation candidate (Version 2)
+
 
 Exact implementation head
 `af0379f9b4f5234faa2814d642151ebc89733e3f` passed GitHub Actions CI run `45590632230`.
@@ -61,15 +81,18 @@ later candidate head from those gates.
 | Git tag | `v1.0.0b5` |
 | GitHub Release | `Span 1.0.0 Beta 5` |
 | MCP Registry | `1.0.0-beta.5` |
-| Repository lifecycle schema | **15** |
-| Installation Functional Pyramid schema | **1** |
+| Repository lifecycle schema (active candidate target) | **16** |
+| Installation Functional Pyramid schema (active candidate target) | **2** |
 
-Beta 5 changes the Functional Pyramid declaration grammar and public carriers
-from the retired rule/coverage model to Version-2 document placements. It does
-not add an MCP tool, change repository schema 15, or change installation
-Functional Pyramid schema 1.
+The historical Version-2 verification above used schema 15/1. The active
+candidate uses Version-3 declarations and the schema-16/2 offline cutover.
+The public MCP surface remains exactly ask, record and reconsider.
+The active transition and public delivery acceptance remain open.
 
 ## Remaining gates
+
+- PUB-02–10 and S-FIELD-04: complete the governing implementation plan and
+  exact-head verification; no historical run substitutes for this gate;
 
 - task 14: adopter-owned Version-2 declaration preparation and isolated cutover
   rehearsal outside the Span repository;

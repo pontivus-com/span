@@ -1084,24 +1084,27 @@ PUB-02–10 remain OPEN pending executable acceptance evidence. PUB-01 is
 owner-confirmed complete. The documented
 contracts are design targets; the source baseline still contains the defects.
 
-**Effective execution ledger (2026-11-27, source inspection at `04a9dfbd345c`).**
+**Effective execution ledger (2026-11-28, code head `afd76fe4297dc7993c77963b305f7ce229dc2f77`).**
 Owner-confirmed baseline acceptance is not an assertion of additional test evidence.
 The following records implementation progress, not a new acceptance matrix or
 new task authority. The existing task gates and FA/invariant evidence remain binding.
 
 | Task | Observed source increment | Effective gate state |
 |---|---|---|
-| PUB-01 | Owner direction above supersedes the historical OPEN records | ACCEPTED (baseline only) |
-| PUB-02 | Shared support/audit projection and `UnderstandService` retrieval owner | STARTED; integrated cutover and audit equivalence unverified |
-| PUB-03 | Complete traversal and per-ref reason projection | STARTED; accepted effect persistence/replay unverified |
-| PUB-07A | `store_transition_schema15.py` repository/installation staging and preservation checks; schema 2 DDL | STARTED; existing runtime still 15/1; administrative transition, atomic activation and all-source verification open |
-| PUB-04 | Existing evidence-only cursor and per-family fitters remain | OPEN; replace through singular delivery owner |
-| PUB-07B | Accepted-effect model increments; `UnderstandingRecorded` still carries broad qualification/status | STARTED; exact transition outcomes and surface receipts open |
-| PUB-05 | `core/selection.py` and scoped status/verification selection | STARTED; history calculated but not yet delivered; dependent integration open |
-| PUB-06 | Compact governance carriers and `service/addressing.py` | STARTED; shared end-to-end address/transaction/delivery contract open |
-| PUB-08 | `UnderstandService.challenge_opening` retrieval increment | STARTED; exact acceptance, replay and pagination open |
-| PUB-09 | No integration acceptance recorded | OPEN |
-| PUB-10 | No exact-head green evidence established in this review | OPEN |
+| PUB-01 | Owner direction supersedes historical OPEN records | ACCEPTED (baseline only) |
+| PUB-02 | Immutable verification/challenge facts, shared support and audit projection, exact retrieval | STARTED; full audit equivalence and nested delivery acceptance open |
+| PUB-03 | Shared traversal, exact per-ref causes, accepted-effect persistence and live projection; selected replacement-lineage recovery | STARTED; pinned restart, retention and disposition acceptance open |
+| PUB-07A | Runtime 16/2; offline schema-15 conversion and coordinated staging/publication in existing transition owner | STARTED; all-source preservation, rollback and origin-key arbitration acceptance open |
+| PUB-04 | Durable installation cursors, pure prefix fitting, ResultPage and ten governance collection variants; directory/status/candidate/receipt pure-read delivery | STARTED; ordinary/audit/admission/effect delivery and old cursor/fitters retirement open |
+| PUB-07B | Exact revision effects and surface receipts; compact record outcomes | STARTED; preflight, bounded replay, origin-key arbitration and postcommit recovery open |
+| PUB-05 | Scoped StatusSubject, immediate child summaries and core verification selection | STARTED; history computed but discarded; bounded status/verification and acceptance open |
+| PUB-06 | Compact governance/receipt projection and partial shared addressing for asks and changed roots | STARTED; ordinary writes/hooks, origin-key arbitration, bound owner/path and installed parity open |
+| PUB-08 | Exact challenge-opening audit projection | STARTED; atomic replay and large/nested delivery acceptance open |
+| PUB-09 | Partial canonical schema/consumer integration | STARTED; conformance failure and guidance/host/FA reconciliation open |
+| PUB-10 | CI run 46090133337 on predecessor 053bc712 failed | OPEN; 1093 passed, 1 failed, 1 skipped, 252 subtests passed; plugin/coverage skipped; later code head unverified |
+
+See [current acceptance evidence](../acceptance.md#current-beta-5-verification-state)
+and §3C for the development handover. No additional gate is accepted.
 
 STARTED means source work exists, not that a gate has passed. INTEGRATED means
 the complete owning implementation and required dependency cutover are in place;
@@ -1128,6 +1131,116 @@ F08: P2 §4.3, FD-20/22, TD §20.3 (PUB-03/04);
 F09: P0–P4 canonical ownership and plan traceability, not a second authority
 (PUB-01/09). Acceptance is the amended P3 §15 cases and PUB-10 evidence.
 PUB-10 and S-FIELD-04 close the same release programme.
+
+## 3C. Development handover — 2026-11-28
+
+This is a source-state handover, not a replacement implementation plan.
+Complete §3B through PUB-10 and its S-FIELD-04 dependency; the governing
+P0–P4, existing task definitions, FA and invariant gates are unchanged.
+
+**Repository:** `pontivus-com/span`, `release/1.0.0-beta5` only.
+The last completed diagnostic run was
+[46090133337](https://github.com/pontivus-com/span/actions/runs/46090133337)
+at `053bc712e6bb5f113041dfedda04dbe114b56ddf`. The later source commit
+`afd76fe4297dc7993c77963b305f7ce229dc2f77` selectively restores retained
+replacement-lineage recovery and an owner-wide-status regression probe.
+It is not an accepted candidate. Do not replay auxiliary branch trees;
+their historical commits are retained as parents of the reconciliation
+commit, with only selected live source changes. See the release programme
+for the disposition and outstanding ref deletion.
+
+### Continuation point and required corrections
+
+1. Re-establish PUB-02/03/07A's integrated gate before accepting dependent
+   work. The schema-16/2 cutover is present
+   (`a5762019a36f7ec2a0359d2185b7a585cae354f0`), not a proposal.
+   Review `core/model/{verification,understanding,recording,support,surfaces}.py`,
+   `service/understand.py`, `service/effects.py` and
+   `shell/store_transition{,_schema15}.py`. Verify exact historical facts,
+   all supported sources, coordinated interruption/rollback, reason/ref
+   equality and no duplicate writer. Preserve the current transition owner,
+   not the older auxiliary installation transition. The selected successor
+   recovery uses exact accepted replacement edges; prove stale/ambiguous/
+   unavailable successor stays actionable and required normative governance
+   remains enforced. Receipt retention is not complete: repository
+   `LifecycleStore.reap_expired` deletes all expired receipts, including
+   accepted effects, and the replacement edge may be lost even while a
+   predecessor obligation remains. PUB-04/07 must resolve this at the
+   existing transaction/retention owner with a locked disposition check.
+2. PUB-04 is the principal integration blocker. Existing commits
+   `e3ea559`, `4a8bc08`, `4ca866e`, `2302aa2`, `053bc71` provide
+   `core/paging.py`, `core/model/delivery.py`, durable selection/cursor
+   tables and governance-only `ContinuationService`. Extend this single
+   owner to every pageable collection in L2 §4.1 and TD §13, including
+   nested typed parent chains and mixed-collection maximal fitting prefixes.
+   Keep full retained records; preserve initial classification, exact
+   count/ref totals, context handles and first-remaining omission metadata.
+   Current `service/answer.py` still uses `_fit_answer`, `_fit_gap`,
+   `_fit_functional_pyramid`, `_fit_evidence_page` and `_evidence_page`;
+   `service/continuation.py` still defines the stateless `span1_` codec,
+   `shell/mcp/wire.py` decodes repository from it, and
+   `shell/mcp/adapter.py` routes the new token by family/prefix. Remove
+   these superseded mechanisms through the shared service, not another
+   wrapper. Bind pure/audit reads to original selector and evaluated
+   semantic state excluding clock-only changes. Deliver ordinary Answer,
+   Gap, ambiguity, exact snapshot/receipt, embedded governance, status and
+   verification history. Preserve pending curation keyset semantics.
+   Pin explicit admission's ordered outcomes, observations and ranges
+   atomically with context attachment via existing transaction owners;
+   subsequent context extensions must not modify the admission. Current
+   `EvidenceService._admit` writes observations and attachments separately
+   and continuation reads the context's current observations. Do not retain
+   source bytes or introduce another admission writer. Retire EvidencePage.
+   Complete accepted-write and Changed selections; store receipt pointers
+   rather than copies of immutable effects, preserve all pinned obligations,
+   stale-effect restart with `Rejected.restart_continuation`, and resume
+   to the same refreshed initial family without a new traversal or write.
+   Bind actual owner/path basis; current durable delivery is scoped to
+   governance only. Verify every PUB-04 acceptance case, byte parity and
+   expiry/restart/forgery behavior.
+3. PUB-07B: use the immutable acceptance already composed by
+   `LifecycleService` and the existing receipt writer. Add minimum
+   envelope preflight before commit and exact receipt recovery on
+   postcommit delivery failure. Bound all accepted effect families and
+   preserve replay/CAS. Implement the canonical addressed-request index
+   (schema 2 table exists; runtime arbitration is incomplete) in the
+   existing atomic owner, preserving the original addressing repository.
+   Never reject an accepted write as if it had not committed.
+4. PUB-05: finish the scoped status/verification delivery through that
+   same owner. `AnswerService._verification` currently assigns
+   `selected, _history` and discards history. Retain selected/current
+   outcome ties and full history under the same selection; enforce total
+   counts across status refs and child summaries and scope isolation.
+5. PUB-06: complete `service/addressing.py` and installation composition
+   for ordinary record/verification/evidence/reconsider/hooks plus
+   governance. Existing ask and changed-root normalization is partial;
+   there is no completed origin/owner transaction arbitration. Enforce
+   one selected owner before mutation, outermost registered ancestor
+   public addresses and path-basis binding. Verify the installed nested-root
+   full journey and registry-change replay cases in §3B.
+6. PUB-08: complete challenge opening on the exact immutable accepted
+   target/revision/context and audit projection in
+   `service/understand.py::challenge_opening` and
+   `service/reconsider.py`. Use PUB-04 nested delivery and accepted
+   receipt recovery. No second challenge owner.
+7. PUB-09: update the single canonical generated schema and actual
+   consumers. `AGENTS.md` still mentions retired
+   `UnderstandingRecorded.qualification`; update the owning managed
+   guidance, skills, hooks, MCP docs, installer examples and FA references
+   to final page/receipt/obligation behavior. Do not hand-edit generated
+   artifacts. The current conformance test
+   `tests/unit/test_surface_conformance.py::SurfaceConformanceTest::test_result_union_declarations_agree`
+   correctly fails: AskResult still contains EvidencePage and lacks the
+   five existing refreshed initial effect families (Changed,
+   UnderstandingRecorded, VerificationRecorded, FunctionalPyramidRecorded,
+   Challenged). Implement the semantics first; do not merely add union
+   members or change the test to match incomplete code.
+8. PUB-10: run all original §3B task gates and complete exact-head CI,
+   including non-editable installed MCP, native host where required,
+   distribution, lint, typing, invariant/FA checks, plugin notices and
+   coverage. Record exact run IDs and measured ratchets in the existing
+   evidence owners. No gates may be loosened. No master merge, tag,
+   publication or live adopter mutation is authorized.
 
 ## 4. Execution sequence
 
