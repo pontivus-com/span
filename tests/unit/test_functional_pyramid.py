@@ -125,6 +125,62 @@ class FunctionalPyramidCarrierTest(unittest.TestCase):
             self.assertNotIn("INVALID_PLACEMENT_SCOPE", schema)
             self.assertNotIn("INVALID_DECLARATION_SOURCE", schema)
 
+    def test_public_validation_and_graph_findings_have_exact_distinct_shapes(self):
+        from span.core.schema import schema_for_result, to_wire_root
+
+        candidate = schema_for_result(m.FunctionalPyramidCandidate)["$defs"]
+        validation = candidate["FunctionalPyramidValidationFinding"]["properties"]
+        graph = candidate["FunctionalPyramidPublicFinding"]["properties"]
+        self.assertEqual(
+            set(validation),
+            {
+                "reason",
+                "detail",
+                "recovery",
+                "repository_id",
+                "pyramid_id",
+                "directory",
+                "expected_version",
+                "current_version",
+            },
+        )
+        self.assertEqual(
+            set(graph),
+            {"reason", "detail", "recovery", "repository_id", "directory", "placement"},
+        )
+        for reason in m.FunctionalPyramidValidationReason:
+            issue = m.FunctionalPyramidValidationIssue(
+                reason=reason,
+                detail="validation detail",
+                recovery="validation recovery",
+                repository_id="repo-a",
+                declaration_locator="private.json",
+                directory="src",
+                expected_version=m.FunctionalPyramidVersion(1),
+                current_version=m.FunctionalPyramidVersion(2),
+            )
+            result = m.public_pyramid_validation_finding(issue, {"repo-a": "/repo-a"})
+            self.assertEqual(result.directory, m.FunctionalPyramidPath("repo-a", "src"))
+            self.assertEqual(result.expected_version, issue.expected_version)
+            self.assertEqual(result.current_version, issue.current_version)
+            self.assertIn(result.reason.value, validation["reason"]["enum"])
+            wire = to_wire_root(type(result), m.to_canonical(result))
+            self.assertNotIn("private.json", json.dumps(wire))
+            self.assertEqual(
+                m.from_canonical(type(result), m.to_canonical(result)), result
+            )
+        self.assertEqual(
+            set(validation["reason"]["enum"]),
+            {
+                "DECLARATION_INVALID",
+                "UNREGISTERED_MEMBER",
+                "DUPLICATE_MEMBER",
+                "MEMBER_ALREADY_ACTIVE",
+                "UNKNOWN_PYRAMID",
+                "STALE_PYRAMID_VERSION",
+            },
+        )
+
     def test_document_placement_identity_includes_scope_and_layer(self) -> None:
         ref = m.FunctionalDocumentRef(
             repository_id="repo-a",

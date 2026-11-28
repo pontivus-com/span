@@ -61,8 +61,8 @@ _RepositoryPaths = _typing.Callable[
 
 
 def _ordered_validation_findings(
-    findings: list[m.FunctionalPyramidValidationFinding],
-) -> tuple[m.FunctionalPyramidValidationFinding, ...]:
+    findings: list[m.FunctionalPyramidValidationIssue],
+) -> tuple[m.FunctionalPyramidValidationIssue, ...]:
     return tuple(
         sorted(
             findings,
@@ -86,8 +86,8 @@ def _validation_finding(
     declaration_locator: str | None = None,
     expected_version: m.FunctionalPyramidVersion | None = None,
     current_version: m.FunctionalPyramidVersion | None = None,
-) -> m.FunctionalPyramidValidationFinding:
-    return m.FunctionalPyramidValidationFinding(
+) -> m.FunctionalPyramidValidationIssue:
+    return m.FunctionalPyramidValidationIssue(
         reason=reason,
         repository_id=repository_id,
         pyramid_id=pyramid_id,
@@ -692,7 +692,7 @@ class FunctionalPyramidService:
                     version=target_version,
                     activation_ready=False,
                     validation_findings=tuple(
-                        m.public_pyramid_finding(item, roots)
+                        m.public_pyramid_validation_finding(item, roots)
                         for item in _ordered_validation_findings(validation)
                     ),
                     graph_findings=(),
@@ -721,7 +721,8 @@ class FunctionalPyramidService:
                 version=target_version,
                 activation_ready=not ordered_validation and not structural,
                 validation_findings=tuple(
-                    m.public_pyramid_finding(item, roots) for item in ordered_validation
+                    m.public_pyramid_validation_finding(item, roots)
+                    for item in ordered_validation
                 ),
                 graph_findings=tuple(
                     m.public_pyramid_finding(item, roots) for item in structural
@@ -738,10 +739,10 @@ class FunctionalPyramidService:
         m.FunctionalPyramidId | None,
         m.FunctionalPyramidVersion | None,
         tuple[m.FunctionalPyramidMemberIntent, ...],
-        list[m.FunctionalPyramidValidationFinding],
+        list[m.FunctionalPyramidValidationIssue],
     ]:
         registered = self._registered()
-        validation: list[m.FunctionalPyramidValidationFinding] = []
+        validation: list[m.FunctionalPyramidValidationIssue] = []
         intents: dict[str, m.FunctionalPyramidMemberIntent] = {}
         duplicates: set[str] = set()
         for intent in selector.members:
@@ -1522,12 +1523,12 @@ class FunctionalPyramidService:
         tuple[m.EvidenceRef, ...],
         tuple[_DeclarationEntry, ...],
         bool,
-        tuple[m.FunctionalPyramidValidationFinding, ...],
+        tuple[m.FunctionalPyramidValidationIssue, ...],
         tuple[m.FunctionalPyramidFinding, ...],
     ]:
         refs: list[m.EvidenceRef] = []
         declarations: list[_DeclarationEntry] = []
-        validation: list[m.FunctionalPyramidValidationFinding] = []
+        validation: list[m.FunctionalPyramidValidationIssue] = []
         graph: list[m.FunctionalPyramidFinding] = []
         available = True
 
@@ -1645,14 +1646,14 @@ class FunctionalPyramidService:
         tuple[m.FunctionalPyramidMemberView, ...],
         tuple[_DeclarationEntry, ...],
         frozenset[str],
-        tuple[m.FunctionalPyramidValidationFinding, ...],
+        tuple[m.FunctionalPyramidValidationIssue, ...],
         tuple[m.FunctionalPyramidFinding, ...],
     ]:
         """Resolve candidate source requests without changing participation."""
         members: list[m.FunctionalPyramidMemberView] = []
         declarations: list[_DeclarationEntry] = []
         available: set[str] = set()
-        validation: list[m.FunctionalPyramidValidationFinding] = []
+        validation: list[m.FunctionalPyramidValidationIssue] = []
         graph: list[m.FunctionalPyramidFinding] = []
 
         for intent in intents:

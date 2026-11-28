@@ -411,7 +411,7 @@ class FunctionalPyramidFinding:
 
 
 @_dataclass(frozen=True)
-class FunctionalPyramidValidationFinding:
+class FunctionalPyramidValidationIssue:
     reason: FunctionalPyramidValidationReason
     detail: str
     recovery: str
@@ -423,17 +423,17 @@ class FunctionalPyramidValidationFinding:
     current_version: FunctionalPyramidVersion | None = None
 
     def __post_init__(self) -> None:
-        _require_non_empty("FunctionalPyramidValidationFinding.detail", self.detail)
-        _require_non_empty("FunctionalPyramidValidationFinding.recovery", self.recovery)
+        _require_non_empty("FunctionalPyramidValidationIssue.detail", self.detail)
+        _require_non_empty("FunctionalPyramidValidationIssue.recovery", self.recovery)
         for name, value in (
             ("repository_id", self.repository_id),
             ("declaration_locator", self.declaration_locator),
         ):
             if value is not None:
-                _require_non_empty(f"FunctionalPyramidValidationFinding.{name}", value)
+                _require_non_empty(f"FunctionalPyramidValidationIssue.{name}", value)
         if self.directory is not None:
             _require_directory_scope(
-                "FunctionalPyramidValidationFinding.directory", self.directory
+                "FunctionalPyramidValidationIssue.directory", self.directory
             )
 
 
@@ -447,51 +447,94 @@ class FunctionalPyramidPublicFinding:
     repository_id: str | None = None
     directory: FunctionalPyramidPath | None = None
     placement: FunctionalPyramidPlacementView | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty("FunctionalPyramidPublicFinding.detail", self.detail)
+        _require_non_empty("FunctionalPyramidPublicFinding.recovery", self.recovery)
+
+
+_ValidationPublicReason = _typing.Literal[
+    FunctionalPyramidPublicReason.DECLARATION_INVALID,
+    FunctionalPyramidPublicReason.UNREGISTERED_MEMBER,
+    FunctionalPyramidPublicReason.DUPLICATE_MEMBER,
+    FunctionalPyramidPublicReason.MEMBER_ALREADY_ACTIVE,
+    FunctionalPyramidPublicReason.UNKNOWN_PYRAMID,
+    FunctionalPyramidPublicReason.STALE_PYRAMID_VERSION,
+]
+
+
+@_dataclass(frozen=True)
+class FunctionalPyramidValidationFinding:
+    """Exact public candidate validation result (FD-84, FD-88B)."""
+
+    reason: _ValidationPublicReason
+    detail: str
+    recovery: str
+    repository_id: str | None = None
     pyramid_id: FunctionalPyramidId | None = None
+    directory: FunctionalPyramidPath | None = None
     expected_version: FunctionalPyramidVersion | None = None
     current_version: FunctionalPyramidVersion | None = None
 
+    def __post_init__(self) -> None:
+        if self.reason not in _typing.get_args(_ValidationPublicReason):
+            raise ValueError("not a public candidate validation reason")
+        _require_non_empty("FunctionalPyramidValidationFinding.detail", self.detail)
+        _require_non_empty("FunctionalPyramidValidationFinding.recovery", self.recovery)
+
+
+def _public_finding_directory(
+    repository_id: str | None, directory: str | None, roots: _typing.Mapping[str, str]
+) -> FunctionalPyramidPath | None:
+    if repository_id is None or directory is None or repository_id not in roots:
+        return None
+    return public_pyramid_path(repository_id, directory, roots)
+
+
+def public_pyramid_validation_finding(
+    finding: FunctionalPyramidValidationIssue, roots: _typing.Mapping[str, str]
+) -> FunctionalPyramidValidationFinding:
+    """Project candidate diagnostics without exposing internal source locators."""
+    reasons: dict[FunctionalPyramidValidationReason, _ValidationPublicReason] = {
+        FunctionalPyramidValidationReason.MISSING_DECLARATION_SOURCE: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE: FunctionalPyramidPublicReason.DECLARATION_INVALID,
+        FunctionalPyramidValidationReason.UNREGISTERED_MEMBER: FunctionalPyramidPublicReason.UNREGISTERED_MEMBER,
+        FunctionalPyramidValidationReason.DUPLICATE_MEMBER: FunctionalPyramidPublicReason.DUPLICATE_MEMBER,
+        FunctionalPyramidValidationReason.MEMBER_ALREADY_ACTIVE: FunctionalPyramidPublicReason.MEMBER_ALREADY_ACTIVE,
+        FunctionalPyramidValidationReason.UNKNOWN_PYRAMID: FunctionalPyramidPublicReason.UNKNOWN_PYRAMID,
+        FunctionalPyramidValidationReason.STALE_PYRAMID_VERSION: FunctionalPyramidPublicReason.STALE_PYRAMID_VERSION,
+    }
+    reason = reasons[finding.reason]
+    return FunctionalPyramidValidationFinding(
+        reason=reason,
+        detail=(
+            "Declaration source is missing or invalid"
+            if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID
+            else finding.detail
+        ),
+        recovery=(
+            "Correct the classification and rerun governed installation"
+            if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID
+            else finding.recovery
+        ),
+        repository_id=finding.repository_id,
+        directory=_public_finding_directory(
+            finding.repository_id, finding.directory, roots
+        ),
+        pyramid_id=finding.pyramid_id,
+        expected_version=finding.expected_version,
+        current_version=finding.current_version,
+    )
+
 
 def public_pyramid_finding(
-    finding: FunctionalPyramidFinding | FunctionalPyramidValidationFinding,
+    finding: FunctionalPyramidFinding,
     roots: _typing.Mapping[str, str],
 ) -> FunctionalPyramidPublicFinding:
-    """Project internal diagnostics onto the exact public vocabulary."""
-    directory = (
-        public_pyramid_path(finding.repository_id, finding.directory, roots)
-        if finding.repository_id is not None
-        and finding.repository_id in roots
-        and finding.directory is not None
-        else None
+    """Project internal graph diagnostics onto the exact public vocabulary."""
+    directory = _public_finding_directory(
+        finding.repository_id, finding.directory, roots
     )
-    if isinstance(finding, FunctionalPyramidValidationFinding):
-        reason = (
-            FunctionalPyramidPublicReason.DECLARATION_INVALID
-            if finding.reason
-            in (
-                FunctionalPyramidValidationReason.MISSING_DECLARATION_SOURCE,
-                FunctionalPyramidValidationReason.INVALID_DECLARATION_SOURCE,
-            )
-            else FunctionalPyramidPublicReason(finding.reason.value)
-        )
-        return FunctionalPyramidPublicFinding(
-            reason=reason,
-            detail=(
-                "Declaration source is missing or invalid"
-                if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID
-                else finding.detail
-            ),
-            recovery=(
-                "Correct the classification and rerun governed installation"
-                if reason is FunctionalPyramidPublicReason.DECLARATION_INVALID
-                else finding.recovery
-            ),
-            repository_id=finding.repository_id,
-            directory=directory,
-            pyramid_id=finding.pyramid_id,
-            expected_version=finding.expected_version,
-            current_version=finding.current_version,
-        )
     reason = {
         FunctionalPyramidFindingReason.INVALID_DECLARATION: FunctionalPyramidPublicReason.DECLARATION_INVALID,
         FunctionalPyramidFindingReason.INVALID_PLACEMENT_SCOPE: FunctionalPyramidPublicReason.DECLARATION_INVALID,
@@ -647,7 +690,7 @@ class FunctionalPyramidCandidateSelector:
 class FunctionalPyramidCandidate:
     action: FunctionalPyramidAction
     activation_ready: bool
-    validation_findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
+    validation_findings: tuple[FunctionalPyramidValidationFinding, ...] = ()
     graph_findings: tuple[FunctionalPyramidPublicFinding, ...] = ()
     pyramid_id: FunctionalPyramidId | None = None
     version: FunctionalPyramidVersion | None = None
