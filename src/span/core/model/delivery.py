@@ -174,9 +174,11 @@ def delivery_extents(
             (DeliveryCollection.MEMBER_DECLARATION_REFS, binding.declaration_count),
             (DeliveryCollection.PARTICIPATION_EFFECTS, binding.participation_count),
             (
-                DeliveryCollection.DEPENDENT_EFFECT_REFS
-                if binding.historical
-                else DeliveryCollection.ACCEPTED_DEPENDENCY_EFFECTS,
+                (
+                    DeliveryCollection.DEPENDENT_EFFECT_REFS
+                    if binding.historical
+                    else DeliveryCollection.ACCEPTED_DEPENDENCY_EFFECTS
+                ),
                 binding.dependency_count,
             ),
         )

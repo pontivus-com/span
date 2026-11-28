@@ -208,9 +208,7 @@ class _State:
     def is_excluded(self, repository_id: str) -> bool:
         return repository_id in self.excluded
 
-    def receipt(
-        self, request_id: m.RequestId
-    ) -> m.FunctionalPyramidReceipt | None:
+    def receipt(self, request_id: m.RequestId) -> m.FunctionalPyramidReceipt | None:
         return self.receipts.get(request_id.value)
 
     @contextlib.contextmanager

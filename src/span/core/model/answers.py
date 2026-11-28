@@ -471,6 +471,17 @@ class ParticipationEffectsPart:
         _validate_part(self.start, self.total, len(self.items))
 
 
+def _validate_receipt_part(
+    parent: tuple[FunctionalPyramidReceiptSelector, ...],
+    start: int,
+    total: int,
+    count: int,
+) -> None:
+    if len(parent) != 1:
+        raise ValueError("receipt effect part requires one receipt coordinate")
+    _validate_part(start, total, count)
+
+
 @_dataclass(frozen=True)
 class AcceptedDependencyEffectsPart:
     parent: tuple[FunctionalPyramidReceiptSelector, ...]
@@ -479,9 +490,7 @@ class AcceptedDependencyEffectsPart:
     items: tuple[AcceptedDependencyEffect, ...]
 
     def __post_init__(self) -> None:
-        if len(self.parent) != 1:
-            raise ValueError("receipt effect part requires one receipt coordinate")
-        _validate_part(self.start, self.total, len(self.items))
+        _validate_receipt_part(self.parent, self.start, self.total, len(self.items))
 
 
 @_dataclass(frozen=True)
@@ -492,9 +501,7 @@ class DependentEffectRefsPart:
     items: tuple[ConclusionRevisionRef, ...]
 
     def __post_init__(self) -> None:
-        if len(self.parent) != 1:
-            raise ValueError("receipt effect part requires one receipt coordinate")
-        _validate_part(self.start, self.total, len(self.items))
+        _validate_receipt_part(self.parent, self.start, self.total, len(self.items))
 
 
 ResultPart = _typing.Union[
@@ -541,9 +548,7 @@ class ResultPage:
         _require_non_empty("ResultPage.selection_id", self.selection_id)
         if not self.parts:
             raise ValueError("a result page must advance")
-        if any(
-            not _part_belongs(part, self.result_kind) for part in self.parts
-        ):
+        if any(not _part_belongs(part, self.result_kind) for part in self.parts):
             raise ValueError("result part does not belong to the bound result kind")
         if self.truncated != (self.continuation is not None):
             raise ValueError("truncation requires an exact continuation")

@@ -320,9 +320,7 @@ class _FunctionalPyramidInstallationReader:
     def is_excluded(self, repository_id: str) -> bool:
         return _is_excluded(self._connection, repository_id)
 
-    def receipt(
-        self, request_id: m.RequestId
-    ) -> m.FunctionalPyramidReceipt | None:
+    def receipt(self, request_id: m.RequestId) -> m.FunctionalPyramidReceipt | None:
         return _receipt(self._connection, request_id)
 
     def load_delivery_cursor(

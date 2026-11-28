@@ -890,7 +890,9 @@ class FunctionalPyramidService:
     ) -> m.RetrievedFunctionalPyramidReceipt | None:
         """Retrieve one immutable installation-scoped Functional Pyramid receipt."""
         retained = self._require_state().receipt(selector.request_id)
-        return None if retained is None else m.project_functional_pyramid_receipt(retained)
+        return (
+            None if retained is None else m.project_functional_pyramid_receipt(retained)
+        )
 
     def obtain_receipt(
         self, selector: m.FunctionalPyramidReceiptSelector

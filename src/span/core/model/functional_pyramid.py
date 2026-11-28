@@ -899,9 +899,7 @@ class FunctionalPyramidReceipt:
 
     def __post_init__(self) -> None:
         if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
-            raise ValueError(
-                "FunctionalPyramidReceipt.committed_at must be aware"
-            )
+            raise ValueError("FunctionalPyramidReceipt.committed_at must be aware")
         if len({effect.repository_id for effect in self.participation_effects}) != len(
             self.participation_effects
         ):
