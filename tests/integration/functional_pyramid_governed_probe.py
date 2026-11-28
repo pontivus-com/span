@@ -267,13 +267,14 @@ async def _run(exe, repo_a, repo_b, data_dir, repo_a_id, repo_b_id, command):
             )
             members = [
                 {
-                    "repository_id": member["repository_id"],
+                    "repository_id": member,
                     "declaration_sources": [
                         {"locator": ref["locator"], "ranges": []}
-                        for ref in member["declaration_refs"]
+                        for ref in activation_receipt_before["member_declaration_refs"]
+                        if ref["repository_id"] == member
                     ],
                 }
-                for member in activation_receipt_before["members"]
+                for member in activation_receipt_before["member_repository_ids"]
             ]
             candidate, candidate_error = await _call(
                 session,

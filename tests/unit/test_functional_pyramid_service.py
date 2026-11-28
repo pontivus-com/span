@@ -165,7 +165,7 @@ class _State:
             tuple[m.FunctionalPyramidMemberView, ...],
         ] = {}
         self.excluded: set[str] = set()
-        self.receipts: dict[str, m.RetrievedFunctionalPyramidReceipt] = {}
+        self.receipts: dict[str, m.FunctionalPyramidReceipt] = {}
         self.transaction_paths: list[tuple[tuple[str, str], ...]] = []
         self.selections: dict[str, m.DeliverySelection] = {}
         self.cursors: dict[str, tuple[str, m.DeliveryPosition]] = {}
@@ -210,7 +210,7 @@ class _State:
 
     def receipt(
         self, request_id: m.RequestId
-    ) -> m.RetrievedFunctionalPyramidReceipt | None:
+    ) -> m.FunctionalPyramidReceipt | None:
         return self.receipts.get(request_id.value)
 
     @contextlib.contextmanager
@@ -862,6 +862,16 @@ class FunctionalPyramidServiceTest(unittest.TestCase):
             tuple(item.repository_id for item in receipt.members),
             ("repo-a", "repo-b"),
         )
+        public = self.admin_service.receipt(
+            m.FunctionalPyramidReceiptSelector(m.RequestId("activate-1"))
+        )
+        assert public is not None
+        self.assertEqual(public.member_repository_ids, ("repo-a", "repo-b"))
+        self.assertEqual(
+            public.member_declaration_refs,
+            tuple(ref for member in receipt.members for ref in member.declaration_refs),
+        )
+        self.assertEqual(public.dependency_effects, receipt.dependency_effects)
         status = self.admin_service.status(
             m.FunctionalPyramidSelector(repository_id="repo-a")
         )

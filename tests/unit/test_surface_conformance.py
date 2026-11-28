@@ -171,6 +171,7 @@ class SurfaceConformanceTest(unittest.TestCase):
             "FunctionalRouteSupport",
             "PremiseSupport",
             "RecordReceipt",
+            "FunctionalPyramidReceipt",
             "SemanticBasis",
             "SourceSupport",
             "SupportEvaluation",
@@ -198,6 +199,12 @@ class SurfaceConformanceTest(unittest.TestCase):
                 "FunctionalPyramidCandidate",
                 {"activation_ready", "validation_findings", "graph_findings"},
                 {"members"},
+            ),
+            (
+                "ask",
+                "RetrievedFunctionalPyramidReceipt",
+                {"member_repository_ids", "member_declaration_refs", "dependency_effects"},
+                {"members", "content_digest"},
             ),
             (
                 "record",

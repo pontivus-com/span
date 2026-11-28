@@ -879,7 +879,12 @@ class FunctionalPyramidService:
         self, selector: m.FunctionalPyramidReceiptSelector
     ) -> m.RetrievedFunctionalPyramidReceipt | None:
         """Retrieve one immutable installation-scoped Functional Pyramid receipt."""
-        return self._require_state().receipt(selector.request_id)
+        retained = self._require_state().receipt(selector.request_id)
+        return (
+            None
+            if retained is None
+            else m.project_functional_pyramid_receipt(retained)
+        )
 
     def record(
         self,
@@ -1174,7 +1179,7 @@ class FunctionalPyramidService:
             version=version,
             members=validated_members,
         )
-        receipt = m.RetrievedFunctionalPyramidReceipt(
+        receipt = m.FunctionalPyramidReceipt(
             request_id=request_id,
             content_digest=digest,
             committed_at=now,
@@ -1230,7 +1235,7 @@ class FunctionalPyramidService:
         for member in old_members:
             transaction.set_excluded(member.repository_id, True)
         now = self._clock()
-        receipt = m.RetrievedFunctionalPyramidReceipt(
+        receipt = m.FunctionalPyramidReceipt(
             request_id=request_id,
             content_digest=digest,
             committed_at=now,
@@ -1286,7 +1291,7 @@ class FunctionalPyramidService:
                 else ()
             )
             now = self._clock()
-            receipt = m.RetrievedFunctionalPyramidReceipt(
+            receipt = m.FunctionalPyramidReceipt(
                 request_id=request_id,
                 content_digest=digest,
                 committed_at=now,
@@ -1305,7 +1310,7 @@ class FunctionalPyramidService:
             return self._recorded(receipt, (), ())
 
     def _replay_record(
-        self, receipt: m.RetrievedFunctionalPyramidReceipt
+        self, receipt: m.FunctionalPyramidReceipt
     ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
         repository_ids = tuple(
             sorted(
@@ -1364,7 +1369,7 @@ class FunctionalPyramidService:
     def _project_receipt(
         self,
         transaction: FunctionalPyramidStateTransaction,
-        receipt: m.RetrievedFunctionalPyramidReceipt,
+        receipt: m.FunctionalPyramidReceipt,
     ) -> m.FunctionalPyramidRecorded | m.AcceptedDetailUnavailable:
         if isinstance(
             receipt.dependency_effects, m.HistoricalAcceptanceDetailUnavailable
@@ -1548,7 +1553,7 @@ class FunctionalPyramidService:
 
     @staticmethod
     def _recorded(
-        receipt: m.RetrievedFunctionalPyramidReceipt,
+        receipt: m.FunctionalPyramidReceipt,
         dependent_effects: tuple[m.ChangedSurface, ...],
         contexts: tuple[m.InvestigationContextRef, ...],
     ) -> m.FunctionalPyramidRecorded:

@@ -289,7 +289,7 @@ class FunctionalPyramidInstallationStoreTest(unittest.TestCase):
                 created_at=NOW,
                 expires_at=NOW + datetime.timedelta(hours=1),
             )
-            receipt = m.RetrievedFunctionalPyramidReceipt(
+            receipt = m.FunctionalPyramidReceipt(
                 request_id=m.RequestId("fp-write"),
                 content_digest=m.ContentDigest("digest-write"),
                 committed_at=NOW,

@@ -82,7 +82,7 @@ class FunctionalPyramidStateTransaction(_typing.Protocol):
 
     def receipt(
         self, request_id: m.RequestId
-    ) -> m.RetrievedFunctionalPyramidReceipt | None: ...
+    ) -> m.FunctionalPyramidReceipt | None: ...
 
     def write_delivery_selection(
         self, selection: m.DeliverySelection
@@ -116,7 +116,7 @@ class FunctionalPyramidStateTransaction(_typing.Protocol):
 
     def write_receipt(
         self,
-        receipt: m.RetrievedFunctionalPyramidReceipt,
+        receipt: m.FunctionalPyramidReceipt,
         *,
         replay_expires_at: _datetime.datetime,
     ) -> None: ...
@@ -151,7 +151,7 @@ class FunctionalPyramidStatePort(_typing.Protocol):
 
     def receipt(
         self, request_id: m.RequestId
-    ) -> m.RetrievedFunctionalPyramidReceipt | None: ...
+    ) -> m.FunctionalPyramidReceipt | None: ...
 
     def load_delivery_cursor(
         self, cursor_id: str

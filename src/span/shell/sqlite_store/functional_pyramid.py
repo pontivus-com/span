@@ -242,7 +242,7 @@ def _is_excluded(connection: _sqlite3.Connection, repository_id: str) -> bool:
     )
 
 
-def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
+def _decode_receipt(row: _sqlite3.Row) -> m.FunctionalPyramidReceipt:
     members_raw = _json.loads(str(row["members_json"]))
     effects_raw = _json.loads(str(row["participation_effects_json"]))
     accepted_raw = _json.loads(str(row["dependent_effect_refs_json"]))
@@ -256,7 +256,7 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
         )
     pyramid_value = row["pyramid_id"]
     version_value = row["version"]
-    return m.RetrievedFunctionalPyramidReceipt(
+    return m.FunctionalPyramidReceipt(
         request_id=m.RequestId(str(row["request_id"])),
         content_digest=m.ContentDigest(str(row["content_digest"])),
         committed_at=_datetime.datetime.fromisoformat(str(row["committed_at"])),
@@ -286,7 +286,7 @@ def _decode_receipt(row: _sqlite3.Row) -> m.RetrievedFunctionalPyramidReceipt:
 def _receipt(
     connection: _sqlite3.Connection,
     request_id: m.RequestId,
-) -> m.RetrievedFunctionalPyramidReceipt | None:
+) -> m.FunctionalPyramidReceipt | None:
     row = connection.execute(
         "SELECT request_id, content_digest, committed_at, action, pyramid_id,"
         " version, members_json, participation_effects_json,"
@@ -322,7 +322,7 @@ class _FunctionalPyramidInstallationReader:
 
     def receipt(
         self, request_id: m.RequestId
-    ) -> m.RetrievedFunctionalPyramidReceipt | None:
+    ) -> m.FunctionalPyramidReceipt | None:
         return _receipt(self._connection, request_id)
 
     def load_delivery_cursor(
@@ -507,7 +507,7 @@ class FunctionalPyramidInstallationTransaction(_FunctionalPyramidInstallationRea
 
     def write_receipt(
         self,
-        receipt: m.RetrievedFunctionalPyramidReceipt,
+        receipt: m.FunctionalPyramidReceipt,
         *,
         replay_expires_at: _datetime.datetime,
     ) -> None:

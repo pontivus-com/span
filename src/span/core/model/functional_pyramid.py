@@ -884,7 +884,7 @@ class FunctionalPyramidReceiptSelector:
 
 
 @_dataclass(frozen=True)
-class RetrievedFunctionalPyramidReceipt:
+class FunctionalPyramidReceipt:
     request_id: RequestId
     content_digest: ContentDigest
     committed_at: _datetime.datetime
@@ -900,7 +900,7 @@ class RetrievedFunctionalPyramidReceipt:
     def __post_init__(self) -> None:
         if self.committed_at.tzinfo is None or self.committed_at.utcoffset() is None:
             raise ValueError(
-                "RetrievedFunctionalPyramidReceipt.committed_at must be aware"
+                "FunctionalPyramidReceipt.committed_at must be aware"
             )
         if len({effect.repository_id for effect in self.participation_effects}) != len(
             self.participation_effects
@@ -939,6 +939,57 @@ class RetrievedFunctionalPyramidReceipt:
         if isinstance(self.dependency_effects, HistoricalAcceptanceDetailUnavailable):
             return self.dependency_effects.dependent_effect_refs
         return tuple(item.ref for item in self.dependency_effects.effects)
+
+
+@_dataclass(frozen=True)
+class RetrievedFunctionalPyramidReceipt:
+    """Public immutable acceptance coordinates, without replay internals."""
+
+    request_id: RequestId
+    committed_at: _datetime.datetime
+    action: FunctionalPyramidAction
+    pyramid_id: FunctionalPyramidId | None
+    version: FunctionalPyramidVersion | None
+    member_repository_ids: tuple[str, ...]
+    member_declaration_refs: tuple[EvidenceRef, ...]
+    participation_effects: tuple[FunctionalPyramidParticipationEffect, ...]
+    dependency_effects: (
+        AcceptedDependencyEffects | HistoricalAcceptanceDetailUnavailable
+    )
+    selection_id: str | None = None
+    continuation: str | None = None
+    omitted: tuple[str, ...] = ()
+    truncated: bool = False
+
+    def __post_init__(self) -> None:
+        _validate_bound_page(
+            self.selection_id, self.continuation, self.omitted, self.truncated
+        )
+        if len(set(self.member_repository_ids)) != len(self.member_repository_ids):
+            raise ValueError("receipt member identities must be distinct")
+        if not self.truncated and any(
+            ref.repository_id not in self.member_repository_ids
+            for ref in self.member_declaration_refs
+        ):
+            raise ValueError("receipt declaration ref crosses accepted membership")
+
+
+def project_functional_pyramid_receipt(
+    receipt: FunctionalPyramidReceipt,
+) -> RetrievedFunctionalPyramidReceipt:
+    return RetrievedFunctionalPyramidReceipt(
+        request_id=receipt.request_id,
+        committed_at=receipt.committed_at,
+        action=receipt.action,
+        pyramid_id=receipt.pyramid_id,
+        version=receipt.version,
+        member_repository_ids=tuple(member.repository_id for member in receipt.members),
+        member_declaration_refs=tuple(
+            ref for member in receipt.members for ref in member.declaration_refs
+        ),
+        participation_effects=receipt.participation_effects,
+        dependency_effects=receipt.dependency_effects,
+    )
 
 
 @_dataclass(frozen=True)

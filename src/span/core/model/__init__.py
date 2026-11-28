@@ -189,7 +189,9 @@ from span.core.model.functional_pyramid import (  # noqa: F401
     FunctionalRouteIdentity,
     FunctionalRouteProvenance,
     FunctionalRouteSupport,
+    FunctionalPyramidReceipt,
     RetrievedFunctionalPyramidReceipt,
+    project_functional_pyramid_receipt,
 )
 from span.core.model.classification import (  # noqa: F401
     FunctionalPyramidClassification,
@@ -800,7 +802,9 @@ __all__ = [
     "FunctionalPyramidResolution",
     "FunctionalPyramidUnavailable",
     "FunctionalPyramidReceiptSelector",
+    "FunctionalPyramidReceipt",
     "RetrievedFunctionalPyramidReceipt",
+    "project_functional_pyramid_receipt",
     "FunctionalRouteSupport",
     "FunctionalPyramidRecorded",
     "FunctionalPyramidClassification",
